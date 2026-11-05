@@ -171,7 +171,9 @@
 #define A_KBDTRACE_FN_KBD_SETUP              0xa57b0cu  // its keyboard setup: Initialize, the callbacks, the image buffer
 #define A_KBDTRACE_FN_SOFTKBD_CTOR           0xa5697cu  // the full-screen keyboard object's constructor (MakePreset...)
 #define A_KBDTRACE_FN_SOFTKBD_JOB            0xa56bd8u  // its job: SetInitialText, ShowKeyboard, the result
-#define KBDTRACE_PORTED (A_KBDTRACE_FN_KBD_UPDATE && A_KBDTRACE_FN_KBD_SETUP && A_KBDTRACE_FN_SOFTKBD_CTOR && A_KBDTRACE_FN_SOFTKBD_JOB)
+#define A_KBDTRACE_FN_ENTRY_UPDATE           0x755a40u  // a text entry's update (step at +0x1c)
+#define A_KBDTRACE_FN_MGR_OPEN               0xa6068cu  // the keyboard manager's open request (manager, keyboard, ?)
+#define KBDTRACE_PORTED (A_KBDTRACE_FN_ENTRY_UPDATE && A_KBDTRACE_FN_MGR_OPEN && A_KBDTRACE_FN_KBD_UPDATE && A_KBDTRACE_FN_KBD_SETUP && A_KBDTRACE_FN_SOFTKBD_CTOR && A_KBDTRACE_FN_SOFTKBD_JOB)
 
 // ---- runtime/services/bonus.c: the save file layout (not addresses), checked by hand for MHXX
 #define BONUS_PORTED 0
