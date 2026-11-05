@@ -1,3 +1,7 @@
+> **MHXX Recomp (fork):** this branch ports MHGU Recomp to *Monster Hunter XX Nintendo Switch Ver.* (Japan) 1.5.1,
+> including the Korean fan translation as a RomFS mod. **Not playable yet.** Status and plan (Korean):
+> [docs/MHXX.md](docs/MHXX.md). Everything below is the original MHGU Recomp documentation.
+
 <p align="center"><img src="docs/images/logo.webp" alt="GU Recomp" width="481"></p>
 
 <p align="center"><b>English</b> · <a href="README.es.md">Español</a></p>
