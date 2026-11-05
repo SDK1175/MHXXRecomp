@@ -1,4 +1,6 @@
 // Windows host layer (runtime/platform.h).
+#include "../game/game.h"
+#define PORT_DIR_W L"MHXXRecomp"  // (PORT_DIR as a wide literal)
 #include <windows.h>
 #include <shlobj.h>
 #include <fcntl.h>
@@ -161,7 +163,7 @@ void plat_standalone(void) {
     }
 }
 
-// %APPDATA%\MHGURecomp (Roaming). The runtime opens files with the narrow (ANSI code page) functions, so a path the
+// %APPDATA%\MHXXRecomp (Roaming). The runtime opens files with the narrow (ANSI code page) functions, so a path the
 // code page can't spell (a user name in another script) is handed out in its 8.3 short form instead.
 bool plat_user_dir(char *buf, size_t size) {
     PWSTR base = NULL;
@@ -170,7 +172,7 @@ bool plat_user_dir(char *buf, size_t size) {
         return false;
     }
     wchar_t dir[MAX_PATH];
-    int n = _snwprintf(dir, MAX_PATH, L"%ls\\MHGURecomp", base);
+    int n = _snwprintf(dir, MAX_PATH, L"%ls\\" PORT_DIR_W, base);
     CoTaskMemFree(base);
     if (n < 0 || n >= MAX_PATH) return false;
     CreateDirectoryW(dir, NULL);

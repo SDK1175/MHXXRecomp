@@ -2,7 +2,7 @@
 
 usage: python tools/dist.py <build dir> <out dir> <windows|linux> <version> [--bonus <file>]
 
-Windows: <out>/Windows-MHGURecomp.<version>.zip; Linux: <out>/Linux-MHGURecomp.<version>.tar.gz (the programs
+Windows: <out>/Windows-MHXXRecomp.<version>.zip; Linux: <out>/Linux-MHXXRecomp.<version>.tar.gz (the programs
 keep their executable permission). Inside, one folder of the same name holds what a player copies: the game, its code
 library, the updater, the DLLs (Windows), pipelines.list, licenses/, bonus/system (--bonus: the donor save of the free downloads) and
 the empty data/, mods/ and cheats/ folders, with a note in data/ of what goes there. Nothing else of the build folder:
@@ -17,7 +17,7 @@ import tarfile
 import time
 import zipfile
 
-DATA_NOTE = ('Put your own dump of Monster Hunter Generations Ultimate 1.4.0 here: the exefs and romfs folders\n'
+DATA_NOTE = ('Put your own dump of Monster Hunter XX Nintendo Switch Ver. 1.5.1 here: the exefs and romfs folders\n'
              '(data/exefs/main, data/romfs/...).\n')
 
 
@@ -53,7 +53,7 @@ def check_version(build, platform, version):
     """The updater must be this version's: it compares its own with GitHub's latest release."""
     p = os.path.join(build, 'mhgurecomp-updater' + ('.exe' if platform == 'windows' else ''))
     with open(p, 'rb') as f:
-        if b'MHGURecomp-updater/' + version.encode() + b'\0' not in f.read():
+        if b'MHXXRecomp-updater/' + version.encode() + b'\0' not in f.read():
             sys.exit(f'dist: {p} was not built as version {version} (make dist VERSION={version} rebuilds it)')
 
 
@@ -69,7 +69,7 @@ def main():
     build, out_dir, platform, version = args
     check_version(build, platform, version)
     # (Linux-: up to 0.11.4 ArchLinux-, when it needed Arch's SDL3 and shaderc; every updater takes both)
-    top = ('Windows' if platform == 'windows' else 'Linux') + '-MHGURecomp'
+    top = ('Windows' if platform == 'windows' else 'Linux') + '-MHXXRecomp'
     name = f'{top}.{version}' + ('.zip' if platform == 'windows' else '.tar.gz')
     entries = files(build, platform)
     if bonus:

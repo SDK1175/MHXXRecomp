@@ -15,7 +15,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 
 public class LogProvider extends ContentProvider {
-    public static final String AUTHORITY = "io.github.morerokk.mhgurecomp.logs";
+    public static final String AUTHORITY = "io.github.mhxxrecomp.app.logs";
     public static final String LOG = "log.txt", CRASH_LOG = "crash-log.txt";
 
     public static Uri uri(String name) { return Uri.parse("content://" + AUTHORITY + "/" + name); }

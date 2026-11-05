@@ -15,7 +15,7 @@ endif
 ANDROID  := $(filter android,$(PLATFORM))
 ABI      ?= arm64-v8a
 
-GAME     ?= ../mhgu/game
+GAME     ?= ../mhxx/game
 GEN      ?= generated
 B        ?= $(if $(ANDROID),build-android,build)
 O        ?= $(if $(ANDROID),obj-android/$(ABI),obj)
@@ -34,7 +34,7 @@ RT_SRC   := $(wildcard runtime/*.c) $(wildcard runtime/hle/*.c) $(wildcard runti
             runtime/platform/$(PLATFORM).c
 # (simd_int.c / neon.c, helpers of the recompiled code, live in the executable: the game code library imports them,
 # and runtime/interp.c uses them too)
-RT_HDRS  := $(wildcard runtime/*.h) $(wildcard runtime/net/*.h) $(wildcard runtime/platform/*.h) $(wildcard runtime/nvn/*.h) $(wildcard runtime/nvn/*/*.h)
+RT_HDRS  := $(wildcard runtime/*.h) $(wildcard runtime/game/*.h) $(wildcard runtime/net/*.h) $(wildcard runtime/platform/*.h) $(wildcard runtime/nvn/*.h) $(wildcard runtime/nvn/*/*.h)
 
 # FFmpeg (the game's movies, runtime/hle/movie.c): by default a small static build of a pinned FFmpeg release, made
 # here from its source (downloaded once to third_party/ffmpeg/, checked against FFMPEG_SHA256) with only what the movies
@@ -327,12 +327,14 @@ $(EXE): $(RT_OBJ) $(AV_DEPS)
 	$(GLIBC_CHECK)
 
 # The updater (updater/updater.c): started in place of the game, it installs the latest release and starts the game.
+# UPDATE_REPO=owner/name: the GitHub repository whose releases it installs (empty: it only starts the game).
+UPDATE_REPO ?=
 UPD_OBJ  := $(patsubst updater/%.c,$(O)/updater/%.o,$(wildcard updater/*.c))
 # (the glibc wrappers and the newer SDL, as the game's)
 UPD_OBJ  += $(if $(filter windows,$(PLATFORM)),,$(O)/rt/platform/linux_glibc.o $(if $(SDL_DEPS),$(O)/rt/platform/linux_sdl.o))
 $(O)/updater/%.o: updater/%.c updater/updater.h $(O)/version.id
 	@mkdir -p $(dir $@)
-	$(CC) -O2 -g -Wall $(OSFLAGS) $(LIB_INC) -DMHGU_VERSION='"$(VERSION)"' -c $< -o $@
+	$(CC) -O2 -g -Wall $(OSFLAGS) $(LIB_INC) -DMHGU_VERSION='"$(VERSION)"' -DUPDATE_REPO='"$(UPDATE_REPO)"' -c $< -o $@
 # (SDL3 / shaderc: their headers before anything is compiled, their archives in LDFLAGS / UPD_LDFLAGS)
 $(RT_OBJ) $(UPD_OBJ): $(LIB_STAMPS)
 $(ICON_RES): extras/icon/mhgurecomp.rc extras/icon/mhgurecomp.ico

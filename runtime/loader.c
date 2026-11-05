@@ -142,6 +142,24 @@ static bool forge_module(const char *path, const char *mod) {
     return forge;
 }
 
+// A mod's exefs NSO that is the game's own file, byte for byte (the Korean translation of MHXX ships the whole 1.5.1
+// exefs beside its romfs, game/game.h): not a code mod. Loaded as one, the game's subsdk0 would run in the
+// interpreter on top of the recompiled game, so it is passed over (the game's own subsdks take only their room).
+static const char *g_game_exefs;
+static bool same_as_game(const char *path, const char *mod) {
+    const char *name = strrchr(path, '/') ? strrchr(path, '/') + 1 : path;
+    char own[1100];
+    snprintf(own, sizeof own, "%s/%s", g_game_exefs, name);
+    size_t a_len, b_len;
+    uint8_t *a = read_file(path, &a_len), *b = read_file(own, &b_len);
+    bool same = a && b && a_len == b_len && !memcmp(a, b, a_len);
+    free(a);
+    free(b);
+    if (same) LOG("[mods] %s: exefs/%s is the game's own (identical): not loaded as a code mod\n", mod, name);
+    return same;
+}
+static bool skip_mod_module(const char *path, const char *mod) { return same_as_game(path, mod) || forge_module(path, mod); }
+
 static void load_nso(Module *m, const char *path, uint32_t base) {
     size_t len;
     uint8_t *raw = read_file(path, &len);
@@ -359,6 +377,7 @@ static uint32_t place_subsdk(uint32_t expected, uint32_t size, uint32_t lo) {
 
 void loader_load(const char *exefs) {
     char path[1100];
+    g_game_exefs = exefs;
     static const struct { const char *name; uint32_t base; } mods[] = {{"main", MAIN_BASE}, {"sdk", SDK_BASE}};
     for (unsigned i = 0; i < 2; i++) {
         Module *m = &g_modules[g_nmodules++];
@@ -371,7 +390,7 @@ void loader_load(const char *exefs) {
     for (int k = 0; k < 10; k++) {
         char name[16];
         snprintf(name, sizeof name, "subsdk%d", k);
-        const char *mod = mods_exefs_file(name, path, sizeof path, forge_module);
+        const char *mod = mods_exefs_file(name, path, sizeof path, skip_mod_module);
         if (!mod) {
             snprintf(path, sizeof path, "%s/%s", exefs, name);
             expected += nso_size(path);

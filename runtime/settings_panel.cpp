@@ -1286,7 +1286,7 @@ std::vector<Row> main_rows() {
         r.back().help = tr("Opens your system's folder picker to choose the save folder.");
         action(r, "save.location.reset", tr("Use the default folder"), []() { s.draft.save_location[0] = 0; },
                *c.save_location != 0);
-        r.back().help = tr("Keeps the save in the default folder again (%APPDATA%\\MHGURecomp\\save on Windows, ~/.local/share/MHGURecomp/save on Linux) after Save and a restart. The save in the other folder is left where it is.");
+        r.back().help = tr("Keeps the save in the default folder again (%APPDATA%\\MHXXRecomp\\save on Windows, ~/.local/share/MHXXRecomp/save on Linux) after Save and a restart. The save in the other folder is left where it is.");
 #endif
         break;
 #ifdef __ANDROID__

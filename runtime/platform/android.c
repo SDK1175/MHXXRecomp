@@ -4,6 +4,7 @@
 // the game's exefs / romfs in its data/ there, and the settings, saves, caches, mods, cheats and log.txt go beside
 // them, as in the PC build's game folder. Android gives no app an environment to start with, so the debug variables
 // (MHGU_QUICKHUNT, MHGU_NO_BC...) come from env.txt in that folder: one NAME=value per line, # for comments.
+#include "../game/game.h"
 #include <fcntl.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -24,7 +25,7 @@ const char *android_home(void) {
     static char dir[1024];
     if (!dir[0]) {
         const char *p = SDL_GetAndroidExternalStoragePath();  // (SDL's Java activity has set up JNI before SDL_main)
-        snprintf(dir, sizeof dir, "%s", p ? p : "/sdcard/MHGURecomp");
+        snprintf(dir, sizeof dir, "%s", p ? p : "/sdcard/" PORT_DIR);
         mkdir(dir, 0777);
     }
     return dir;
@@ -92,7 +93,7 @@ void android_mark_crash(void) {
 }
 
 void android_error_box(const char *msg) {
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "MHGU Recomp", msg, NULL);
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, PORT_NAME, msg, NULL);
 }
 
 // ------------------------------------------------------------------ [Android] GameFolder
@@ -231,7 +232,7 @@ bool android_offer_import(const char *msg, char *data, size_t size) {
         {0, 2, "Use where they are"},
         {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Import game files"},
     };
-    const SDL_MessageBoxData box = {SDL_MESSAGEBOX_INFORMATION, NULL, "MHGU Recomp", text, 3, buttons, NULL};
+    const SDL_MessageBoxData box = {SDL_MESSAGEBOX_INFORMATION, NULL, PORT_NAME, text, 3, buttons, NULL};
     int pressed = 0;
     if (!SDL_ShowMessageBox(&box, &pressed)) return false;
     if (pressed == 1 && android_import(1, false)) {

@@ -9,7 +9,7 @@
         android:shortcutLongLabel="@string/share_log_long">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetPackage="io.github.morerokk.mhgurecomp"
+            android:targetPackage="io.github.mhxxrecomp.app"
             android:targetClass="io.github.morerokk.mhgurecomp.LogActivity" />
     </shortcut>
 </shortcuts>

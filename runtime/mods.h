@@ -9,7 +9,8 @@
 //            every function a patch changes runs in the interpreter instead (from the patched code in memory, as a
 //            cheat's), and so does a subsdk's code (runtime/loader.c places it; mods_patch_code).
 // These folders are found up to three levels down, so a mod unpacked as Mod/Mod/romfs or with an emulator or
-// Atmosphere layout (atmosphere/contents/0100770008DD8000/romfs) works as it is.
+// Atmosphere layout (atmosphere/contents/0100C3800049C000/romfs, or a bare 0100C3800049C000/romfs as the Korean
+// translation's zip has it) works as it is. A mod's exefs files identical to the game's own are ignored (runtime/loader.c).
 // Mods load in name order; a file in a later mod wins. mods/load_order.txt (one folder name per line, '#'
 // comments) picks and orders them instead; a folder whose name starts with '_' is skipped. A list the Mods tab of the
 // settings menu wrote also loads a folder it doesn't mention (a mod added since), after the listed ones.

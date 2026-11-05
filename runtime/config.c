@@ -391,7 +391,7 @@ static const char DEFAULT_INI[] =
     "Updates = Ask\n"
     "\n"
     "; PC only. The folder the save is kept in (the one that holds save_0), for example on another drive or in a synced\n"
-    "; folder. Empty: the default (%APPDATA%\\MHGURecomp\\save on Windows, ~/.local/share/MHGURecomp/save on Linux).\n"
+    "; folder. Empty: the default (%APPDATA%\\MHXXRecomp\\save on Windows, ~/.local/share/MHXXRecomp/save on Linux).\n"
     "; Your save is not moved: copy save_0 there yourself. Takes effect at the next start\n"
     "SaveLocation =\n"
     "\n"

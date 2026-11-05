@@ -39,7 +39,12 @@
 #define GAME_LIB "mhgugame.so"
 #define ASSET_PREFIXES "Linux-,ArchLinux-"  // (ArchLinux-: up to 0.11.4)
 #endif
-#define LATEST_URL "https://api.github.com/repos/morerokk/MHGURecomp/releases/latest"
+// The GitHub repository (owner/name) this port's releases come from: make UPDATE_REPO=owner/name. Empty: no
+// updates (the game starts at once). Never MHGU Recomp's: its releases are another game's.
+#ifndef UPDATE_REPO
+#define UPDATE_REPO ""
+#endif
+#define LATEST_URL "https://api.github.com/repos/" UPDATE_REPO "/releases/latest"
 
 // what the archive must never write (first path component, any case): the player's
 static const char *const KEEP[] = {"data", "mods", "engine_modules", "cheats", "bonus", "cache", "shots", "save", "update",
@@ -379,6 +384,7 @@ static int SDLCALL worker(void *arg) {
     char *etag = SDL_LoadFile(etag_path, NULL);
     bool cached = etag && *etag && exists(p);
     const char *url = SDL_getenv("MHGU_UPDATE_API");
+    if ((!url || !*url) && !*UPDATE_REPO) return quietly("no release repository (UPDATE_REPO) in this build");
     if (!url || !*url) url = LATEST_URL;
     Buf body = {0};
     HttpResult r;

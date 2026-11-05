@@ -1,4 +1,5 @@
 // Applet manager (appletOE), apm, and lm.
+#include "../game/game.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -156,7 +157,7 @@ static void application_functions(Service *s, IpcReq *req, IpcResp *resp) {
         break;
     }
     case 22: break;  // SetTerminateResult
-    case 23: memcpy(resp->data, "1.4.0", 6); resp_size(resp, 0x10); break;  // GetDisplayVersion
+    case 23: memcpy(resp->data, GAME_VERSION, sizeof GAME_VERSION); resp_size(resp, 0x10); break;  // GetDisplayVersion
     case 40: OUT(uint8_t, 0) = 0; resp_size(resp, 1); break;  // NotifyRunning
     case 130: case 140: resp->copy_handles[resp->ncopy++] = new_event(); break;
     default: UNHANDLED("IApplicationFunctions");

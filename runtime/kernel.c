@@ -24,7 +24,8 @@
 #define PSEUDO_PROCESS 0xFFFF8001u
 #define WAITERS_BIT 0x40000000u
 
-#define TITLE_ID 0x0100770008DD8000ull
+#include "game/game.h"
+#define TITLE_ID GAME_TITLE_ID
 
 pthread_mutex_t g_klock = PTHREAD_MUTEX_INITIALIZER;
 static __thread KThread *t_cur;

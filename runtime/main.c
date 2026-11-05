@@ -1,5 +1,6 @@
 // MHGU Recomp entry: claim the guest window, load the modules, set up the kernel, run nn::init::Start on the
 // main thread.
+#include "game/game.h"
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,7 +30,7 @@ const char *g_game_dir = "game";  // folder holding exefs/ and romfs/ (the playe
 
 // where the player puts the game files, for the messages below
 #ifdef __ANDROID__
-#define DATA_FOLDER "Android/data/io.github.morerokk.mhgurecomp/files/data on this device"
+#define DATA_FOLDER "Android/data/io.github.mhxxrecomp.app/files/data on this device"
 #define DATA_SUB(s) "data/" s
 #else
 #define DATA_FOLDER "the data folder next to mhgurecomp.exe"
@@ -153,20 +154,20 @@ static bool game_files_problem(const char *data, char *msg, size_t size) {
                  DATA_FOLDER " (" DATA_SUB("exefs") ", " DATA_SUB("romfs") ").");
         return true;
     }
-    // the recompiled code is v1.4.0's: another version's files don't fit it (NSO header +0x40: build id)
-    static const uint8_t want[8] = {0xfb, 0x08, 0xf1, 0xd2, 0x0f, 0xd1, 0x20, 0x4f};
+    // the recompiled code is one build's (game/game.h): another version's files don't fit it (NSO header +0x40)
+    static const uint8_t want[8] = GAME_MAIN_BUILD_ID;
     uint8_t hdr[0x48] = {0};
     bool ok = fread(hdr, 1, sizeof hdr, f) == sizeof hdr && !memcmp(hdr, "NSO0", 4) && !memcmp(hdr + 0x40, want, 8);
     fclose(f);
     if (!ok) {
-        snprintf(msg, size, "The game files in " DATA_FOLDER " are not version 1.4.0 of Monster Hunter Generations "
-                 "Ultimate (exefs/main, build id FB08F1D20FD1204F). Dump the game with its 1.4.0 "
-                 "update applied (exefs from the update, romfs merged).");
+        snprintf(msg, size, "The game files in " DATA_FOLDER " are not version " GAME_VERSION " of " GAME_NAME
+                 " (exefs/main, build id " GAME_MAIN_BUILD_ID_STR "). Dump the game with its " GAME_VERSION
+                 " update applied (exefs from the update, romfs merged).");
         return true;
     }
     // an incomplete romfs starts, then crashes or quits with the game's own error: players' dumps of the base game
-    // without the update merged (34149 files) or of the update alone (12 files, no shader package) did. 1.4.0
-    // merged has 35531; the margin is for dump tools that leave out a few. MHGU_ROMFS_ANY=1 skips the check.
+    // without the update merged, or of the update alone, did (MHGU). GAME_ROMFS_MIN_FILES: game/game.h (0: the count
+    // isn't checked, only the shader package). MHGU_ROMFS_ANY=1 skips the check.
     char romfs[1200];
     snprintf(romfs, sizeof romfs, "%s/romfs", data);
     int nfiles = getenv("MHGU_ROMFS_ANY") ? -1 : plat_count_files(romfs);
@@ -185,10 +186,10 @@ static bool game_files_problem(const char *data, char *msg, size_t size) {
                  " with it.", spelled, sep, sep, sep);
         return true;
     }
-    if (nfiles >= 0 && (nfiles < 35000 || !have_shaders)) {
-        snprintf(msg, size, "The game files in " DATA_SUB("romfs") " are incomplete: %d files, where Monster Hunter "
-                 "Generations Ultimate 1.4.0 has 35531%s. Extract the romfs again with the 1.4.0 update applied (the "
-                 "base game's files with the update's merged over them) and replace " DATA_SUB("romfs") " with it.", nfiles,
+    if (nfiles >= 0 && (nfiles < GAME_ROMFS_MIN_FILES || !have_shaders)) {
+        snprintf(msg, size, "The game files in " DATA_SUB("romfs") " are incomplete: %d files%s. Extract the romfs "
+                 "again with the " GAME_VERSION " update applied (the base game's files with the update's merged over "
+                 "them) and replace " DATA_SUB("romfs") " with it.", nfiles,
                  !have_shaders ? ", and nativeNX\\system\\app_shader\\AppShaderPackage.mfx is missing" : "");
         return true;
     }

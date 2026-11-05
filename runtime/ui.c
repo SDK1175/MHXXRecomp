@@ -2,6 +2,7 @@
 // before the guest starts so the renderer can attach to it from the game's graphics thread.
 //   MHGU_HIDDEN=1     no visible window (test runs; controls then come only from MHGU_INPUT)
 // Display mode, size and the 3D resolution come from the settings (runtime/config.c, mhgurecomp.ini).
+#include "game/game.h"
 #include <stdlib.h>
 
 #include <SDL3/SDL.h>
@@ -184,18 +185,18 @@ static void install_launcher(void) {
     snprintf(run, sizeof run, "%.*s/mhgurecomp-updater", (int)(slash - exe), exe);
     if (access(run, X_OK) != 0) snprintf(run, sizeof run, "%s", exe);
 
-    snprintf(path, sizeof path, "%s/applications/mhgurecomp.desktop", data);
+    snprintf(path, sizeof path, "%s/applications/mhxxrecomp.desktop", data);
     FILE *f = fopen(path, "rb");
     if (f) {
         char old[8192];
         size_t n = fread(old, 1, sizeof old - 1, f);
         fclose(f);
         old[n] = 0;
-        if (!strstr(old, "\nX-MHGURecomp=true\n")) return;
+        if (!strstr(old, "\nX-MHXXRecomp=true\n")) return;
     }
     snprintf(dir, sizeof dir, "%s/icons/hicolor/128x128/apps", data);
     mkdirs(dir);
-    snprintf(path, sizeof path, "%s/mhgurecomp.png", dir);
+    snprintf(path, sizeof path, "%s/mhxxrecomp.png", dir);
     if (!write_if_changed(path, mhgu_icon_png, (size_t)(mhgu_icon_png_end - mhgu_icon_png))) {
         LOG("[ui] no app menu launcher: can't write %s\n", path);
         return;
@@ -204,18 +205,18 @@ static void install_launcher(void) {
     // and a copy dragged to Plasma's desktop showed a "?")
     char entry[4 * PATH_MAX + 512];
     int n = snprintf(entry, sizeof entry,
-                     "[Desktop Entry]\nType=Application\nName=MHGU Recomp\nComment=Monster Hunter Generations Ultimate, "
+                     "[Desktop Entry]\nType=Application\nName=" PORT_NAME "\nComment=" GAME_NAME ", "
                      "recompiled\nExec=\"%s\"\nPath=%.*s\nIcon=%s\nTerminal=false\nCategories=Game;\n"
-                     "StartupWMClass=mhgurecomp\nX-MHGURecomp=true\n",
+                     "StartupWMClass=mhgurecomp\nX-MHXXRecomp=true\n",
                      run, (int)(slash - exe), exe, path);
     if (n <= 0 || (size_t)n >= sizeof entry) return;
     snprintf(dir, sizeof dir, "%s/applications", data);
     mkdirs(dir);
-    snprintf(path, sizeof path, "%s/mhgurecomp.desktop", dir);
+    snprintf(path, sizeof path, "%s/mhxxrecomp.desktop", dir);
     if (!write_if_changed(path, entry, (size_t)n)) LOG("[ui] no app menu launcher: can't write %s\n", path);
     // The same launcher beside the game, so the folder has something to click with the icon (file managers start an
     // executable .desktop file; a read-only folder just goes without)
-    snprintf(path, sizeof path, "%.*s/MHGU Recomp.desktop", (int)(slash - exe), exe);
+    snprintf(path, sizeof path, "%.*s/" PORT_NAME ".desktop", (int)(slash - exe), exe);
     if (write_if_changed(path, entry, (size_t)n)) chmod(path, 0755);
 }
 
@@ -273,7 +274,7 @@ void ui_init(void) {
     flags |= SDL_WINDOW_VULKAN;
 #endif
     if (getenv("MHGU_HIDDEN")) flags |= SDL_WINDOW_HIDDEN;
-    window = SDL_CreateWindow("Monster Hunter Generations Ultimate", win_w, win_h, flags);
+    window = SDL_CreateWindow(GAME_NAME, win_w, win_h, flags);
     if (!window) FATAL("SDL_CreateWindow: %s\n", SDL_GetError());
     set_window_icon();
     if (g_config.display_mode != DISPLAY_WINDOWED) set_fullscreen(true);

@@ -101,7 +101,9 @@ typedef struct {
 // Note: the below server address should ideally only be used by MHGURecomp, or any forks that intend to be fully network-compatible with it.
 // If you are going to use the below server address on Android or iOS (mobile), please ensure that the "default" matchmaking key for public play is passed as `public-phone` and not empty.
 // This is to ensure gameplay remains stable on PC, while still allowing players to opt into crossplay by specifying a matchmaking key themselves.
-#define LDN_DEFAULT_SERVER "morerokk-mhgurecomp-ldnserver.duckdns.org"
+// No default hub server yet (MHGU Recomp's is its author's, for MHGU): internet hubs need [Multiplayer] Server =
+// <host[:port]> (anyone can run server/), LAN and Join = work without one.
+#define LDN_DEFAULT_SERVER ""
 enum { UPDATES_ASK, UPDATES_AUTO, UPDATES_OFF };
 enum { BATTERY_OFF, BATTERY_WITH_FPS, BATTERY_ALONE };
 enum { THEME_GOLD, THEME_BLUE, THEME_HUNTER };  // [Application] Theme

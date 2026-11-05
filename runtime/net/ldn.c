@@ -94,8 +94,8 @@ enum { DR_NONE, DR_BY_USER, DR_BY_SYSTEM, DR_DESTROYED_BY_USER, DR_DESTROYED_BY_
 #define R_TOO_MANY_PLAYERS LDN_RESULT(144)
 
 // ---- link protocol
-#define PROTO_MAGIC "MHGL"
-#define PROTO_VERSION 2
+#define PROTO_MAGIC "MHXL"  // (MHGU Recomp: "MHGL")
+#define PROTO_VERSION 0x5802  // 'X' << 8 | 2: a hub server shared with MHGU Recomp (version 2) keeps them apart
 enum { F_HELLO = 1, F_INFO, F_WELCOME, F_REFUSE, F_PACKET, F_DESTROY, F_AUX };  // F_AUX: the port's own messages (emsync.c, hle/hpscale.c)
 typedef struct {
     char magic[4];
@@ -681,7 +681,7 @@ static bool lobby_server(char *out) {
 // Android without a key: the room of the key "public-phone", so a phone's public hubs are among phones only and no key
 // reaches the PCs' public room (all zero): phones play with PCs only by sharing a key.
 static bool lobby_header(uint8_t *h, const char *key) {
-    static const char salt[] = "MHGURecomp matchmaking key:";
+    static const char salt[] = "MHXXRecomp matchmaking key:";
     char live[sizeof g_config.ldn_key];
     if (!key) config_live_ldn(NULL, 0, live, sizeof live), key = live;
     memcpy(h, "MHGS", 4);
@@ -1349,7 +1349,7 @@ static uint32_t create_network(const uint8_t *cfg, const uint8_t *sec, const uin
     }
     memcpy(L.info + NI_BSSID, L.mac, 6);
     char ssid[33];
-    snprintf(ssid, sizeof ssid, "MHGURecomp%08x%08x", arc4random(), arc4random());
+    snprintf(ssid, sizeof ssid, "MHXXRecomp%08x%08x", arc4random(), arc4random());
     L.info[NI_SSID] = (uint8_t)strlen(ssid);
     memcpy(L.info + NI_SSID + 1, ssid, strlen(ssid));
     uint16_t ch = rd16(cfg + 0x10);

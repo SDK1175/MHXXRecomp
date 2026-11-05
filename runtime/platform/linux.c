@@ -11,6 +11,7 @@
 // - No console to keep or free: with stderr not a terminal nobody is watching, so the log goes to log.txt.
 // Android (bionic) uses this file too, with runtime/platform/android.c for the app's folder and its message box.
 #define _GNU_SOURCE
+#include "../game/game.h"
 #include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
@@ -235,7 +236,7 @@ void plat_standalone(void) {
     }
 }
 
-// $XDG_DATA_HOME/MHGURecomp, else ~/.local/share/MHGURecomp (docs/STATUS.md "Save data", runtime/platform.h).
+// $XDG_DATA_HOME/MHXXRecomp, else ~/.local/share/MHXXRecomp (docs/STATUS.md "Save data", runtime/platform.h).
 static bool mkdir_p(const char *path) {
     char buf[PATH_MAX];
     snprintf(buf, sizeof buf, "%s", path);
@@ -262,7 +263,7 @@ bool plat_user_dir(char *buf, size_t size) {
         base = fallback;
     }
     char dir[PATH_MAX];
-    if (snprintf(dir, sizeof dir, "%s/MHGURecomp", base) >= (int)sizeof dir) return false;
+    if (snprintf(dir, sizeof dir, "%s/" PORT_DIR, base) >= (int)sizeof dir) return false;
     if (!mkdir_p(dir)) return false;
     struct stat st;
     if (stat(dir, &st) != 0 || !S_ISDIR(st.st_mode)) return false;

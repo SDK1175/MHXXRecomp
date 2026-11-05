@@ -1,4 +1,5 @@
 // Small services: account, parental control, add-on content, settings, and other mostly-stubbed interfaces.
+#include "../game/game.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -120,7 +121,7 @@ static const char *const languages[] = {"ja", "en-US", "fr", "de", "it", "es", "
 
 const char *settings_language(void) {
     const char *l = getenv("MHGU_LANG");
-    return l && *l ? l : "en-US";
+    return l && *l ? l : GAME_DEFAULT_LANG;
 }
 
 static uint64_t lang_code(const char *s) {

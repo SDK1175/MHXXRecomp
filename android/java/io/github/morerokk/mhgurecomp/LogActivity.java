@@ -20,7 +20,7 @@ import android.widget.Toast;
 import java.io.File;
 
 public class LogActivity extends Activity {
-    public static final String CRASH = "io.github.morerokk.mhgurecomp.CRASH";
+    public static final String CRASH = "io.github.mhxxrecomp.app.CRASH";
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -53,7 +53,7 @@ public class LogActivity extends Activity {
         Intent send = new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
         send.putExtra(Intent.EXTRA_STREAM, uri);
-        send.putExtra(Intent.EXTRA_SUBJECT, "MHGU Recomp " + name);
+        send.putExtra(Intent.EXTRA_SUBJECT, "MHXX Recomp " + name);
         send.setClipData(ClipData.newRawUri(name, uri));  // (the read grant goes with the chooser to the app picked)
         send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         try {

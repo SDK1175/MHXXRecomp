@@ -5,7 +5,7 @@
 #   make PLATFORM=android ABI=x86_64            build-android/mhgurecomp.apk: every ABI built so far
 #                                                 (build-android/lib/<abi>/), signed with the SDK's debug key
 #   make PLATFORM=android ABI=x86_64 install    that APK onto the running emulator / the connected phone (adb)
-#   make PLATFORM=android dist VERSION=0.13.0   the release: dist/Android-MHGURecomp.<version>.apk, arm64-v8a only,
+#   make PLATFORM=android dist VERSION=0.13.0   the release: dist/Android-MHXXRecomp.<version>.apk, arm64-v8a only,
 #                                                 signed with the release key (on Windows, make dist does this too)
 #   make PLATFORM=android release-key           that key, once ever (below)
 # The assets are what a PC release has beside the exe: pipelines.list, licenses/ and bonus/system (BONUS), which the
@@ -25,7 +25,7 @@ DEBUG_KEY   := $(HOME)/.android/debug.keystore
 # with a random password in the .pass file beside it: keep both safe, and copy them to every PC that makes releases.
 # (In the Windows profile's .android, where the SDK keeps its own: MSYS2's HOME isn't the same in every shell, and
 # make dist never makes a new key by itself.)
-RELEASE_KEY ?= $(or $(call to_unix,$(USERPROFILE)),$(HOME))/.android/mhgurecomp-release.keystore
+RELEASE_KEY ?= $(or $(call to_unix,$(USERPROFILE)),$(HOME))/.android/mhxxrecomp-release.keystore
 RELEASE_PASS = $(RELEASE_KEY).pass
 # versionCode: the commits so far (grows with every build of a newer commit); versionName: the build's VERSION
 APK_VERSION_CODE := $(shell git rev-list --count HEAD 2>/dev/null || echo 1)
@@ -39,7 +39,7 @@ DEBUG_SIGN   = --ks "$(call win_path,$(DEBUG_KEY))" --ks-pass pass:android --key
 # serves adb's incremental install, and would leave an .idsig file beside the APK in dist/)
 RELEASE_SIGN = --ks "$(call win_path,$(RELEASE_KEY))" --ks-pass "file:$(call win_path,$(RELEASE_PASS))" \
                --v4-signing-enabled false
-DIST_APK     = $(DIST)/Android-MHGURecomp.$(VERSION).apk
+DIST_APK     = $(DIST)/Android-MHXXRecomp.$(VERSION).apk
 
 # $(call pack_apk,<apk>,<ABIs>,<apksigner's key options>)
 define pack_apk
@@ -80,7 +80,7 @@ release-key:
 	@$(PY) -c "import secrets; print(secrets.token_urlsafe(24), end='')" > "$(RELEASE_PASS)"
 	"$(JDK)/bin/keytool" -genkeypair -keystore "$(call win_path,$(RELEASE_KEY))" -storetype PKCS12 \
 	    -storepass:file "$(call win_path,$(RELEASE_PASS))" -keypass:file "$(call win_path,$(RELEASE_PASS))" \
-	    -alias mhgurecomp -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=MHGURecomp"
+	    -alias mhxxrecomp -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=MHXXRecomp"
 	@echo "apk: made the release key $(RELEASE_KEY) (password in $(RELEASE_PASS)): back both up, every release needs them"
 $(RELEASE_KEY):
 	@echo "dist: no release key $@: copy it (with its .pass) from the PC that made the earlier releases,"; \
