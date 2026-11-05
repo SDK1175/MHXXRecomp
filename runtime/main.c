@@ -88,6 +88,7 @@ static void boot(const char *root) {
     emtrace_init();  // (debug, MHGU_EMTRACE: runtime/hle/emtrace.c)
     kotrace_init();  // (debug, MHGU_KOTRACE: runtime/hle/kotrace.c)
     dummy_init();  // (debug, MHGU_DUMMY: runtime/hle/dummy.c)
+    { void kbdtrace_init(void); kbdtrace_init(); }  // (debug, MHXX: the keyboard's way, runtime/hle/kbdtrace.c)
     cheats_init();  // (cheat codes from cheats/: runtime/cheats.c)
     discord_init();  // (Discord Rich Presence: runtime/net/discord.c, runtime/hle/presence.c)
     { void sampler_init(void); sampler_init(); }  // (debug, Windows, MHGU_SAMPLE: runtime/sampler.c)
