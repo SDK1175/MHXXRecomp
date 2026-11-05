@@ -108,6 +108,23 @@ SITE(0) SITE(1) SITE(2) SITE(3) SITE(4) SITE(5) SITE(6) SITE(7) SITE(8) SITE(9) 
 static const HostFn g_site_fns[NSITES] = {site_0, site_1, site_2, site_3, site_4, site_5, site_6,
                                           site_7, site_8, site_9, site_10, site_11, site_12};
 
+// The message box the name step shows ("please enter a name", 0x842420(box): +0x4c its step, +0x50 its kind: most
+// kinds close on the decide button, kind 11 waits for a sub-object at +0x68 instead): logged when anything changes
+#define FN_MSGBOX_UPDATE 0x842420u
+static uint32_t m_obj, m_sig = ~0u;
+static void msgbox_update(Cpu *c) {
+    uint32_t obj = c->r[0];
+    fnhook_call_original(c, FN_MSGBOX_UPDATE);
+    uint32_t step = LD32(obj + 0x4c), kind = LD32(obj + 0x50), res = LD32(obj + 0x54), btn = LD32(obj + 0x58),
+             wait = LD32(obj + 0x5c), sub = LD32(obj + 0x68), subvt = sub && sub >= 0x08000000u ? LD32(sub) : 0;
+    uint32_t sig = step ^ kind << 4 ^ res << 8 ^ btn ^ wait << 16 ^ sub;
+    if (obj != m_obj || sig != m_sig) {
+        LOG("[kbdtrace] message box %08x: step %u, kind %u, result %u, button %x, wait %u, sub-object %08x (vtable %08x)\n",
+            obj, step, kind, res, btn, wait, sub, subvt);
+        m_obj = obj, m_sig = sig;
+    }
+}
+
 #define FN_ENTRY_OPEN 0x758360u  // the global text entry's open (entry), as the 16 places call it
 static void entry_open(Cpu *c) {
     LOG("[kbdtrace] text entry opened (from %08x, frame %llu)\n", c->r[14], (unsigned long long)g_present_count);
@@ -125,6 +142,7 @@ void kbdtrace_init(void) {
     fnhook_set(FN_MGR_OPEN, hle_register("kbdtrace:mgr_open", mgr_open));
     fnhook_set(FN_FACTORY, hle_register("kbdtrace:factory", factory));
     fnhook_set(FN_ENTRY_OPEN, hle_register("kbdtrace:entry_open", entry_open));
+    fnhook_set(FN_MSGBOX_UPDATE, hle_register("kbdtrace:msgbox_update", msgbox_update));
     for (unsigned i = 0; i < NSITES; i++) {
         char name[32];
         snprintf(name, sizeof name, "kbdtrace:site_%x", g_sites[i]);
