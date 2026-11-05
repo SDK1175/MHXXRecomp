@@ -31,9 +31,13 @@ def sanitize(sym):
 MOV_LR_PC = 0xE1A0E00F
 
 # Game instructions replaced at generation time: (module, address) -> (expected word, C for that instruction).
+# GU_PATCHES / GU_EMJUMP: MHGU 1.4.0's, as MHGU Recomp has them: kept as the reference for what each one does.
+# MHXX_PATCHES / MHXX_EMJUMP (below them): this port's, for MHXX 1.5.1 (runtime/game/game.h), filled in as each
+# instruction is found in its main. Only those are applied (PATCHES). A wrong address stops the generation (the
+# expected word doesn't match), so a guess never slips in. Until one is there, its feature does what the game does.
 # main 0xdbcd34 / 0xdbcd38: the docked render size, `mov r0, #1920` / `movw r7, #1080` (the constants resolution mods
 # patch), taken from the settings instead (runtime/config.c).
-PATCHES = {
+GU_PATCHES = {
     ('main', 0xdbcd34): (0xE3A00D1E, '{ extern uint32_t g_render_size[2]; c->r[0] = g_render_size[0]; }'),
     ('main', 0xdbcd38): (0xE3007438, '{ extern uint32_t g_render_size[2]; c->r[7] = g_render_size[1]; }'),
     # 2D UI canvas size: mov r7, #1280 (0xdbcd48) / mov r7, #720 (0xdbcd54)
@@ -84,7 +88,7 @@ PATCHES = {
 # update without the frame step, advance by the step instead. (address, kind, axis, jerk): the store `vstr sN,
 # [r0, #off]` of that status block field. 0x1122b4c / 0x1122b9c: Arzuros / Lagombi / Volvidon hops (vertical only);
 # 0x1122e48 / 0x1122ee4: Volvidon's body press, rising / falling; 0x10f6eb4: Zinogre (no jerk).
-EMJUMP = [
+GU_EMJUMP = [
     (0x1122b4c, 'pos', 1, -0.2), (0x1122b60, 'vel', 1, -0.2), (0x1122b74, 'acc', 1, -0.2),
     (0x1122b9c, 'pos', 1, -0.2), (0x1122bb0, 'vel', 1, -0.2), (0x1122bc8, 'acc', 1, -0.2),
     (0x1122e48, 'pos', 0, 0), (0x1122e5c, 'pos', 1, -0.2), (0x1122e70, 'pos', 2, 0),
@@ -94,11 +98,32 @@ EMJUMP = [
     (0x10f6eb4, 'pos', 0, 0), (0x10f6ec4, 'pos', 1, 0), (0x10f6ed4, 'pos', 2, 0),
     (0x10f6ee8, 'vel', 0, 0), (0x10f6ef8, 'vel', 1, 0), (0x10f6f08, 'vel', 2, 0),
 ]
-for _a, _kind, _axis, _jerk in EMJUMP:
-    _off = {'pos': 0x40, 'vel': 0x10, 'acc': 0x20}[_kind] + 4 * _axis  # (vstr's offset / 4 in the low byte)
-    _reg = 1 if _a == 0x1122bc8 else 0  # vstr s2 there, s0 elsewhere
-    _word = 0xED800A00 | (_reg << 12) | (_off // 4)
-    PATCHES[('main', _a)] = (_word, f'{{ extern void emjump_{_kind}(Cpu *, int, float); emjump_{_kind}(c, {_axis}, {float(_jerk)}f); }}')
+
+
+def emjump_patches(table, reg_of=lambda a: 0):
+    """(address, kind, axis, jerk) stores -> PATCHES entries. reg_of(address): the vstr's source register's
+    (sN, N / 2 in bits 12-15) for an entry whose store isn't from s0."""
+    out = {}
+    for a, kind, axis, jerk in table:
+        off = {'pos': 0x40, 'vel': 0x10, 'acc': 0x20}[kind] + 4 * axis  # (vstr's offset / 4 in the low byte)
+        word = 0xED800A00 | (reg_of(a) << 12) | (off // 4)
+        out[('main', a)] = (word, f'{{ extern void emjump_{kind}(Cpu *, int, float); emjump_{kind}(c, {axis}, {float(jerk)}f); }}')
+    return out
+
+
+GU_PATCHES.update(emjump_patches(GU_EMJUMP, lambda a: 1 if a == 0x1122bc8 else 0))  # (vstr s2 at 0x1122bc8)
+
+# ---- MHXX 1.5.1 (main build 9D4C86E6EF74504A): GU_PATCHES' entries at their MHXX addresses, as they are found.
+# Same format: ('main', address): (expected word, C). The C is usually GU's as it is; check the registers the
+# instruction uses, which can differ between the builds.
+MHXX_PATCHES = {
+}
+MHXX_EMJUMP = [  # (address, kind, axis, jerk), as GU_EMJUMP
+]
+MHXX_EMJUMP_REG = {}  # address -> vstr source register / 2, for the entries not stored from s0
+
+PATCHES = dict(MHXX_PATCHES)
+PATCHES.update(emjump_patches(MHXX_EMJUMP, lambda a: MHXX_EMJUMP_REG.get(a, 0)))
 
 
 class Module:

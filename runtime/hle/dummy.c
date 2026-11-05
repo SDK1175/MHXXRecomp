@@ -3,16 +3,17 @@
 // it lasts. Each hit is logged with the damage it would have done: for testing attacks without chasing a monster. MHGU_DUMMY=<n>,
 // n > 1: its distance in cm instead of 240 (at 350 some attacks don't reach a Volvidon). A good target: quest 404, a Volvidon.
 // Hooked: the collision manager's update (just before hits are decided) and the monster's HP damage.
+#include "../game/addr.h"
 #include <stdlib.h>
 
 #include "../hle.h"
 
-#define FN_COLLISION   0x36b15cu  // the collision manager's update: attacks against targets, every update
-#define FN_EN_DAMAGE   0x29d6f8u  // (enemy, part, damage, kind): takes the damage from its HP
-#define FN_EN_SPEED    0x2b0870u  // (enemy, speed s0): its motion's speed
-#define G_SENEMY       0x1a51fe0u // sEnemy *: +0x1c the 10 live enemies
-#define G_SPLAYER      0x1a85b58u // sPlayer *: +0x1c the 4 player slots
-#define G_GAMECONTROL  0x1a8ca48u // sGameControl *: +0x30 our player slot
+#define FN_COLLISION   A_DUMMY_FN_COLLISION  // the collision manager's update: attacks against targets, every update
+#define FN_EN_DAMAGE   A_DUMMY_FN_EN_DAMAGE  // (enemy, part, damage, kind): takes the damage from its HP
+#define FN_EN_SPEED    A_DUMMY_FN_EN_SPEED  // (enemy, speed s0): its motion's speed
+#define G_SENEMY       A_G_SENEMY // sEnemy *: +0x1c the 10 live enemies
+#define G_SPLAYER      A_G_SPLAYER // sPlayer *: +0x1c the 4 player slots
+#define G_GAMECONTROL  A_G_GAMECONTROL // sGameControl *: +0x30 our player slot
 #define EN_INFO        0x1428u    // enemy: status block: +0x40 position, +0x1b6 network id (below 10000: large)
 #define OBJ_POS        0x40u      // player: position
 #define OBJ_ROT        0x50u      // player: rotation (quaternion)
@@ -23,13 +24,13 @@ static float g_dist = 240.0f;
 static uint32_t g_dummy;  // the monster held, 0 none
 
 static uint32_t local_player(void) {
-    uint32_t gc = LD32(G_GAMECONTROL), sp = LD32(G_SPLAYER);
+    uint32_t gc = LDG(G_GAMECONTROL), sp = LDG(G_SPLAYER);
     uint32_t slot = gc ? LD32(gc + 0x30) : 4;
     return sp && slot < 4 ? LD32(sp + 0x1c + 4 * slot) : 0;
 }
 
 static void hold(Cpu *c) {
-    uint32_t pl = local_player(), sen = LD32(G_SENEMY), en = 0;
+    uint32_t pl = local_player(), sen = LDG(G_SENEMY), en = 0;
     g_dummy = 0;
     if (!pl || !sen || !LD8(pl + OBJ_ZONE)) return;
     for (int k = 0; k < MAX_EN && !en; k++) {
@@ -61,7 +62,7 @@ static bool g_summoned;
 static uint64_t g_apart_since;
 
 static void summon_once(void) {
-    uint32_t pl = local_player(), sen = LD32(G_SENEMY), en = 0;
+    uint32_t pl = local_player(), sen = LDG(G_SENEMY), en = 0;
     if (!pl || !sen || !LD8(pl + OBJ_ZONE)) return;
     for (int k = 0; k < MAX_EN && !en; k++) {
         uint32_t e = LD32(sen + 0x1c + 4u * (uint32_t)k), info = e ? LD32(e + EN_INFO) : 0;
@@ -116,6 +117,7 @@ static void damage(Cpu *c) {
 }
 
 void dummy_init(void) {
+    PORT_OFF(DUMMY, "training dummy (debug)");
     const char *e = getenv("MHGU_SUMMON");
     if (e && *e && atoi(e) > 0) {
         g_summon = (float)atoi(e);

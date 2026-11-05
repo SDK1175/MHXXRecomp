@@ -12,13 +12,14 @@
 // (+0x500 of the object at 0x1a390e0: 206 and 303 in byte 1, 10216 in byte 0xc, 10307 in 0xd, 11204 in 0xaf). The script
 // module isn't loaded during a hunt (the answer is then always no), but is on the result screen, where 0x588d40 runs.
 // The save is each player's own, so this needs nothing from the host and changes nothing for the others in the quest.
+#include "../game/addr.h"
 #include <string.h>
 
 #include "../config.h"
 #include "../hle.h"
 
-#define FN_URGENT   0x5ae75cu  // (sQuest) -> an Urgent quest
-#define FN_UNLOCKED 0x74af8cu  // (quest number, 0xff, 0) -> unlocked in this save
+#define FN_URGENT   A_URGENTCREDIT_FN_URGENT  // (sQuest) -> an Urgent quest
+#define FN_UNLOCKED A_URGENTCREDIT_FN_UNLOCKED  // (quest number, 0xff, 0) -> unlocked in this save
 #define SQ_QUEST_NO 0xe0u      // sQuest: the quest number
 
 static bool unlocked(Cpu *c, uint32_t q) {
@@ -44,5 +45,6 @@ static void urgent(Cpu *c) {
 }
 
 void urgentcredit_init(void) {
+    PORT_OFF(URGENTCREDIT, "shared Urgent quest credit");
     fnhook_set(FN_URGENT, hle_register("urgentcredit:urgent", urgent));
 }

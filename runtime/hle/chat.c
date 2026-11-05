@@ -4,6 +4,7 @@
 // index), shown in every player's chat window as it arrives. So "/" opens a line to type (runtime/textinput.c, drawn
 // by the overlay) and Enter sends it the way the game sends a shoutout, from the game's thread. A longer line goes out
 // as several messages, split between words, each as long as the Hub's chat allows (one line of the chat window).
+#include "../game/addr.h"
 #include "chat.h"
 
 #include <stdatomic.h>
@@ -14,13 +15,13 @@
 #include "../textinput.h"
 
 // Game code and data (main, v1.4.0; runtime addresses). Found from the Hub chat's own sender (0x870270).
-#define FN_SEND_CHAT   0x41e204u  // (net object, type, name, text[0x78], int on the stack (1)): builds and sends it
-#define FN_NET_INDEX   0x427ae4u  // (sNetwork) -> our player index in the session
-#define FN_NET_ONLINE  0x427ba8u  // (sNetwork) -> in a session (else the index is 0)
-#define FN_NET_OBJECT  0x427b3cu  // (sNetwork, 0x6b) -> the object chat messages are sent through
-#define FN_MY_PLAYER   0x476278u  // (sPlayer) -> our player; +0x13c4 -> its data, +0x514 there: the hunter's name
-#define G_SNETWORK     0x1a843f0u
-#define G_SPLAYER      0x1a85b58u
+#define FN_SEND_CHAT   A_CHAT_FN_SEND_CHAT  // (net object, type, name, text[0x78], int on the stack (1)): builds and sends it
+#define FN_NET_INDEX   A_CHAT_FN_NET_INDEX  // (sNetwork) -> our player index in the session
+#define FN_NET_ONLINE  A_CHAT_FN_NET_ONLINE  // (sNetwork) -> in a session (else the index is 0)
+#define FN_NET_OBJECT  A_CHAT_FN_NET_OBJECT  // (sNetwork, 0x6b) -> the object chat messages are sent through
+#define FN_MY_PLAYER   A_CHAT_FN_MY_PLAYER  // (sPlayer) -> our player; +0x13c4 -> its data, +0x514 there: the hunter's name
+#define G_SNETWORK     A_G_SNETWORK
+#define G_SPLAYER      A_G_SPLAYER
 #define CHAT_TYPE      6u         // + player index: a shoutout's type (shown in quests too)
 #define TEXT_BYTES     0x78u      // what the sender copies (the game's own texts are at most 0x68 bytes)
 #define MAX_CHARS      120        // a line typed; it goes out in messages of up to LINE_CHARS, split between words
@@ -66,6 +67,7 @@ void chat_save_position(void) {
 }
 
 void chat_open(void) {
+    PORT_OFF(CHAT, "typed chat");
     if (atomic_load(&g_composing)) return;
     textinput_begin("", MAX_CHARS);
     atomic_store(&g_composing, true);  // (after it: chat_tick never sees the line without its text entry, below)
@@ -86,7 +88,7 @@ static uint32_t call(Cpu *c, uint32_t fn, uint32_t a0, uint32_t a1, uint32_t a2,
 }
 
 static void send_text(Cpu *c, const char *text) {
-    uint32_t net = LD32(G_SNETWORK), players = LD32(G_SPLAYER);
+    uint32_t net = LDG(G_SNETWORK), players = LDG(G_SPLAYER);
     if (!net || !players) { LOG("[chat] not sent: no network or player yet\n"); return; }
     uint32_t saved[16];
     memcpy(saved, c->r, sizeof saved);

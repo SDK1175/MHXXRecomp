@@ -1,4 +1,5 @@
 // nn::vi (display / layer) and nv:: (graphics driver init), implemented on the host.
+#include "../game/addr.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -19,11 +20,11 @@ uint32_t g_native_window;
 // cheat codes write this same field). The frame delta is in 60 fps frames, measured: walking speed is the same at 30,
 // 60 and ~135 fps. The settings' FPS (mhgurecomp.ini: 30..240, default 60); MHGU_FRAMERATE supplies the initial override. Above the
 // monitor's refresh rate the settings' VSync must be Off (immediate present): FIFO / mailbox wait for the display.
-#define FPS_OBJ_GLOBAL 0x2326764u
+#define FPS_OBJ_GLOBAL A_G_SYSTEM
 static float framerate(void) { return config_live_fps(); }
 void vi_apply_framerate(void) {  // (also called per presented frame: runtime/nvn/vulkan/device.c)
     float want = framerate();
-    uint32_t obj = LD32(FPS_OBJ_GLOBAL);
+    uint32_t obj = LDG(FPS_OBJ_GLOBAL);
     if (obj < HEAP_BASE || obj >= HEAP_BASE + HEAP_MAX) return;  // (not created yet)
     float cur = LDF(obj + 0x3c);
     if (cur != want) STF(obj + 0x3c, want);

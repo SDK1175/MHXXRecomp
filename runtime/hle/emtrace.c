@@ -4,15 +4,17 @@
 // monster (as its AI does: f_276154). MHGU_EMTRACE_ZAKO=1 logs small monsters: every new action and, twice a second,
 // each one's distance to the hunter and current targets.
 // Hooked: the engine's frame function (0xda5824: the limiter, which also measures the frame step), after it runs.
+#include "../game/addr.h"
 #include <math.h>
 #include <stdlib.h>
 
 #include "../hle.h"
 
-#define FN_FRAME      0xda5824u   // engine frame start: sleeps to the target, sets the step (+0x68)
-#define FN_SET_ACTION 0x276154u   // (monster, group, index, mode): starts a monster action
-#define G_SYSTEM      0x2326764u  // engine system object *: +0x68 the frame step in 60 fps frames
-#define G_SENEMY      0x1a51fe0u  // sEnemy *: +0x1c: the 10 live enemies of the loaded zone
+#define FN_FRAME      A_EMTRACE_FN_FRAME   // engine frame start: sleeps to the target, sets the step (+0x68)
+#define FN_SET_ACTION A_EMTRACE_FN_SET_ACTION   // (monster, group, index, mode): starts a monster action
+#define G_SYSTEM      A_G_SYSTEM  // engine system object *: +0x68 the frame step in 60 fps frames
+#define G_SPLAYER     A_G_SPLAYER
+#define G_SENEMY      A_G_SENEMY  // sEnemy *: +0x1c: the 10 live enemies of the loaded zone
 #define EN_INFO       0x1428u     // enemy: status block pointer (+0x40 position, +0x1b6 network id)
 #define EN_ACTION     0x73e0u     // enemy: the current action (group, index, ...)
 #define MAX_EN        10
@@ -53,14 +55,14 @@ static bool zako(uint32_t en) {
 
 // The hunter's distance from a monster (sPlayer +0x1c: the 4 player slots, position at +0x40).
 static float slot0_dist(uint32_t info) {
-    uint32_t spl = LD32(0x1a85b58u), p = spl ? LD32(spl + 0x1c) : 0;
+    uint32_t spl = LDG(G_SPLAYER), p = spl ? LD32(spl + 0x1c) : 0;
     if (!p) return -1;
     float dx = LDF(p + 0x40) - LDF(info + 0x40), dz = LDF(p + 0x48) - LDF(info + 0x48);
     return sqrtf(dx * dx + dz * dz);
 }
 
 // The attention rates (f_2bb828: how much a target's score rises per update), last value per monster.
-#define FN_HATE_RATE 0x2bb828u
+#define FN_HATE_RATE A_EMTRACE_FN_HATE_RATE
 static struct { uint32_t en; int pl, ot; } g_rate[32];
 
 static void hate_rate(Cpu *c) {
@@ -132,7 +134,7 @@ void emtrace_cmd(Cpu *c) {
 
 static void frame(Cpu *c) {
     fnhook_call_original(c, FN_FRAME);
-    uint32_t sen = LD32(G_SENEMY), sys = LD32(G_SYSTEM);
+    uint32_t sen = LDG(G_SENEMY), sys = LDG(G_SYSTEM);
     if (!sen) return;
     uint64_t now = plat_now_ns();
     if (g_zako) zako_log(sen, now);
@@ -142,7 +144,7 @@ static void frame(Cpu *c) {
     if (!pos_read) pos_read = true, pos_log = getenv("MHGU_EMTRACE_POS") != NULL;
     if (pos_log && now - pos_last >= 100000000ull) {
         pos_last = now;
-        uint32_t spl = LD32(0x1a85b58u), p = spl ? LD32(spl + 0x1c) : 0;
+        uint32_t spl = LDG(G_SPLAYER), p = spl ? LD32(spl + 0x1c) : 0;
         for (int k = 0; p && k < MAX_EN; k++) {
             uint32_t en = LD32(sen + 0x1c + 4u * (uint32_t)k);
             if (!en || !large(en)) continue;
@@ -243,6 +245,7 @@ static void set_action(Cpu *c) {
 }
 
 void emtrace_init(void) {
+    PORT_OFF(EMTRACE, "monster action trace (debug)");
     const char *e = getenv("MHGU_EMTRACE");
     g_zako = getenv("MHGU_EMTRACE_ZAKO") != NULL;
     if ((!e || !*e || !(g_level = atoi(e))) && !g_zako) return;

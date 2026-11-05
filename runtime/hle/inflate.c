@@ -8,13 +8,14 @@
 // bits +0x34, lencode +0x44, distcode +0x48, lenbits +0x4c, distbits +0x50), its modes TYPE 11 and BAD 27, no
 // INFLATE_STRICT (dmax), and a distance too far back always an error (no `sane` test), as the game's function does.
 // MHGU_INFLATE=game: the game's function; MHGU_INFLATE=check: both on every call, results compared (logged).
+#include "../game/addr.h"
 #include <stdlib.h>
 #include <string.h>
 
 #include "../hle.h"
 
-#define FN_INFLATE_FAST 0x1422ce8u  // (z_stream *strm, unsigned start: avail_out when inflate() was entered)
-#define FN_ADLER32      0x1422774u  // (adler, buf, len) -> adler
+#define FN_INFLATE_FAST A_INFLATE_FN_INFLATE_FAST  // (z_stream *strm, unsigned start: avail_out when inflate() was entered)
+#define FN_ADLER32      A_INFLATE_FN_ADLER32  // (adler, buf, len) -> adler
 
 #define ZS_NEXT_IN   0x00u
 #define ZS_AVAIL_IN  0x04u
@@ -38,9 +39,9 @@
 #define MODE_TYPE 11u
 #define MODE_BAD  27u
 
-#define MSG_LITLEN   0x17860b5u  // "invalid literal/length code"
-#define MSG_DISTCODE 0x17860d1u  // "invalid distance code"
-#define MSG_DISTFAR  0x17860e7u  // "invalid distance too far back"
+#define MSG_LITLEN   A_INFLATE_MSG_LITLEN  // "invalid literal/length code"
+#define MSG_DISTCODE A_INFLATE_MSG_DISTCODE  // "invalid distance code"
+#define MSG_DISTFAR  A_INFLATE_MSG_DISTFAR  // "invalid distance too far back"
 
 typedef struct { uint8_t op, bits; uint16_t val; } Code;  // zlib's `code`
 
@@ -265,6 +266,7 @@ static void hook_adler_check(Cpu *c) {
 }
 
 void inflate_init(void) {
+    PORT_OFF(INFLATE, "fast archive decompression");
     const char *e = getenv("MHGU_INFLATE");
     if (e && !strcmp(e, "game")) return;
     bool check = e && !strcmp(e, "check");

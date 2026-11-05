@@ -13,16 +13,17 @@
 // and in the updates between nothing counts. (Counting any change within the 30 fps update instead still counted
 // more than the 30 fps game.) At 30 fps and below the original. MHGU_NO_MASHRATE=1: the original per-update count
 // (for comparing).
+#include "../game/addr.h"
 #include <math.h>
 #include <stdlib.h>
 
 #include "../hle.h"
 
-#define FN_MASH   0x47f590u    // (player) -> 1: mashed this update
+#define FN_MASH   A_MASHRATE_FN_MASH    // (player) -> 1: mashed this update
 #define PL_STEP   0x1cu        // player: its step (f32, 60 fps frames)
 #define PL_LOCAL  0x13ccu      // player: bit 0 the local player's
 #define PL_STATE  0x13fcu      // player: the input state (+0x1400 the last update's)
-#define MASH_BITS 0x00ff05f0u  // (the stick's directions, the buttons 0x47f590 counts)
+#define MASH_BITS A_MASHRATE_MASH_BITS  // (the stick's directions, the buttons 0x47f590 counts)
 #define SLOTS     4
 
 static struct { uint32_t pl, state; uint64_t update; float t; bool got; } g_slot[SLOTS];
@@ -55,6 +56,7 @@ static void mash(Cpu *c) {
 }
 
 void mashrate_init(void) {
+    PORT_OFF(MASHRATE, "stun mashing at high frame rates");
     const char *e = getenv("MHGU_NO_MASHRATE");
     if (e && *e == '1') return;
     fnhook_set(FN_MASH, hle_register("mashrate:mash", mash));

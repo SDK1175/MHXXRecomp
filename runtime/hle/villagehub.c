@@ -19,6 +19,7 @@
 // back to its first state, which lays out the menu anew. Only in the rank menu (UI state 1) and star menu (2): in the
 // quest list L / R page through a quest's details.
 //   MHGU_VQ_TRACE=1   log the filter's verdicts (once per counter type and quest group)
+#include "../game/addr.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,25 +29,25 @@
 #include "input.h"
 
 // main v1.4.0, runtime addresses
-#define FN_QUEST_FILTER   0x5b8090u   // (list, quest number, counter type) -> listed?
-#define FN_CATEGORY_BUILD 0x5b85d8u   // sQuestSelector: categories from the list
-#define FN_CATEGORY_FILL  0x5bb318u   // sQuestSelector: category contents
-#define FN_CATEGORY_GET   0x5bc96cu   // (selector, slot) -> category
-#define FN_UI_ROWS        0x983074u   // uUIQuestCounter: the star rows of a rank
-#define FN_UI_UPDATE      0x981e34u   // uUIQuestCounter vtable slot 9
-#define FN_UI_DRAW        0x981bb0u   // uUIQuestCounter vtable slot 18
-#define FN_LIST_LOAD      0x5b7fd8u   // sQuestSelector: start the list job
-#define FN_LIST_DONE      0x5b8070u   // sQuestSelector: the list job has finished
-#define FN_CATEGORIES     0x5ba8fcu   // sQuestSelector: build the categories anew (at a stage's start)
-#define FN_QUEST_LOOKUP   0x5ba50cu   // (selector, quest number) -> its rQuestData (DLC, loaded, or in the list)
-#define FN_QUEST_UNLOCKED 0x74af8cu   // (quest number, 0xff, 0) -> unlocked in this save (the counters' check)
-#define G_RESOURCES       0x2326a64u  // the resource manager * (vtable +0x30: getResource(dti, path, mode))
-#define DTI_QUESTDATA     0x1a8ab98u  // rQuestData
+#define FN_QUEST_FILTER   A_VILLAGEHUB_FN_QUEST_FILTER   // (list, quest number, counter type) -> listed?
+#define FN_CATEGORY_BUILD A_VILLAGEHUB_FN_CATEGORY_BUILD   // sQuestSelector: categories from the list
+#define FN_CATEGORY_FILL  A_VILLAGEHUB_FN_CATEGORY_FILL   // sQuestSelector: category contents
+#define FN_CATEGORY_GET   A_VILLAGEHUB_FN_CATEGORY_GET   // (selector, slot) -> category
+#define FN_UI_ROWS        A_VILLAGEHUB_FN_UI_ROWS   // uUIQuestCounter: the star rows of a rank
+#define FN_UI_UPDATE      A_VILLAGEHUB_FN_UI_UPDATE   // uUIQuestCounter vtable slot 9
+#define FN_UI_DRAW        A_VILLAGEHUB_FN_UI_DRAW   // uUIQuestCounter vtable slot 18
+#define FN_LIST_LOAD      A_VILLAGEHUB_FN_LIST_LOAD   // sQuestSelector: start the list job
+#define FN_LIST_DONE      A_VILLAGEHUB_FN_LIST_DONE   // sQuestSelector: the list job has finished
+#define FN_CATEGORIES     A_VILLAGEHUB_FN_CATEGORIES   // sQuestSelector: build the categories anew (at a stage's start)
+#define FN_QUEST_LOOKUP   A_VILLAGEHUB_FN_QUEST_LOOKUP   // (selector, quest number) -> its rQuestData (DLC, loaded, or in the list)
+#define FN_QUEST_UNLOCKED A_VILLAGEHUB_FN_QUEST_UNLOCKED   // (quest number, 0xff, 0) -> unlocked in this save (the counters' check)
+#define G_RESOURCES       A_VILLAGEHUB_G_RESOURCES  // the resource manager * (vtable +0x30: getResource(dti, path, mode))
+#define DTI_QUESTDATA     A_VILLAGEHUB_DTI_QUESTDATA  // rQuestData
 #define SEL_LIST          0x24u       // sQuestSelector: rQuestData *[LIST_MAX], +0x28 their number
 #define SEL_COUNT         0x28u
 #define LIST_MAX          0x360u
-#define G_GAMECONTROL     0x1a8ca48u  // sGameControl *: +0x4c area type
-#define G_SELECTOR        0x1a8ae38u  // sQuestSelector *
+#define G_GAMECONTROL     A_G_GAMECONTROL  // sGameControl *: +0x4c area type
+#define G_SELECTOR        A_G_SELECTOR  // sQuestSelector *
 #define GC_AREA_TYPE      0x4cu
 #define UI_STATE          0x3cu       // uUIQuestCounter: 1 rank menu, 2 star menu, 5 quest list
 #define UI_RANK_MENU      1
@@ -65,7 +66,7 @@ static bool hub_area(uint8_t a) { return a == AREA_HUB || a == AREA_PUB; }
 static bool village_active(void) { return g_village || config_live_village_in_hub(); }
 
 static uint32_t area_addr(void) {
-    uint32_t gc = LD32(G_GAMECONTROL);
+    uint32_t gc = LDG(G_GAMECONTROL);
     return gc ? gc + GC_AREA_TYPE : 0;
 }
 
@@ -167,7 +168,7 @@ static void quest_lookup(Cpu *c) {
 }
 
 static void reload_list(Cpu *c) {
-    uint32_t sel = LD32(G_SELECTOR);
+    uint32_t sel = LDG(G_SELECTOR);
     if (!sel) return;
     uint64_t t0 = plat_now_ns();
     call1(c, FN_LIST_LOAD, sel);
@@ -205,6 +206,7 @@ static void ui_update(Cpu *c) {
 // The hooks are set whatever the setting: each follows [Village Quests] VillageQuestsInHub as it is now (a Save in the
 // settings menu turns it on or off; when off, the counter goes back to the Hub's quests at its rank or star menu).
 void villagehub_init(void) {
+    PORT_OFF(VILLAGEHUB, "Village quests in the Hub");
     g_trace = getenv("MHGU_VQ_TRACE") != NULL;
     g_path = hle_alloc(64);
     fnhook_set(FN_QUEST_FILTER, hle_register("villagehub:quest_filter", quest_filter));

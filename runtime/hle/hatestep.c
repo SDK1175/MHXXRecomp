@@ -9,12 +9,13 @@
 // Here the monster's time is cut into 30 fps updates (2.0 of its step): 0x2bbf98 runs once for each with the step 2.0,
 // so the scores move as in the 30 fps game. At 30 fps and below the original. MHGU_NO_HATESTEP=1: the original per-update
 // add (for comparing).
+#include "../game/addr.h"
 #include <math.h>
 #include <stdlib.h>
 
 #include "../hle.h"
 
-#define FN_HATE  0x2bbf98u  // (monster): the update of its attention scores
+#define FN_HATE  A_HATESTEP_FN_HATE  // (monster): the update of its attention scores
 #define EN_STEP  0x1cu      // monster: its step (f32, 60 fps frames)
 #define SLOTS    32
 
@@ -46,6 +47,7 @@ static void hate(Cpu *c) {
 }
 
 void hatestep_init(void) {
+    PORT_OFF(HATESTEP, "monster attention at high frame rates");
     const char *e = getenv("MHGU_NO_HATESTEP");
     if (e && *e == '1') return;
     fnhook_set(FN_HATE, hle_register("hatestep:hate", hate));

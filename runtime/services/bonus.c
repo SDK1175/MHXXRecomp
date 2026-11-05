@@ -18,6 +18,7 @@
 // When both are all zero in a save, the donor's are copied in; nothing else in the file is touched. A save that has
 // downloads of its own is left alone (claims, deleted quests and so on stay the game's business).
 // Only with BonusContent = On in mhgurecomp.ini (the default; Off: saves are never touched).
+#include "../game/addr.h"
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -95,6 +96,7 @@ static bool load_donor(void) {
 
 // Called before the game opens a save file (host path): fills in the bonus content if the file has none.
 void bonus_fill(const char *host_path) {
+    PORT_OFF(BONUS, "bonus content (MHGU's save layout)");
     const char *base = strrchr(host_path, '/');
     base = base ? base + 1 : host_path;
     if (strcmp(base, "system") && strcmp(base, "system_backup")) return;

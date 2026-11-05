@@ -9,17 +9,18 @@
 // is where the original 30 fps game has it at every 30 fps frame. s is at most 1 (below 30 fps as the original).
 // The stores come in the original order (all positions, then velocities, then the acceleration), so each one still
 // sees the values from before the update.
+#include "../game/addr.h"
 #include <stdlib.h>
 
 #include "../hle.h"
 
-#define G_SYSTEM 0x2326764u  // engine system object *: +0x68 the frame step in 60 fps frames
+#define G_SYSTEM A_G_SYSTEM  // engine system object *: +0x68 the frame step in 60 fps frames
 
 static float step_s(void) {
     static int off = -1;  // MHGU_NO_EMJUMP=1: the original per-update jumps (for comparing)
     if (off < 0) off = getenv("MHGU_NO_EMJUMP") && *getenv("MHGU_NO_EMJUMP") == '1';
     if (off) return 1.0f;
-    uint32_t sys = LD32(G_SYSTEM);
+    uint32_t sys = LDG(G_SYSTEM);
     float s = sys ? LDF(sys + 0x68) * 0.5f : 1.0f;
     return s > 0.0f && s < 1.0f ? s : 1.0f;
 }

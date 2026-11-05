@@ -13,13 +13,14 @@
 // around) runs the selector's update and, seeing the request and an ordered quest, calls the area's depart method
 // (0x8c02a4): stage from the ordered quest (sGameControl +0x48 / +0x4a), the area's quest flag (+0xda), mode 4,
 // whose states fade out and jump to the stage's area (aMap<nn>), where aQuest loads the quest from +0xd68.
+#include "../game/addr.h"
 #include <stdlib.h>
 #include <string.h>
 
 #include "../hle.h"
 
-#define FN_TOWN_IDLE     0x8bd0fcu   // town area update, mode 1 (r0: the area)
-#define G_SELECTOR       0x1a8ae38u  // sQuestSelector *
+#define FN_TOWN_IDLE     A_QUICKHUNT_FN_TOWN_IDLE   // town area update, mode 1 (r0: the area)
+#define G_SELECTOR       A_G_SELECTOR  // sQuestSelector *
 #define SEL_FLAGS        0xd65u      // u8: bit 0 ordered at a counter, bit 3 depart
 #define SEL_ORDERED      0xd68u      // the ordered quest's number
 #define FLAG_ORDERED     0x01u
@@ -34,7 +35,7 @@ static void town_idle(Cpu *c) {
     if (g_quest && !g_done) {
         g_done = true;
         g_in_town = true;
-        uint32_t sel = LD32(G_SELECTOR);
+        uint32_t sel = LDG(G_SELECTOR);
         if (g_quest == TOWN_ONLY) {
             LOG("[quickhunt] in town\n");
         } else if (sel) {
@@ -58,6 +59,7 @@ void quickhunt_poll(void) {
 }
 
 void quickhunt_init(void) {
+    PORT_OFF(QUICKHUNT, "quick hunt (debug)");
     const char *e = getenv("MHGU_QUICKHUNT");
     if (!e || !*e) return;
     g_quest = !strcmp(e, "town") ? TOWN_ONLY : (uint32_t)strtoul(e, NULL, 10);

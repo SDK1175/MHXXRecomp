@@ -14,18 +14,19 @@
 // MHGU_PLSNAP=<file>: the player's memory (PLSNAP_BYTES) every update for PLSNAP_UPDATES updates from a knockback
 // (1:85 / 1:86) or the control file's "plsnap [updates]", appended to the file: per update a header {"PSNP", frame,
 // step (f32, 60 fps frames), player} and the bytes (for finding a status timer by comparing the updates).
+#include "../game/addr.h"
 #include <stdlib.h>
 
 #include "../hle.h"
 
-#define FN_SET_CMDTBL   0x4e9b7cu  // (player, id, start frame)
-#define FN_SET_CMDTBL2  0x4e9c50u  // (player, id, start frame, mode)
-#define FN_SET_ACTION   0x4831e0u  // (player, act_st, act_no, act_param)
-#define FN_DO_ACTION    0x4ab670u  // (player, act_st, act_no, act_param)
-#define FN_PL_INPUT     0x47ca28u  // (player): its input update, every update
+#define FN_SET_CMDTBL   A_MOVELOG_FN_SET_CMDTBL  // (player, id, start frame)
+#define FN_SET_CMDTBL2  A_MOVELOG_FN_SET_CMDTBL2  // (player, id, start frame, mode)
+#define FN_SET_ACTION   A_MOVELOG_FN_SET_ACTION  // (player, act_st, act_no, act_param)
+#define FN_DO_ACTION    A_MOVELOG_FN_DO_ACTION  // (player, act_st, act_no, act_param)
+#define FN_PL_INPUT     A_MOVELOG_FN_PL_INPUT  // (player): its input update, every update
 #define PL_ACT_ST       0x2506u    // player: the current action (u16 act_st, act_no)
 #define PL_ACT_NO       0x250au
-#define G_SYSTEM        0x2326764u  // engine system object *: +0x68 the frame step in 60 fps frames
+#define G_SYSTEM        A_G_SYSTEM  // engine system object *: +0x68 the frame step in 60 fps frames
 #define PLSNAP_BYTES    0x3800u
 #define PLSNAP_UPDATES  900
 
@@ -83,7 +84,7 @@ static void pl_input(Cpu *c) {
         LOG("[moves] %llu pl %08x: %d snapshots\n", (unsigned long long)g_present_count, pl, req);
     }
     if (g_snap && g_snap_left > 0) {
-        uint32_t sys = LD32(G_SYSTEM), frame = (uint32_t)g_present_count;
+        uint32_t sys = LDG(G_SYSTEM), frame = (uint32_t)g_present_count;
         float step = sys ? LDF(sys + 0x68) : 0;
         fwrite("PSNP", 1, 4, g_snap), fwrite(&frame, 4, 1, g_snap), fwrite(&step, 4, 1, g_snap), fwrite(&pl, 4, 1, g_snap);
         fwrite(G2H(pl), 1, PLSNAP_BYTES, g_snap);
@@ -151,6 +152,7 @@ static void set_cmdtbl2(Cpu *c) {
 }
 
 void movelog_init(void) {
+    PORT_OFF(MOVELOG, "move log (debug)");
     const char *e = getenv("MHGU_LOG_MOVES");
     if (!e || !*e || *e == '0') return;
     fnhook_set(FN_SET_CMDTBL, hle_register("movelog:set_cmdtbl", set_cmdtbl));

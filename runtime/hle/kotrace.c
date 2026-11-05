@@ -6,16 +6,17 @@
 //   +0x5d76 s16 buildup         +0x5d78 s16 threshold       +0x5d7c f32 decay timer (60 fps frames)
 //   +0x5d80 u8  KOs so far      +0x5e08 bit 0x10 stunned    +0x5e0c f32 time left stunned
 //   +0x3a2..+0x3a4 u8 updates left in which the KO is held back at the threshold (also when vtable +0x39c says 1)
+#include "../game/addr.h"
 #include <stdlib.h>
 
 #include "../hle.h"
 
-#define FN_KO_HIT    0x29db54u  // (monster, ?, part, KO value): a hit's KO into +0x4d2
-#define FN_KO_APPLY  0x2a2e18u  // (monster, amount): into the buildup; 1 when the KO starts
-#define FN_KO_START  0x2a2f0cu  // (monster): stunned for the entry's duration
-#define FN_KO_RAISE  0x2a2f80u  // (monster): the threshold for the next KO
-#define FN_DECAY     0x2a398cu  // (monster): every status's decay, each update
-#define G_SYSTEM     0x2326764u
+#define FN_KO_HIT    A_KOTRACE_FN_KO_HIT  // (monster, ?, part, KO value): a hit's KO into +0x4d2
+#define FN_KO_APPLY  A_KOTRACE_FN_KO_APPLY  // (monster, amount): into the buildup; 1 when the KO starts
+#define FN_KO_START  A_KOTRACE_FN_KO_START  // (monster): stunned for the entry's duration
+#define FN_KO_RAISE  A_KOTRACE_FN_KO_RAISE  // (monster): the threshold for the next KO
+#define FN_DECAY     A_KOTRACE_FN_DECAY  // (monster): every status's decay, each update
+#define G_SYSTEM     A_G_SYSTEM
 #define EN_INFO      0x1428u
 
 static uint64_t g_t0;
@@ -34,7 +35,7 @@ static double secs(void) {
     return (double)(now - g_t0) / 1e9;
 }
 static float step(void) {
-    uint32_t sys = LD32(G_SYSTEM);
+    uint32_t sys = LDG(G_SYSTEM);
     return sys ? LDF(sys + 0x68) : 0;
 }
 #define KLOG(en, fmt, ...) LOG("[ko] %8.2f s step %.3f %08x " fmt "\n", secs(), step(), en, __VA_ARGS__)
@@ -101,6 +102,7 @@ static void decay(Cpu *c) {
 }
 
 void kotrace_init(void) {
+    PORT_OFF(KOTRACE, "KO trace (debug)");
     const char *e = getenv("MHGU_KOTRACE");
     if (!e || !*e || !atoi(e)) return;
     fnhook_set(FN_KO_HIT, hle_register("kotrace:hit", ko_hit));

@@ -5,15 +5,16 @@
 // updates a second, 0.08 s at 240 fps. The patched decrement (0x834d20) takes s = step / 2 updates off instead
 // (step: the engine's frame step in 60 fps frames, s = 1 at 30 fps; at most 1, below 30 fps as the original), in
 // 1/65536 units, and the reload is 20 of those (tools/gen.py PATCHES, "Buff icon cycle").
+#include "../game/addr.h"
 #include "../hle.h"
 
-#define G_SYSTEM 0x2326764u  // engine system object *: +0x68 the frame step in 60 fps frames
+#define G_SYSTEM A_G_SYSTEM  // engine system object *: +0x68 the frame step in 60 fps frames
 #define UNIT 65536
 
 uint32_t buffcycle_reload(void) { return 20u * UNIT; }
 
 uint32_t buffcycle_tick(void) {
-    uint32_t sys = LD32(G_SYSTEM);
+    uint32_t sys = LDG(G_SYSTEM);
     float s = sys ? LDF(sys + 0x68) * 0.5f : 1.0f;
     if (!(s > 0.0f && s < 1.0f)) s = 1.0f;
     uint32_t t = (uint32_t)(s * UNIT + 0.5f);

@@ -7,6 +7,7 @@
 // monsters behave as the game made them. A filter in the game's per-monster receive (tools/gen.py
 // PATCHES, 0x2cb120) drops small monster messages from a player in another zone and
 // those reaching the master. Details: docs/research/small-monster-sync.md.
+#include "../game/addr.h"
 #include <string.h>
 
 #include "../config.h"
@@ -14,9 +15,9 @@
 #include "net.h"
 
 // Game data (main, v1.4.0; runtime addresses)
-#define G_SENEMY      0x1a51fe0u  // sEnemy *: +0x1c: the 10 live enemies of the loaded zone
-#define G_SPLAYER     0x1a85b58u  // sPlayer *: +0x1c: the 4 player slots
-#define G_MEMBER      0x1a8ca48u  // +0x30: the local player's slot
+#define G_SENEMY      A_G_SENEMY  // sEnemy *: +0x1c: the 10 live enemies of the loaded zone
+#define G_SPLAYER     A_G_SPLAYER  // sPlayer *: +0x1c: the 4 player slots
+#define G_MEMBER      A_G_GAMECONTROL  // +0x30: the local player's slot
 #define EN_INFO       0x1428u     // enemy: status block pointer
 #define INFO_FLAGS    0x1a8u      // u32: 8 = networked (actions are sent). Others are species data, e.g. 0x80: no attention scores
 #define INFO_ID       0x1b6u      // u16: network id (0xffff none; small monsters 10000+)
@@ -115,6 +116,7 @@ static struct { volatile uint64_t at; volatile uint8_t area, claim; } g_claims[4
 static bool g_claiming;  // our own claim (kept while we stay in the zone)
 
 void emsync_aux_received(const void *data, uint32_t len) {
+    PORT_OFF(EMSYNC, "small monster sync");
     Claim m;
     if (len < sizeof m) return;
     memcpy(&m, data, sizeof m);
@@ -129,13 +131,14 @@ static bool claims_area(int slot, int area, uint64_t now) {
 
 // From the game's input polling (each frame, on the game's thread): who is master here, and the flags that follow.
 void emsync_tick(void) {
+    PORT_OFF(EMSYNC, "small monster sync");
     static uint64_t last, last_sent;
     static int sent_area = -2, sent_claim = -1;
     uint64_t now = plat_now_ns();
     if (now - last < 33000000ull) return;
     last = now;
     static int was = -1;  // last logged state
-    uint32_t sen = LD32(G_SENEMY), spl = LD32(G_SPLAYER), mem = LD32(G_MEMBER);
+    uint32_t sen = LDG(G_SENEMY), spl = LDG(G_SPLAYER), mem = LDG(G_MEMBER);
     bool on = config_live_sync_small_monsters(), up = ldn_net_up();
     if ((!on || !up) && g_area >= 0) {  // (turned off in the settings menu, or the link is gone: this zone's small monsters as the game runs them)
         int me = sane(mem) ? (int)LD32(mem + 0x30) : -1;
@@ -197,11 +200,12 @@ void emsync_tick(void) {
 // The patched entry of the per-monster receive (0x2cb120: r0 = monster, r2 = the message's parameters, byte 1 = the
 // sender's slot). True: drop the message.
 int emsync_filter(Cpu *c) {
+    PORT_OFF_RET(EMSYNC, "small monster sync", 0);
     if (g_area < 0 || !config_live_sync_small_monsters()) return 0;
     uint32_t info;
     if (!is_zako(c->r[0], &info)) return 0;
     if (g_master) return 1;  // (a moment of two owners: keep ours)
-    uint32_t spl = LD32(G_SPLAYER);
+    uint32_t spl = LDG(G_SPLAYER);
     int sender = LD8(c->r[2] + 1);
     if (!sane(spl) || sender < 0 || sender > 3) return 1;
     return slot_area(spl, sender) != g_area;

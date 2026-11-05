@@ -6,14 +6,15 @@
 // The patched constant takes s = step / 2 updates off instead (step: the engine's frame step in 60 fps frames, s = 1
 // at 30 fps; at most 1, below 30 fps as the original): the window lasts 67 ms at any frame rate (tools/gen.py PATCHES,
 // "Two-button input window"). [Controls] ComboInputWindow = Strict keeps 1.0 per update.
+#include "../game/addr.h"
 #include "../config.h"
 #include "../hle.h"
 
-#define G_SYSTEM 0x2326764u  // engine system object *: +0x68 the frame step in 60 fps frames
+#define G_SYSTEM A_G_SYSTEM  // engine system object *: +0x68 the frame step in 60 fps frames
 
 float combowin_tick(void) {
     if (config_live_combo_window() == COMBO_STRICT) return 1.0f;
-    uint32_t sys = LD32(G_SYSTEM);
+    uint32_t sys = LDG(G_SYSTEM);
     float s = sys ? LDF(sys + 0x68) * 0.5f : 1.0f;
     return s > 0.0f && s < 1.0f ? s : 1.0f;
 }

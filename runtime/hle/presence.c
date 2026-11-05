@@ -21,6 +21,7 @@
 //   the large monsters (5 of 14 bytes, u16 monster id first).
 // - Monster ids (small << 12 | variant << 8 | em number) -> name: the game's (id, index) table 0x1797ea4 (137 pairs),
 //   then the index's UI number 0x182e7f8, the string number in GUI\06_msg\monsterName_eng.gmd.
+#include "../game/addr.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,10 +34,10 @@
 #include "../net/net.h"
 #include "../romfs.h"
 
-#define G_GAMECONTROL  0x1a8ca48u
-#define G_SPLAYER      0x1a85b58u
-#define G_SQUEST       0x1a8ad90u
-#define G_SELECTOR     0x1a8ae38u  // sQuestSelector *: +0xd750 the quest's hunters, +0xd74c its maximum
+#define G_GAMECONTROL  A_G_GAMECONTROL
+#define G_SPLAYER      A_G_SPLAYER
+#define G_SQUEST       A_G_SQUEST
+#define G_SELECTOR     A_G_SELECTOR  // sQuestSelector *: +0xd750 the quest's hunters, +0xd74c its maximum
 #define GC_TOWN        0x4cu
 #define GC_SLOT        0x30u
 #define PL_ZONE        0x1054u
@@ -44,9 +45,9 @@
 #define PD_NAME        0x514u
 #define PD_HR          0x554u
 #define PD_WEAPON      0x14cu
-#define MON_PAIRS      0x1797ea4u
+#define MON_PAIRS      A_PRESENCE_MON_PAIRS
 #define MON_PAIR_COUNT 137
-#define MON_UI         0x182e7f8u
+#define MON_UI         A_PRESENCE_MON_UI
 #define TOWN_NONE      0xffu
 #define TICK_NS        1000000000ull
 #define MENU_NS        15000000000ull
@@ -150,6 +151,7 @@ static void quest_targets(uint32_t qd, char *out, size_t size) {
 
 // ---- once a second, from the game's input polling
 void presence_tick(void) {
+    PORT_OFF(PRESENCE, "Discord Rich Presence details");
     static uint64_t next;
     static int64_t since;
     static int last_place = -2;
@@ -158,10 +160,10 @@ void presence_tick(void) {
     if (now < next) return;
     next = now + TICK_NS;
 
-    uint32_t gc = LD32(G_GAMECONTROL), sp = LD32(G_SPLAYER);
+    uint32_t gc = LDG(G_GAMECONTROL), sp = LDG(G_SPLAYER);
     uint32_t slot = sane(gc) ? LD32(gc + GC_SLOT) : 0;
     uint32_t pl = sane(sp) && slot < 4 ? LD32(sp + 0x1c + 4 * slot) : 0, pd = sane(pl) ? LD32(pl + PL_DATA) : 0;
-    uint32_t sq = LD32(G_SQUEST), qd = sane(sq) ? LD32(sq + 0xa4) : 0;
+    uint32_t sq = LDG(G_SQUEST), qd = sane(sq) ? LD32(sq + 0xa4) : 0;
     int town = sane(gc) ? LD8(gc + GC_TOWN) : -1;
     uint32_t quest = town == TOWN_NONE && sane(qd) ? LD32(qd + 8) : 0;
     int place = !sane(pd) ? -1 : town == TOWN_NONE ? (quest ? 100 : -2) : town;  // -1 menus, 100 quest, -2 between
@@ -214,7 +216,7 @@ void presence_tick(void) {
         else if (map) snprintf(a.state, sizeof a.state, "%s", map);
         snprintf(a.large_text, sizeof a.large_text, "%s", title ? title : "");
         snprintf(a.small_text, sizeof a.small_text, "%s", who);
-        uint32_t sel = LD32(G_SELECTOR);
+        uint32_t sel = LDG(G_SELECTOR);
         if (online && sane(sel)) {  // (the quest's hunters, not the hub's)
             party = (int)LD32(sel + 0xd750), party_max = (int)LD32(sel + 0xd74c);
             if (party < 1 || party > 4 || party_max < party || party_max > 4) party = 0;

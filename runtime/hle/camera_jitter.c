@@ -30,6 +30,7 @@
 //   MHGU_JITTER_TEST=<x>,<y>  (debug) a constant shift of the 3D picture by (x, y) render pixels (x right, y down),
 //                             with FSR on or off: shows the sign convention in screenshots
 //   MHGU_JITTER_LOG=1         (debug) every capture in the log
+#include "../game/addr.h"
 #include <math.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -41,11 +42,11 @@
 #include "../hle.h"
 #include "../nvn/nvn.h"
 
-#define FN_LOOKAT     0x21c33cu  // look-at: r0 = out view matrix, r1 = camera
-#define FN_PROJECTION 0x21c358u  // projection: r0 = out matrix, r1 = camera
-#define FN_EVENT_LOOKAT     0xb57a10u  // the same for event cameras (cutscenes: the meal), their class's own
-#define FN_EVENT_PROJECTION 0xb57fa4u
-#define FN_SCREENSHOT_BUFFERS 0xa6f854u  // sScreenShot's buffers made: r0 = sScreenShot, r1 = how many, r2 / r3 size
+#define FN_LOOKAT     A_CAMERA_JITTER_FN_LOOKAT  // look-at: r0 = out view matrix, r1 = camera
+#define FN_PROJECTION A_CAMERA_JITTER_FN_PROJECTION  // projection: r0 = out matrix, r1 = camera
+#define FN_EVENT_LOOKAT     A_CAMERA_JITTER_FN_EVENT_LOOKAT  // the same for event cameras (cutscenes: the meal), their class's own
+#define FN_EVENT_PROJECTION A_CAMERA_JITTER_FN_EVENT_PROJECTION
+#define FN_SCREENSHOT_BUFFERS A_CAMERA_JITTER_FN_SCREENSHOT_BUFFERS  // sScreenShot's buffers made: r0 = sScreenShot, r1 = how many, r2 / r3 size
 #define CAM_FAR       0x30u
 #define CAM_NEAR      0x34u
 #define CAM_ASPECT    0x38u
@@ -223,6 +224,7 @@ static void screenshot_buffers(Cpu *c) {
 }
 
 void camjit_init(void) {
+    PORT_OFF(CAMERA_JITTER, "FSR camera jitter");
     const char *e = getenv("MHGU_JITTER_TEST");
     g_test = e && sscanf(e, "%f,%f", &g_test_xy[0], &g_test_xy[1]) == 2;
     g_log = getenv("MHGU_JITTER_LOG") != NULL;

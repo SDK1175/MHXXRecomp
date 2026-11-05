@@ -10,15 +10,16 @@
 // animation. The handler is hooked: after it, a notch of
 // the wheel does the same, past the same checks. One notch per update, at most a few waiting; notches while the
 // handler doesn't run (towns, menus, cutscenes) or while the player may not pick an item are dropped.
+#include "../game/addr.h"
 #include <pthread.h>
 
 #include "../hle.h"
 #include "itembar.h"
 
-#define FN_ITEM_BAR      0x4f7f38u  // the player's item bar handler (r0 = the player)
-#define FN_PL_IS_LOCAL   0x47bcd0u  // (player) 1: the handler goes on
-#define FN_PL_BUSY       0x47b918u  // (player) 0: the handler goes on
-#define FN_ITEM_NEXT     0x4880fcu  // (player, slot, 0 right / 1 left): the next slot holding an item
+#define FN_ITEM_BAR      A_ITEMBAR_FN_ITEM_BAR  // the player's item bar handler (r0 = the player)
+#define FN_PL_IS_LOCAL   A_ITEMBAR_FN_PL_IS_LOCAL  // (player) 1: the handler goes on
+#define FN_PL_BUSY       A_ITEMBAR_FN_PL_BUSY  // (player) 0: the handler goes on
+#define FN_ITEM_NEXT     A_ITEMBAR_FN_ITEM_NEXT  // (player, slot, 0 right / 1 left): the next slot holding an item
 #define VF_CAN_SELECT    0x230u     // vfunc (player, 1) 1: may pick an item now
 #define PL_ITEM_SLOT     0x3298u    // u16: the selected pouch slot
 #define PL_ITEM_FLAGS    0x253cu    // bit 1: turned right, bit 2: turned left (the bar's animation)
@@ -74,5 +75,6 @@ static void item_bar(Cpu *c) {
 }
 
 void itembar_init(void) {
+    PORT_OFF(ITEMBAR, "mouse wheel item bar");
     fnhook_set(FN_ITEM_BAR, hle_register("itembar:item_bar", item_bar));
 }

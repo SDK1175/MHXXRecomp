@@ -3,6 +3,7 @@
 // before the process ends, so a report of the game closing at start-up says what it gave up on. Every AbortImpl /
 // nndetailDiagAbort*Impl variant of the SDK ends in VAbortImpl; HLE_SDK replaces these for the game's imports and the
 // SDK's own calls alike.
+#include "../game/addr.h"
 #include <stdlib.h>
 
 #include "../hle.h"
@@ -40,7 +41,7 @@ HLE_SDK("abort", abort) {
 // callback, exit(1); its caller's return address at sp + 0x414). Callers: 0x9bd71c "Memory Pool Initialization Error",
 // 0xa69924 "Couldn't initialize the NVN device.", 0xb6b99c "uSerial::setup() : not found 'serial'.", 0xdd7250
 // "Shader compile failed. %s" (a shader resource that did not load), 0xdd8f00 (a resource collision)
-#define FATAL_EXIT_RET 0xa3e1c8u
+#define FATAL_EXIT_RET A_ABORT_FATAL_EXIT_RET
 
 HLE_SDK("exit", exit) {
     LOG("[abort] exit(%d)\n", (int)ARG(0));

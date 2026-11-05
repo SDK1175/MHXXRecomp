@@ -16,6 +16,7 @@
 // forge_socket_*: the game's own nn::socket (a virtual network, runtime/net/vsock.c: local play only, no internet).
 // A plugin that requires a Forge version newer than this one (FORGE_MAJOR.FORGE_MINOR) gets no calls. One that can't be
 // loaded (a relocation this port doesn't know) is dropped with a log line (runtime/loader.c); the others go on.
+#include "game/addr.h"
 #include <ctype.h>
 #include <math.h>
 #include <dirent.h>
@@ -40,12 +41,12 @@
 #define FORGE_VERSION_STRING "1.5.1"
 
 // Main module offsets (from its text) Forge uses, MHGU 1.4.0
-#define OFF_APP_RUN     0xB8692Cu  // sApp::run
-#define OFF_UPDATE      0x3DA8FCu  // the frame update (this: dt at +0x68)
-#define OFF_SYSTEM_CTOR 0x887810u  // cSystem::cSystem / ~cSystem: every singleton
-#define OFF_SYSTEM_DTOR 0x88784Cu
-#define OFF_MOUNT_SAVE  0x878DA0u  // sSavedata's mount
-#define OFF_JOB_SAFE    0x212041Cu
+#define OFF_APP_RUN     A_FORGE_OFF_APP_RUN  // sApp::run
+#define OFF_UPDATE      A_FORGE_OFF_UPDATE  // the frame update (this: dt at +0x68)
+#define OFF_SYSTEM_CTOR A_FORGE_OFF_SYSTEM_CTOR  // cSystem::cSystem / ~cSystem: every singleton
+#define OFF_SYSTEM_DTOR A_FORGE_OFF_SYSTEM_DTOR
+#define OFF_MOUNT_SAVE  A_FORGE_OFF_MOUNT_SAVE  // sSavedata's mount
+#define OFF_JOB_SAFE    A_FORGE_OFF_JOB_SAFE
 
 #define MAX_PLUGINS (MAX_MODULES - 2)  // g_modules also holds main and sdk
 typedef struct {
@@ -1365,6 +1366,7 @@ static void forge_map_regions(void) {
 }
 
 void forge_init(void) {
+    PORT_OFF(FORGE, "Forge plugins");
     const char *lv = getenv("MHGU_FORGE_LOG");  // debug, info, warn, error
     if (lv && log_level_of(lv) >= 0) log_level = log_level_of(lv), env_level = true;
     main_text = g_modules[0].base + g_modules[0].text_off;

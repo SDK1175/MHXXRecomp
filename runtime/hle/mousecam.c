@@ -13,13 +13,14 @@
 // both the heading and the smoothed angles (no smoothing lag), with the game's invert option.
 // Where it doesn't run (villages, whose camera doesn't turn, or other cameras) host_input.c gives the mouse to the
 // right stick as before (mousecam_active).
+#include "../game/addr.h"
 #include <pthread.h>
 
 #include "../config.h"
 #include "../hle.h"
 #include "mousecam.h"
 
-#define FN_CAMERA_STICK 0x2255ccu  // uQuestCamera's right stick handler: r0 = the camera, r1 = the invert bits
+#define FN_CAMERA_STICK A_MOUSECAM_FN_CAMERA_STICK  // uQuestCamera's right stick handler: r0 = the camera, r1 = the invert bits
 #define QC_PITCH_NOW    0x9e0u
 #define QC_YAW_NOW      0x9e4u
 #define QC_PITCH_TO     0x9e8u
@@ -80,5 +81,6 @@ static void camera_stick(Cpu *c) {
 }
 
 void mousecam_init(void) {
+    PORT_OFF(MOUSECAM, "mouse camera");
     fnhook_set(FN_CAMERA_STICK, hle_register("mousecam:camera_stick", camera_stick));
 }
