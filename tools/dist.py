@@ -36,9 +36,8 @@ def files(build, platform):
             sys.exit(f'dist: {p} is missing (make first)')
         out.append((n, p, n in programs))
     pl = os.path.join(build, 'pipelines.list')  # (the recorded pipelines a first run builds: make's pipelist)
-    if not os.path.isfile(pl):
-        sys.exit(f'dist: {pl} is missing (make first)')
-    out.append(('pipelines.list', pl, False))
+    if os.path.isfile(pl):  # (optional: none recorded for MHXX yet, Makefile "pipelist")
+        out.append(('pipelines.list', pl, False))
     lic = os.path.join(build, 'licenses')
     if not os.path.isdir(lic):
         sys.exit(f'dist: {lic} is missing (make first)')

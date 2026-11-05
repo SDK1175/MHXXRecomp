@@ -15,6 +15,7 @@
 // interpreter's speed); words written into the room after the code (padding up to the read-only data, where cheats
 // put new code) are interpreted when the changed code jumps there. A call already running when the code changes
 // finishes the old code.
+#include "game/game.h"
 #include <ctype.h>
 #include <dirent.h>
 #include <pthread.h>
@@ -658,6 +659,19 @@ bool cheats_add(const char *text, char *err, size_t errsz) {
 }
 
 // ------------------------------------------------------------------ entry points
+// Atmosphere names a game's cheat file by its main's build id (the first 16 hex digits: <build id>.txt). Such a file
+// for another build (MHGU's, another MHXX version's) would write that build's addresses into this one: skipped.
+// Files named otherwise are read as they are (their codes must be for this build: game/game.h).
+static bool other_build(const char *name) {
+    size_t l = strlen(name);
+    if (l != 16 + 4) return false;
+    for (int i = 0; i < 16; i++)
+        if (!isxdigit((unsigned char)name[i])) return false;
+    if (!strncasecmp(name, GAME_MAIN_BUILD_ID_STR, 16)) return false;
+    LOG("[cheats] %s: for another game build (this one is " GAME_MAIN_BUILD_ID_STR "): not loaded\n", name);
+    return true;
+}
+
 // The cheats folder, every file in name order, into cheats
 static void load_dir(void) {
     DIR *d = opendir(cheats_dir());
@@ -667,7 +681,8 @@ static void load_dir(void) {
     struct dirent *e;
     while ((e = readdir(d)) && n < 256) {
         size_t l = strlen(e->d_name);
-        if (e->d_name[0] != '_' && e->d_name[0] != '.' && l > 4 && !strcasecmp(e->d_name + l - 4, ".txt"))
+        if (e->d_name[0] != '_' && e->d_name[0] != '.' && l > 4 && !strcasecmp(e->d_name + l - 4, ".txt") &&
+            !other_build(e->d_name))
             names[n++] = strdup(e->d_name);
     }
     closedir(d);

@@ -433,7 +433,10 @@ endif
 # (bundle: tools/bundle_dlls.py, which lists them all with their versions and sources in licenses/README.txt).
 # The pipelines recorded in the common areas (extras/pipelines.list: the game's shader code hashes and render state,
 # nothing of the game itself), built in the background on a first run: runtime/nvn/vulkan/exec.c "pipeline list"
-pipelist: $(B)/pipelines.list
+# MHXX: none recorded yet (MHGU's list named GU's shaders): record one with MHGU_PIPELIST_EXPORT=<file> while playing
+# the common areas and put it at extras/pipelines.list; without it the build and the release simply have none.
+PIPELIST := $(wildcard extras/pipelines.list)
+pipelist: $(if $(PIPELIST),$(B)/pipelines.list)
 $(B)/pipelines.list: extras/pipelines.list
 	@mkdir -p $(dir $@)
 	cp $< $@
