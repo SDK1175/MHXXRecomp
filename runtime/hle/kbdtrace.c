@@ -5,7 +5,9 @@
 // (0xa5697c) and its job that shows it (0xa56bd8, ShowKeyboard). MHXX 1.5.1 addresses, found in its main
 // (runtime/game/addr.h, KBDTRACE_*). MHGU_NO_KBDTRACE=1: off.
 #include "../game/addr.h"
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "../hle.h"
 
@@ -88,6 +90,30 @@ static void factory(Cpu *c) {
     LOG("[kbdtrace] keyboard of kind %u asked for (from %08x): %08x\n", kind, from, c->r[0]);
 }
 
+// The 16 places that open the global text entry (0x758360) sit in these 13 functions (MHXX 1.5.1). Each one's first
+// call is logged with the frame, and the open itself with its caller: the character creation's name entry (no
+// keyboard) should be the one whose function runs without the open following.
+static const uint32_t g_sites[] = {0x3c70f0, 0x3cc3fc, 0x790f38, 0x796a38, 0x8664b4, 0x87d830, 0x88a0d0,
+                                   0x91dd00, 0x922280, 0x94b38c, 0x94ed10, 0x969114, 0x96c83c};
+#define NSITES (sizeof g_sites / sizeof *g_sites)
+static int g_site_seen[NSITES];
+static void site_hit(Cpu *c, unsigned i) {
+    if (!g_site_seen[i]++)
+        LOG("[kbdtrace] entry site %08x first runs (frame %llu, from %08x)\n", g_sites[i],
+            (unsigned long long)g_present_count, c->r[14]);
+    fnhook_call_original(c, g_sites[i]);
+}
+#define SITE(i) static void site_##i(Cpu *c) { site_hit(c, i); }
+SITE(0) SITE(1) SITE(2) SITE(3) SITE(4) SITE(5) SITE(6) SITE(7) SITE(8) SITE(9) SITE(10) SITE(11) SITE(12)
+static const HostFn g_site_fns[NSITES] = {site_0, site_1, site_2, site_3, site_4, site_5, site_6,
+                                          site_7, site_8, site_9, site_10, site_11, site_12};
+
+#define FN_ENTRY_OPEN 0x758360u  // the global text entry's open (entry), as the 16 places call it
+static void entry_open(Cpu *c) {
+    LOG("[kbdtrace] text entry opened (from %08x, frame %llu)\n", c->r[14], (unsigned long long)g_present_count);
+    fnhook_call_original(c, FN_ENTRY_OPEN);
+}
+
 void kbdtrace_init(void) {
     PORT_OFF(KBDTRACE, "keyboard trace (debug)");
     if (getenv("MHGU_NO_KBDTRACE")) return;
@@ -98,5 +124,11 @@ void kbdtrace_init(void) {
     fnhook_set(FN_ENTRY_UPDATE, hle_register("kbdtrace:entry_update", entry_update));
     fnhook_set(FN_MGR_OPEN, hle_register("kbdtrace:mgr_open", mgr_open));
     fnhook_set(FN_FACTORY, hle_register("kbdtrace:factory", factory));
+    fnhook_set(FN_ENTRY_OPEN, hle_register("kbdtrace:entry_open", entry_open));
+    for (unsigned i = 0; i < NSITES; i++) {
+        char name[32];
+        snprintf(name, sizeof name, "kbdtrace:site_%x", g_sites[i]);
+        fnhook_set(g_sites[i], hle_register(strdup(name), g_site_fns[i]));
+    }
     LOG("[kbdtrace] keyboard driver traced (MHGU_NO_KBDTRACE=1: off)\n");
 }
