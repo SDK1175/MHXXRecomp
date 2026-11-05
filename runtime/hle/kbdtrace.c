@@ -15,6 +15,7 @@
 #define FN_SOFTKBD_JOB  A_KBDTRACE_FN_SOFTKBD_JOB
 #define FN_ENTRY_UPDATE A_KBDTRACE_FN_ENTRY_UPDATE
 #define FN_MGR_OPEN     A_KBDTRACE_FN_MGR_OPEN
+#define FN_FACTORY      A_KBDTRACE_FN_FACTORY
 
 static uint32_t g_last_obj, g_last_state = ~0u, g_last_flags = ~0u, g_calls;
 
@@ -79,6 +80,14 @@ static void mgr_open(Cpu *c) {
     }
 }
 
+// The keyboard manager's factory (0xa60514(manager, kind) -> keyboard object; 0 full-screen, 1 the inline driver,
+// 2-5 others): which kind the game asks for, from where
+static void factory(Cpu *c) {
+    uint32_t kind = c->r[1], from = c->r[14];
+    fnhook_call_original(c, FN_FACTORY);
+    LOG("[kbdtrace] keyboard of kind %u asked for (from %08x): %08x\n", kind, from, c->r[0]);
+}
+
 void kbdtrace_init(void) {
     PORT_OFF(KBDTRACE, "keyboard trace (debug)");
     if (getenv("MHGU_NO_KBDTRACE")) return;
@@ -88,5 +97,6 @@ void kbdtrace_init(void) {
     fnhook_set(FN_SOFTKBD_JOB, hle_register("kbdtrace:softkbd_job", softkbd_job));
     fnhook_set(FN_ENTRY_UPDATE, hle_register("kbdtrace:entry_update", entry_update));
     fnhook_set(FN_MGR_OPEN, hle_register("kbdtrace:mgr_open", mgr_open));
+    fnhook_set(FN_FACTORY, hle_register("kbdtrace:factory", factory));
     LOG("[kbdtrace] keyboard driver traced (MHGU_NO_KBDTRACE=1: off)\n");
 }
