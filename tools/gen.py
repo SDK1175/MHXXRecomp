@@ -120,10 +120,37 @@ MHXX_PATCHES = {
     # Quest photo request (sScreenShot, registered at 0xa64468; GU 0xa6f9ac): `mov r1, #1` before the strb to +0x2c.
     # Without it the reward screen's background is other textures' data (seen 2026-11-06 at 240 fps).
     ('main', 0xa643c8): (0xE3A01001, '{ extern void backend_photo_requested(void); backend_photo_requested(); c->r[1] = 1; }'),
+    # Docked render size and 2D canvas (GU 0xdbcd34..): the same four instructions, the same registers.
+    ('main', 0xdb174c): (0xE3A00D1E, '{ extern uint32_t g_render_size[2]; c->r[0] = g_render_size[0]; }'),
+    ('main', 0xdb1750): (0xE3007438, '{ extern uint32_t g_render_size[2]; c->r[7] = g_render_size[1]; }'),
+    ('main', 0xdb1760): (0xE3A07C05, '{ extern uint32_t g_ui_size[2]; c->r[7] = g_ui_size[0]; }'),
+    ('main', 0xdb176c): (0xE3A07E2D, '{ extern uint32_t g_ui_size[2]; c->r[7] = g_ui_size[1]; }'),
+    # 3D camera projection (GU 0x21c36c..; sCamera projection 0x21bb4c, its swapped twin 0x21bb94, uCamera 0xae8eb0),
+    # all calling the perspective at 0x9babfc (GU 0x9c617c)
+    ('main', 0x21bb60): (0xEDD11A0E, '{ extern float g_render_aspect; float a = LDF(c->r[1] + 0x38u); c->v.f[3] = a > 1.77f && a < 1.786f ? g_render_aspect : a; }'),
+    ('main', 0x21bb64): (0xEE211A02, '{ extern float camera_fovy(float, float); c->v.f[2] = camera_fovy(c->v.f[2] * c->v.f[4], c->v.f[3]); }'),
+    ('main', 0x21bbac): (0xEDD01A0E, '{ extern float g_render_aspect; float a = LDF(c->r[0] + 0x38u); c->v.f[3] = a > 1.77f && a < 1.786f ? g_render_aspect : a; }'),
+    ('main', 0x21bbb4): (0xEE221A01, '{ extern float camera_fovy(float, float); c->v.f[2] = camera_fovy(c->v.f[4] * c->v.f[2], c->v.f[3]); }'),
+    ('main', 0xae8ec0): (0xEDD11A0E, '{ extern float g_render_aspect; float a = LDF(c->r[1] + 0x38u); c->v.f[3] = a > 1.77f && a < 1.786f ? g_render_aspect : a; }'),
+    ('main', 0xae8ec4): (0xEE211A02, '{ extern float camera_fovy(float, float); c->v.f[2] = camera_fovy(c->v.f[2] * c->v.f[4], c->v.f[3]); }'),
+    # Monster stall timers (GU 0x2c4058 / 0x2c4150): +0x1414 and +0x1418, r4 = the monster
+    ('main', 0x2c2d94): (0xEE380A00, '{ extern float emstall_scale(uint32_t); c->v.f[0] += c->v.f[16] * emstall_scale(c->r[4]); }'),
+    ('main', 0x2c2e8c): (0xEE310A00, '{ extern float emstall_scale(uint32_t); c->v.f[0] = c->v.f[2] + c->v.f[0] * emstall_scale(c->r[4]); }'),
+    # uScheduler's update (GU 0xb66164; vtable 0x19ae40c): event camera pans skippable with A
+    ('main', 0xb5ab7c): (0xE92D4010, '{ extern void evskip_update(Cpu *); evskip_update(c); '
+                                     'uint32_t ea = c->r[13] - 8u; ST32(ea, c->r[4]); ST32(ea + 4u, c->r[14]); c->r[13] = ea; }'),
+    # Buff icon cycle (GU 0x834d20 / 0x834ef4; function 0x82ba0c)
+    ('main', 0x82ba2c): (0xE2477001, '{ extern uint32_t buffcycle_tick(void); c->r[7] -= buffcycle_tick(); }'),
+    ('main', 0x82bc00): (0xE3A00014, '{ extern uint32_t buffcycle_reload(void); c->r[0] = buffcycle_reload(); }'),
+    # Two-button input window (GU 0x47ca84): the player's +0x1448 countdown
+    ('main', 0x479cc8): (0xEEBF1A00, '{ extern float combowin_tick(void); c->v.f[2] = -combowin_tick(); }'),
+    # Town NPC fade and its speech bubble (GU 0x8c2e34 / 0x8c127c; tables 0x8b7d98 / 0x8b61c8: 2500^2, 1800^2)
+    ('main', 0x8b7cdc): (0xED924A00, '{ extern float npc_fade_dist2(float); c->v.f[8] = npc_fade_dist2(LDF(c->r[2])); }'),
+    ('main', 0x8b611c): (0xED924A00, '{ extern float npc_fade_dist2(float); c->v.f[8] = npc_fade_dist2(LDF(c->r[2])); }'),
 }
-MHXX_EMJUMP = [  # (address, kind, axis, jerk), as GU_EMJUMP
-]
-MHXX_EMJUMP_REG = {}  # address -> vstr source register / 2, for the entries not stored from s0
+# Monster jumps: every GU_EMJUMP store is in MHXX 0xb798 lower, the same words (checked word for word, each group).
+MHXX_EMJUMP = [(a - 0xb798, kind, axis, jerk) for a, kind, axis, jerk in GU_EMJUMP]
+MHXX_EMJUMP_REG = {0x1122bc8 - 0xb798: 1}  # address -> vstr source register / 2, for the entries not stored from s0
 
 PATCHES = dict(MHXX_PATCHES)
 PATCHES.update(emjump_patches(MHXX_EMJUMP, lambda a: MHXX_EMJUMP_REG.get(a, 0)))
