@@ -125,6 +125,35 @@ static void msgbox_update(Cpu *c) {
     }
 }
 
+// Character creation (MHXX 1.5.1): the scene's update 0x871764 (state at +4, sub-state +5), its edit menu
+// 0x877e28 (step at +0x3e; step 4 runs the name step 0x87b710, whose own step is at +0x39). Logged when they change.
+#define FN_CM_SCENE 0x871764u
+#define FN_CM_MENU  0x877e28u
+#define FN_CM_NAME  0x87b710u
+static uint32_t cm_obj, cm_sig = ~0u;
+static void cm_log(uint32_t obj, const char *where) {
+    uint32_t s = LD8(obj + 4), sub = LD8(obj + 5), step = LD8(obj + 0x3e), name = LD8(obj + 0x39);
+    uint32_t sig = s | sub << 8 | step << 16 | name << 24;
+    if (obj != cm_obj || sig != cm_sig) {
+        LOG("[kbdtrace] chara make %08x (%s): state %u, sub %u, menu step %u, name step %u (frame %llu)\n", obj, where, s,
+            sub, step, name, (unsigned long long)g_present_count);
+        cm_obj = obj, cm_sig = sig;
+    }
+}
+static void cm_scene(Cpu *c) { uint32_t o = c->r[0]; fnhook_call_original(c, FN_CM_SCENE); cm_log(o, "scene"); }
+static void cm_menu(Cpu *c) {
+    uint32_t o = c->r[0];
+    fnhook_call_original(c, FN_CM_MENU);
+    cm_log(o, "menu");
+}
+static void cm_name(Cpu *c) {
+    uint32_t o = c->r[0];
+    static int n;
+    if (n++ < 3) LOG("[kbdtrace] name step runs (%08x, step %u)\n", o, LD8(o + 0x39));
+    fnhook_call_original(c, FN_CM_NAME);
+    cm_log(o, "name");
+}
+
 #define FN_ENTRY_OPEN 0x758360u  // the global text entry's open (entry), as the 16 places call it
 static void entry_open(Cpu *c) {
     LOG("[kbdtrace] text entry opened (from %08x, frame %llu)\n", c->r[14], (unsigned long long)g_present_count);
@@ -143,6 +172,9 @@ void kbdtrace_init(void) {
     fnhook_set(FN_FACTORY, hle_register("kbdtrace:factory", factory));
     fnhook_set(FN_ENTRY_OPEN, hle_register("kbdtrace:entry_open", entry_open));
     fnhook_set(FN_MSGBOX_UPDATE, hle_register("kbdtrace:msgbox_update", msgbox_update));
+    fnhook_set(FN_CM_SCENE, hle_register("kbdtrace:cm_scene", cm_scene));
+    fnhook_set(FN_CM_MENU, hle_register("kbdtrace:cm_menu", cm_menu));
+    fnhook_set(FN_CM_NAME, hle_register("kbdtrace:cm_name", cm_name));
     for (unsigned i = 0; i < NSITES; i++) {
         char name[32];
         snprintf(name, sizeof name, "kbdtrace:site_%x", g_sites[i]);
