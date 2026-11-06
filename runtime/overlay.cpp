@@ -14,6 +14,7 @@
 #include <atomic>
 #include <cfloat>
 #include <cstdio>
+#include <cstdlib>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -374,6 +375,40 @@ static void forge_style(ImGuiStyle &style) {  // Forge's own (source/forge/graph
     c[ImGuiCol_NavWindowingDimBg] = c[ImGuiCol_ModalWindowDimBg] = dim;
 }
 
+// Hangul for the Korean settings menu ([Application] Language = Korean): a font with it merged into the menu's, its
+// glyphs loaded as they are drawn (ImGui 1.92). fonts/menu.ttf in the game folder (any .ttf / .otf / .ttc), else the
+// system's: Malgun Gothic on Windows, Noto Sans CJK or Nanum Gothic on Linux and Android. None found: Hangul shows
+// as boxes (the log says so).
+static const char *korean_font(void) {
+    static const char *const paths[] = {
+        "fonts/menu.ttf", "fonts/menu.otf", "fonts/menu.ttc",
+#ifdef _WIN32
+        nullptr,  // (%WINDIR%\Fonts\malgun.ttf, below)
+#else
+        "/system/fonts/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+        "/usr/share/fonts/nanum/NanumGothic.ttf",
+#endif
+    };
+    static char windows[512];
+    for (const char *p : paths) {
+        if (!p) {
+            const char *w = getenv("WINDIR");
+            snprintf(windows, sizeof windows, "%s\\Fonts\\malgun.ttf", w && *w ? w : "C:\\Windows");
+            p = windows;
+        }
+        if (FILE *f = fopen(p, "rb")) {
+            fclose(f);
+            return p;
+        }
+    }
+    return nullptr;
+}
+
 void overlay_init(const char *font_path, float font_size, int menu_key) {
 #ifdef MHGU_NULL_BACKEND
     return;
@@ -390,6 +425,14 @@ void overlay_init(const char *font_path, float font_size, int menu_key) {
     cfg.SizePixels = g_font_size;
     ImFont *font = font_path ? io.Fonts->AddFontFromFileTTF(font_path, g_font_size, &cfg) : nullptr;
     if (!font) io.Fonts->AddFontDefaultVector(&cfg);
+    if (const char *ko = korean_font()) {
+        ImFontConfig merge;
+        merge.MergeMode = true;
+        merge.SizePixels = g_font_size;
+        bool ok = io.Fonts->AddFontFromFileTTF(ko, g_font_size, &merge) != nullptr;
+        LOG("[overlay] Hangul font %s%s\n", ko, ok ? "" : ": could not be read");
+    } else
+        LOG("[overlay] no Hangul font found (put one at fonts/menu.ttf): Korean shows as boxes\n");
     ImGui::StyleColorsDark();
     forge_style(ImGui::GetStyle());
     ImGui::GetStyle().FontSizeBase = g_font_size;

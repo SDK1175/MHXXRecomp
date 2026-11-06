@@ -55,6 +55,7 @@ MHGU Recomp(`morerokk/MHGURecomp` @ `ebe50a3`)를 포크해 **몬스터헌터 �
 | 휠 아이템바 (`ITEMBAR`) | 핸들러 `0x4f4e98`, `0x478f14`, `0x478b5c`, `0x4850d8` | 액션 9/0xa/0x43/0x44, 슬롯 `+0x3298`, 플래그 `+0x253c` GU와 같음 |
 | 컨트롤러 버튼 매핑 | (런타임만) | `[Controller]`, 설정 > 컨트롤 > Controller buttons |
 | 창 X 버튼 | (런타임만) | 오버레이가 없거나 3초 안에 X를 두 번 누르면 바로 종료 |
+| F1 메뉴 한국어 | (런타임만) | `[Application] Language = Korean` (새 ini의 기본값). 메뉴 문구, 오류, ini 도움말 줄 전부. 한글 글꼴: `fonts/menu.ttf` → Windows 맑은 고딕 → 리눅스·안드로이드 Noto Sans CJK / 나눔고딕 |
 
 ## 해결: 캐릭터 생성 이름 입력 (2026-11-06)
 

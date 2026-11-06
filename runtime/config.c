@@ -86,7 +86,7 @@
     .mute_in_background = 0,                                                                        \
     /* [Application] */                                                                             \
     .confirm_exit = 1,                                                                              \
-    .language = 0,                                                                                  \
+    .language = 2,                                                                                  \
     .button_icons = 0,                                                                              \
     .menu_theme = THEME_HUNTER,                                                                     \
     .menu_scale = 100,                                                                              \
@@ -389,9 +389,9 @@ static const char DEFAULT_INI[] =
     "ConfirmExit = On\n"
     "\n"
     "; Language of the settings menu (F1, or Minus + Plus on a controller)\n"
-    "; English, Spanish\n"
-    "; Default: English\n"
-    "Language = English\n"
+    "; English, Spanish, Korean\n"
+    "; Default: Korean\n"
+    "Language = Korean\n"
     "\n"
     "; Button icons in the settings menu\n"
     "; Xbox, Switch, PlayStation\n"
@@ -602,7 +602,7 @@ const ConfigSetting g_settings[] = {
     {"Audio", "Volume", SET_INT, F(volume), 0, 0, 100, NULL, NULL, false, ERR_MISC},
     ON_OFF("Audio", "MuteInBackground", mute_in_background, false),
     ON_OFF("Application", "ConfirmExit", confirm_exit, false),
-    {"Application", "Language", SET_CHOICE, F(language), 0, 0, 0, "English|en,Spanish|es", NULL, false, ERR_LANGUAGE},
+    {"Application", "Language", SET_CHOICE, F(language), 0, 0, 0, "English|en,Spanish|es,Korean|ko|한국어", NULL, false, ERR_LANGUAGE},
     {"Application", "ButtonIcons", SET_CHOICE, F(button_icons), 0, 0, 0, "Xbox,Switch,PlayStation", NULL, false, ERR_ICONS},
     {"Application", "Theme", SET_CHOICE, F(menu_theme), 0, 0, 0, "Gold,Blue,Hunter", NULL, false, ERR_MISC},
     {"Application", "MenuScale", SET_INT, F(menu_scale), 0, 50, 200, NULL, NULL, false, ERR_SCALE},
