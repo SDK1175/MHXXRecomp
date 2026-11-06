@@ -1,9 +1,10 @@
-// (debug, MHXX) The software keyboard's way through the game, logged: at character creation the name entry shows no
-// keyboard (2026-11-06), and the port's swkbd.c logs nothing (no Appear, no ShowKeyboard), so the game stops before
-// asking for one. Logged here: the keyboard driver's state (its update 0xa56ff0, state at +0x2ec8 and the flags at
+// (debug, MHXX; MHGU_KBDTRACE=1) The software keyboard's way through the game, logged. Written while looking for a
+// "missing" name keyboard at character creation (2026-11-06): there was none missing, the name is the edit menu's
+// first item (step 4); the "please enter a name" box is the warning for 'done' without one. Name entry and chat both
+// reach InlineKeyboard::Appear and runtime/textinput.c. Logged here: the keyboard driver's state (its update 0xa56ff0, state at +0x2ec8 and the flags at
 // +0x2ecc..+0x2ecf) whenever it changes, its keyboard setup (0xa57b0c), the full-screen keyboard object being made
 // (0xa5697c) and its job that shows it (0xa56bd8, ShowKeyboard). MHXX 1.5.1 addresses, found in its main
-// (runtime/game/addr.h, KBDTRACE_*). MHGU_NO_KBDTRACE=1: off.
+// (runtime/game/addr.h, KBDTRACE_*).
 #include "../game/addr.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -162,7 +163,7 @@ static void entry_open(Cpu *c) {
 
 void kbdtrace_init(void) {
     PORT_OFF(KBDTRACE, "keyboard trace (debug)");
-    if (getenv("MHGU_NO_KBDTRACE")) return;
+    if (!getenv("MHGU_KBDTRACE")) return;  // (off unless asked for)
     fnhook_set(FN_KBD_UPDATE, hle_register("kbdtrace:update", kbd_update));
     fnhook_set(FN_KBD_SETUP, hle_register("kbdtrace:setup", kbd_setup));
     fnhook_set(FN_SOFTKBD_CTOR, hle_register("kbdtrace:softkbd_ctor", softkbd_ctor));
@@ -180,5 +181,5 @@ void kbdtrace_init(void) {
         snprintf(name, sizeof name, "kbdtrace:site_%x", g_sites[i]);
         fnhook_set(g_sites[i], hle_register(strdup(name), g_site_fns[i]));
     }
-    LOG("[kbdtrace] keyboard driver traced (MHGU_NO_KBDTRACE=1: off)\n");
+    LOG("[kbdtrace] keyboard and text entry traced (MHGU_KBDTRACE)\n");
 }
