@@ -297,7 +297,16 @@ int ui_run(void) {
         if (SDL_WaitEventTimeout(&e, 4)) {
             do {
                 if (e.type == SDL_EVENT_QUIT) {
-                    if (!config_confirm_exit() && !overlay_settings_dirty()) { LOG("window closed\n"); exit(0); }
+                    // (the question is asked in the settings menu: without the overlay, or with it already asked -
+                    // X pressed twice - the window closes at once rather than seeming to ignore the X)
+                    static uint64_t asked_ns;
+                    uint64_t now = SDL_GetTicksNS();
+                    bool again = asked_ns && now - asked_ns < 3000000000ull;
+                    if ((!config_confirm_exit() && !overlay_settings_dirty()) || !overlay_enabled() || again) {
+                        LOG("window closed\n");
+                        exit(0);
+                    }
+                    asked_ns = now;
                     overlay_request_close();
                     continue;
                 }

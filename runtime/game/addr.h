@@ -77,18 +77,18 @@
 #define HPSCALE_PORTED (A_HPSCALE_FN_NANDO_ROW && A_G_GAMECONTROL && A_G_SELECTOR && A_G_SENEMY && A_G_SPLAYER && A_G_SQUEST)
 
 // ---- runtime/hle/inflate.c
-#define A_INFLATE_FN_INFLATE_FAST            0x0u  // GU 1.4.0: 0x1422ce8  (z_stream *strm, unsigned start: avail_out when inflate() was entered)
-#define A_INFLATE_FN_ADLER32                 0x0u  // GU 1.4.0: 0x1422774  (adler, buf, len) -> adler
-#define A_INFLATE_MSG_LITLEN                 0x0u  // GU 1.4.0: 0x17860b5  "invalid literal/length code"
-#define A_INFLATE_MSG_DISTCODE               0x0u  // GU 1.4.0: 0x17860d1  "invalid distance code"
-#define A_INFLATE_MSG_DISTFAR                0x0u  // GU 1.4.0: 0x17860e7  "invalid distance too far back"
+#define A_INFLATE_FN_INFLATE_FAST            0x1417520u  // GU 1.4.0: 0x1422ce8  (z_stream *strm, unsigned start: avail_out when inflate() was entered)
+#define A_INFLATE_FN_ADLER32                 0x1416facu  // GU 1.4.0: 0x1422774  (adler, buf, len) -> adler
+#define A_INFLATE_MSG_LITLEN                 0x177aa7cu  // GU 1.4.0: 0x17860b5  "invalid literal/length code"
+#define A_INFLATE_MSG_DISTCODE               0x177aa98u  // GU 1.4.0: 0x17860d1  "invalid distance code"
+#define A_INFLATE_MSG_DISTFAR                0x177aaaeu  // GU 1.4.0: 0x17860e7  "invalid distance too far back"
 #define INFLATE_PORTED (A_INFLATE_FN_INFLATE_FAST && A_INFLATE_FN_ADLER32 && A_INFLATE_MSG_LITLEN && A_INFLATE_MSG_DISTCODE && A_INFLATE_MSG_DISTFAR)
 
 // ---- runtime/hle/itembar.c
-#define A_ITEMBAR_FN_ITEM_BAR                0x0u  // GU 1.4.0: 0x4f7f38  the player's item bar handler (r0 = the player)
-#define A_ITEMBAR_FN_PL_IS_LOCAL             0x0u  // GU 1.4.0: 0x47bcd0  (player) 1: the handler goes on
-#define A_ITEMBAR_FN_PL_BUSY                 0x0u  // GU 1.4.0: 0x47b918  (player) 0: the handler goes on
-#define A_ITEMBAR_FN_ITEM_NEXT               0x0u  // GU 1.4.0: 0x4880fc  (player, slot, 0 right / 1 left): the next slot holding an item
+#define A_ITEMBAR_FN_ITEM_BAR                0x4f4e98u  // GU 1.4.0: 0x4f7f38  the player's item bar handler (r0 = the player)
+#define A_ITEMBAR_FN_PL_IS_LOCAL             0x478f14u  // GU 1.4.0: 0x47bcd0  (player) 1: the handler goes on
+#define A_ITEMBAR_FN_PL_BUSY                 0x478b5cu  // GU 1.4.0: 0x47b918  (player) 0: the handler goes on
+#define A_ITEMBAR_FN_ITEM_NEXT               0x4850d8u  // GU 1.4.0: 0x4880fc  (player, slot, 0 right / 1 left): the next slot holding an item
 #define ITEMBAR_PORTED (A_ITEMBAR_FN_ITEM_BAR && A_ITEMBAR_FN_PL_IS_LOCAL && A_ITEMBAR_FN_PL_BUSY && A_ITEMBAR_FN_ITEM_NEXT)
 
 // ---- runtime/hle/kotrace.c
@@ -105,7 +105,7 @@
 #define MASHRATE_PORTED (A_MASHRATE_FN_MASH && A_MASHRATE_MASH_BITS)
 
 // ---- runtime/hle/mousecam.c
-#define A_MOUSECAM_FN_CAMERA_STICK           0x0u  // GU 1.4.0: 0x2255cc  uQuestCamera's right stick handler: r0 = the camera, r1 = the invert bits
+#define A_MOUSECAM_FN_CAMERA_STICK           0x224d7cu  // GU 1.4.0: 0x2255cc  uQuestCamera's right stick handler: r0 = the camera, r1 = the invert bits
 #define MOUSECAM_PORTED (A_MOUSECAM_FN_CAMERA_STICK)
 
 // ---- runtime/hle/movelog.c
