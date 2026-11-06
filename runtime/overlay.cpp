@@ -153,6 +153,8 @@ void overlay_request_close(void) {
     set_open(g_forge_open);
 }
 bool overlay_settings_dirty(void) { return settings_panel_dirty(); }
+bool overlay_pad_capture(void) { return g_settings_open && settings_panel_pad_capturing(); }
+void overlay_pad_captured(int src) { settings_panel_pad(src); }
 void overlay_toggle_settings(void) {
     if (!g_enabled) return;
     if (g_settings_open) { settings_panel_request_back(); return; }

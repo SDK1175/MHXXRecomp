@@ -30,6 +30,13 @@ bool overlay_event(const SDL_Event *e);
 // Host main thread, while the menu is open: the controller, which moves through the menu instead of the game.
 typedef struct { bool a, b, x, y, up, down, left, right, l, r, plus, minus; float lx, ly; } OverlayPad;
 void overlay_pad(const OverlayPad *p);
+// Host main thread: the settings menu waits for a controller button ([Controller], Controller buttons); the button
+// pressed then (config.h PAD_SRC_*) goes to overlay_pad_captured, not to the menu.
+bool overlay_pad_capture(void);
+void overlay_pad_captured(int src);
+// runtime/host_input.c: the kind of controller in use, for the names of its buttons (0 Xbox and others, 1 Nintendo,
+// 2 PlayStation; -1 none)
+int host_pad_layout(void);
 
 // The game's thread, once a frame (after the plugins' forge_onUpdate): the overlay's frame, plugins' UI included.
 void overlay_frame(void *cpu);

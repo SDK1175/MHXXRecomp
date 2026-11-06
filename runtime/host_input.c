@@ -739,6 +739,37 @@ static uint64_t pad_remap(uint64_t usual) {
     return b;
 }
 
+int host_pad_layout(void) {
+    if (!pad) return -1;
+    switch (SDL_GetGamepadType(pad)) {
+    case SDL_GAMEPAD_TYPE_PS3: case SDL_GAMEPAD_TYPE_PS4: case SDL_GAMEPAD_TYPE_PS5: return 2;
+    case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO: case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT:
+    case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT: case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR: return 1;
+    default: return 0;
+    }
+}
+// Choosing a controller button in the settings menu: the first button pressed once all were let go (the one that
+// opened the choice is still held), and nothing reaches the menu until that one is let go too. true: the menu gets
+// no controller this frame.
+static bool pad_capture_update(void) {
+    static bool was, armed, swallow;
+    bool cap = pad && overlay_pad_capture();
+    bool any = false;
+    int first = -1;
+    if (pad)
+        for (int src = PAD_SRC_SOUTH; src < PAD_SRCS; src++)
+            if (pad_source_held(src)) { any = true; if (first < 0) first = src; }
+    if (cap && !was) armed = false;
+    was = cap;
+    if (cap) {
+        if (!any) armed = true;
+        else if (armed) overlay_pad_captured(first), armed = false, swallow = true;
+        return true;
+    }
+    if (swallow && !any) swallow = false;
+    return swallow;
+}
+
 void host_input_update(void) {
     if (nscript < 0) script_parse();
     rumble_update();
@@ -872,10 +903,13 @@ void host_input_update(void) {
         memset(keys, 0, sizeof keys);  // (keys held as it opened went to the menu: nothing stays pressed)
         mouse_held = 0;
     }
+    bool choosing = pad_capture_update() && menu;  // (choosing a controller button: the controller is not the menu's)
+    if (choosing) mb = kb;
     if (menu) {  // Forge's menu has the controller (as in Forge: A activates, B cancels, stick and d-pad move)
         OverlayPad p = {mb & B(BTN_A), mb & B(BTN_B), mb & B(BTN_X), mb & B(BTN_Y), mb & B(BTN_UP), mb & B(BTN_DOWN),
                         mb & B(BTN_LEFT), mb & B(BTN_RIGHT), mb & B(BTN_L), mb & B(BTN_R), mb & B(BTN_PLUS),
-                        mb & B(BTN_MINUS), clamp_axis(lx) / 32767.0f, clamp_axis(ly) / 32767.0f};
+                        mb & B(BTN_MINUS), choosing ? 0 : clamp_axis(lx) / 32767.0f,
+                        choosing ? 0 : clamp_axis(ly) / 32767.0f};
         overlay_pad(&p);
         b = 0, lx = ly = rx = ry = 0;
     }

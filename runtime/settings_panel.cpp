@@ -27,7 +27,7 @@
 #include <vector>
 
 namespace {
-enum class View { Main, Keyboard, CloseChanges, Exit, Restart, Reset, Move, Conflicts, KeyCapture, Keybinds, PadBinds };
+enum class View { Main, Keyboard, CloseChanges, Exit, Restart, Reset, Move, Conflicts, KeyCapture, Keybinds, PadBinds, PadCapture };
 enum class Command { None, Save };
 struct Row {
     std::string id, title, value;
@@ -93,10 +93,16 @@ struct State {
     bool position_override = false;
     int capture_bind = -1;     // the keybind (BIND_*) a key is being chosen for; -1: the chat key
     bool capture_add = false;  // the key chosen is that keybind's second, else its only one
+    int capture_pad = 0;            // the Switch button (PAD_*) a controller button is being chosen for
+    uint64_t capture_pad_since = 0;  // when that began (SDL_GetTicksNS): it gives up after PAD_CAPTURE_SECONDS
 } s;
 std::atomic<bool> request_exit, request_back, is_dirty, is_confirming, is_capturing, capture_mouse, capture_wheel;
 // (the key pressed while a key is being chosen, or KEY_MOUSE + a mouse button; -1: none yet)
 std::atomic<int> captured_key{-1};
+// (the controller button pressed while one is being chosen, PAD_SRC_*; -1: none yet)
+std::atomic<int> captured_pad{-1};
+std::atomic<bool> is_pad_capturing;
+constexpr int PAD_CAPTURE_SECONDS = 5;
 const char *tr(const char *text) { return settings_text(s.draft.language, text); }
 std::string fmt(const char *text, ...) {
     char buffer[512];
@@ -735,8 +741,9 @@ const char *const pad_titles[PAD_BINDS] = {"A", "B", "X", "Y", "L", "R", "ZL", "
 const char *const pad_ini_keys[PAD_BINDS] = {"PadA", "PadB", "PadX", "PadY", "PadL", "PadR", "PadZL", "PadZR",
                                              "PadPlus", "PadMinus", "PadDpadUp", "PadDpadDown", "PadDpadLeft",
                                              "PadDpadRight", "PadLeftStickClick", "PadRightStickClick"};
+// The controller's button names (PAD_SRC_SOUTH..), as the controller in use calls them (else as Button icons draws
+// them): 0 Xbox and others, 1 Nintendo, 2 PlayStation
 std::vector<std::string> pad_source_names() {
-    // PAD_SRC_SOUTH.. by layout (0 Xbox, 1 Switch, 2 PlayStation)
     static const char *const names[3][PAD_SRCS - PAD_SRC_SOUTH] = {
         {"A", "B", "X", "Y", "LB", "RB", "LT", "RT", "Menu", "View", "D-pad up", "D-pad down", "D-pad left",
          "D-pad right", "LS", "RS", "Paddle 1", "Paddle 2", "Paddle 3", "Paddle 4", "Share", "Touchpad"},
@@ -745,34 +752,51 @@ std::vector<std::string> pad_source_names() {
         {"Cross", "Circle", "Square", "Triangle", "L1", "R1", "L2", "R2", "Options", "Share", "D-pad up",
          "D-pad down", "D-pad left", "D-pad right", "L3", "R3", "Paddle 1", "Paddle 2", "Paddle 3", "Paddle 4",
          "Mic", "Touchpad"}};
-    static const char *const places[4] = {"bottom", "right", "left", "top"};
-    int layout = std::clamp(s.draft.button_icons, 0, 2);
+    int layout = host_pad_layout();
+    if (layout < 0)
+        layout = std::clamp(s.draft.button_icons, 0, 2);
     std::vector<std::string> v = {tr("Default"), tr("None")};
-    for (int i = 0; i < PAD_SRCS - PAD_SRC_SOUTH; i++) {
-        std::string n = tr(names[layout][i]);
-        if (i < 4)
-            n += std::string(" (") + tr(places[i]) + ")";
-        v.push_back(n);
-    }
+    for (int i = 0; i < PAD_SRCS - PAD_SRC_SOUTH; i++)
+        v.push_back(tr(names[layout][i]));
     return v;
 }
+void capture_pad(int pad) {
+    s.capture_pad = pad;
+    s.capture_pad_since = SDL_GetTicksNS();
+    captured_pad = -1;
+    captured_key = -1;
+    push(View::PadCapture, "padcap.cancel");
+}
+// The Controller buttons submenu: a row per Switch button, the controller button that presses it (red where another
+// row has that button too). Confirm: press the button to use, Default or None.
 void padbind_rows(std::vector<Row> &r) {
     std::vector<std::string> names = pad_source_names();
     header(r, "pad.buttons", tr("Switch button"));
     for (int i = 0; i < PAD_BINDS; i++) {
-        std::string id = "pad." + std::to_string(i);
-        add_choice(r, id.c_str(), pad_titles[i], s.draft.pad_binds[i], names,
-                   [i](int v) { s.draft.pad_binds[i] = v; }, ini(pad_ini_keys[i]));
-        // what a controller button does besides (its usual job, or another row's): red, as Keybinds does
-        int src = s.draft.pad_binds[i];
-        if (src >= PAD_SRC_SOUTH) {
+        Row row;
+        row.id = "pad." + std::to_string(i);
+        row.title = tr(pad_titles[i]);
+        keyed(row, ini(pad_ini_keys[i]));
+        int src = std::clamp(s.draft.pad_binds[i], 0, (int)names.size() - 1);
+        row.value = names[src];
+        if (src >= PAD_SRC_SOUTH)
             for (int j = 0; j < PAD_BINDS; j++)
                 if (j != i && s.draft.pad_binds[j] == src) {
-                    r.back().value += std::string(" (") + tr("in use:") + " " + tr(pad_titles[j]) + ")";
-                    r.back().warn = true;
+                    row.value += std::string(" (") + tr("in use:") + " " + tr(pad_titles[j]) + ")";
+                    row.warn = true;
                     break;
                 }
-        }
+        Row copy = row;
+        row.menu = true;
+        row.activate = [copy, i]() {
+            choices(copy, {tr("Press a button"), tr("Default"), tr("None")}, -1, [i](int v) {
+                if (v == 0)
+                    capture_pad(i);
+                else
+                    s.draft.pad_binds[i] = v == 1 ? PAD_SRC_DEFAULT : PAD_SRC_NONE;
+            });
+        };
+        r.push_back(std::move(row));
     }
     action(r, "pad.reset", tr("Reset controller buttons"), []() {
         Config f = config_defaults();
@@ -1463,6 +1487,24 @@ std::vector<Row> rows_for_view(bool *open) {
         keybind_rows(r);
     } else if (s.view == View::PadBinds) {
         padbind_rows(r);
+    } else if (s.view == View::PadCapture) {
+        int key = captured_key.exchange(-1), src = captured_pad.exchange(-1);
+        if (src >= PAD_SRC_SOUTH && src < PAD_SRCS) {
+            s.draft.pad_binds[s.capture_pad] = src;
+            pop();
+        } else if (key == SDL_SCANCODE_ESCAPE || SDL_GetTicksNS() - s.capture_pad_since > PAD_CAPTURE_SECONDS * 1000000000ull)
+            pop();
+        if (s.view == View::PadCapture) {  // (the mouse's: the controller's buttons are the one chosen)
+            action(r, "padcap.default", tr("Default"), []() {
+                s.draft.pad_binds[s.capture_pad] = PAD_SRC_DEFAULT;
+                pop();
+            });
+            action(r, "padcap.none", tr("None"), []() {
+                s.draft.pad_binds[s.capture_pad] = PAD_SRC_NONE;
+                pop();
+            });
+            action(r, "padcap.cancel", tr("Cancel"), []() { pop(); });
+        }
     } else if (s.view == View::KeyCapture) {
         int key = captured_key.exchange(-1);
         const char *name = key > 0 && key < KEY_MOUSE ? SDL_GetScancodeName((SDL_Scancode)key) : "";
@@ -1904,6 +1946,8 @@ bool settings_panel_mouse(int button) {
     captured_key = KEY_MOUSE + button;
     return true;
 }
+bool settings_panel_pad_capturing() { return is_pad_capturing.load(); }
+void settings_panel_pad(int src) { captured_pad = src; }
 bool settings_panel_wheel(int notches) {
     if (!capture_wheel.load() || !notches)
         return false;
@@ -2148,6 +2192,9 @@ void settings_panel(bool *open) {
         std::string title = s.view == View::Keyboard ? s.keyboard.title
                             : s.view == View::KeyCapture && s.capture_bind >= 0
                                 ? fmt("Press a key or mouse button for %s (Esc: cancel)", tr(bind_titles[s.capture_bind]))
+                            : s.view == View::PadCapture
+                                ? fmt("Press the controller button for %s (%d s, Esc: cancel)", tr(pad_titles[s.capture_pad]),
+                                      (int)std::max<int64_t>(0, PAD_CAPTURE_SECONDS - (int64_t)((SDL_GetTicksNS() - s.capture_pad_since) / 1000000000ull)))
                                 : tr(s.view == View::Exit         ? "Exit game?"
                                      : s.view == View::Restart    ? "Restart game?"
                                      : s.view == View::Reset      ? "Reset this tab?"
@@ -2304,10 +2351,11 @@ void settings_panel(bool *open) {
     ImGui::PopStyleColor(3);
     is_dirty = *open && (dirty() || pending_text());
     is_confirming = *open && confirmation();
-    is_capturing = *open && s.view == View::KeyCapture;
+    is_capturing = *open && (s.view == View::KeyCapture || s.view == View::PadCapture);  // (PadCapture: for Esc)
+    is_pad_capturing = *open && s.view == View::PadCapture;
     // (a click on the capture view's buttons is theirs; anywhere else it is the mouse button chosen)
-    capture_mouse = is_capturing && s.capture_bind >= 0 && !s.pointing;
-    capture_wheel = is_capturing && s.capture_bind >= 0;  // (the capture view doesn't scroll)
+    capture_mouse = *open && s.view == View::KeyCapture && s.capture_bind >= 0 && !s.pointing;
+    capture_wheel = *open && s.view == View::KeyCapture && s.capture_bind >= 0;  // (the capture view doesn't scroll)
     if (!*open)
         s.editing = false;
 }
