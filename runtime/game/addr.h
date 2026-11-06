@@ -29,10 +29,10 @@
 #define A_G_SNETWORK                         0x0u  // GU 1.4.0: 0x1a843f0
 #define A_G_SPLAYER                          0x0u  // GU 1.4.0: 0x1a85b58
 #define A_G_SQUEST                           0x0u  // GU 1.4.0: 0x1a8ad90  sQuest *: +0xa4 cQuestData * of the quest being played (+0x8 quest number)
-#define A_G_SYSTEM                           0x0u  // GU 1.4.0: 0x2326764  engine system object *: +0x68 the frame step in 60 fps frames
+#define A_G_SYSTEM                           0x2348764u  // MHXX 1.5.1 (read +0x68 at 0x8717ec, 0x92bea4; checked live 2026-11-06: +0x38 60.0, +0x3c 30.0 target, +0x44 ~30.0 measured). GU 1.4.0: 0x2326764  engine system object *: +0x68 the frame step in 60 fps frames
 
 // ---- runtime/hle/buffcycle.c
-#define BUFFCYCLE_PORTED (A_G_SYSTEM)
+#define BUFFCYCLE_PORTED (A_G_SYSTEM)  // (and its tools/gen.py patches, not in MHXX_PATCHES yet: until then nothing calls it)
 
 // ---- runtime/hle/camera_jitter.c
 #define A_CAMERA_JITTER_FN_LOOKAT            0x0u  // GU 1.4.0: 0x21c33c  look-at: r0 = out view matrix, r1 = camera
@@ -51,7 +51,7 @@
 #define CHAT_PORTED (A_CHAT_FN_SEND_CHAT && A_CHAT_FN_NET_INDEX && A_CHAT_FN_NET_ONLINE && A_CHAT_FN_NET_OBJECT && A_CHAT_FN_MY_PLAYER && A_G_SNETWORK && A_G_SPLAYER)
 
 // ---- runtime/hle/combowin.c
-#define COMBOWIN_PORTED (A_G_SYSTEM)
+#define COMBOWIN_PORTED (A_G_SYSTEM)  // (and its tools/gen.py patches, not in MHXX_PATCHES yet: until then nothing calls it)
 
 // ---- runtime/hle/dummy.c
 #define A_DUMMY_FN_COLLISION                 0x0u  // GU 1.4.0: 0x36b15c  the collision manager's update: attacks against targets, every update
@@ -60,7 +60,7 @@
 #define DUMMY_PORTED (A_DUMMY_FN_COLLISION && A_DUMMY_FN_EN_DAMAGE && A_DUMMY_FN_EN_SPEED && A_G_GAMECONTROL && A_G_SENEMY && A_G_SPLAYER)
 
 // ---- runtime/hle/emjump.c
-#define EMJUMP_PORTED (A_G_SYSTEM)
+#define EMJUMP_PORTED (A_G_SYSTEM)  // (and its tools/gen.py patches, not in MHXX_PATCHES yet: until then nothing calls it)
 
 // ---- runtime/hle/emtrace.c
 #define A_EMTRACE_FN_FRAME                   0x0u  // GU 1.4.0: 0xda5824  engine frame start: sleeps to the target, sets the step (+0x68)
