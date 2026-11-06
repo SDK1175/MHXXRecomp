@@ -117,6 +117,9 @@ GU_PATCHES.update(emjump_patches(GU_EMJUMP, lambda a: 1 if a == 0x1122bc8 else 0
 # Same format: ('main', address): (expected word, C). The C is usually GU's as it is; check the registers the
 # instruction uses, which can differ between the builds.
 MHXX_PATCHES = {
+    # Quest photo request (sScreenShot, registered at 0xa64468; GU 0xa6f9ac): `mov r1, #1` before the strb to +0x2c.
+    # Without it the reward screen's background is other textures' data (seen 2026-11-06 at 240 fps).
+    ('main', 0xa643c8): (0xE3A01001, '{ extern void backend_photo_requested(void); backend_photo_requested(); c->r[1] = 1; }'),
 }
 MHXX_EMJUMP = [  # (address, kind, axis, jerk), as GU_EMJUMP
 ]
