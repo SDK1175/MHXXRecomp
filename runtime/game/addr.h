@@ -157,9 +157,9 @@
 // ---- runtime/net/emsync.c
 #define EMSYNC_PORTED (A_G_GAMECONTROL && A_G_SENEMY && A_G_SPLAYER)
 
-// ---- runtime/forge.c
+// ---- runtime/forge.c (offsets from main's .text, not runtime addresses: + MAIN_BASE 0x200000 gives the address)
 #define A_FORGE_OFF_APP_RUN                  0x0u  // GU 1.4.0: 0xb8692c  sApp::run
-#define A_FORGE_OFF_UPDATE                   0x0u  // GU 1.4.0: 0x3da8fc  the frame update (this: dt at +0x68)
+#define A_FORGE_OFF_UPDATE                   0x3d6be0u  // MHXX 1.5.1: 0x5d6be0, the system object's vtable[7], once a frame from 0xd7b388 (fntrace, 2026-11-06). GU 1.4.0: 0x3da8fc  the frame update (this: dt at +0x68)
 #define A_FORGE_OFF_SYSTEM_CTOR              0x0u  // GU 1.4.0: 0x887810  cSystem::cSystem / ~cSystem: every singleton
 #define A_FORGE_OFF_SYSTEM_DTOR              0x0u  // GU 1.4.0: 0x88784c
 #define A_FORGE_OFF_MOUNT_SAVE               0x0u  // GU 1.4.0: 0x878da0  sSavedata's mount

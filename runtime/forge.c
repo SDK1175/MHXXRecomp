@@ -1366,7 +1366,7 @@ static void forge_map_regions(void) {
 }
 
 void forge_init(void) {
-    PORT_OFF(FORGE, "Forge plugins");
+    if (!OFF_UPDATE) PORT_OFF(FORGE, "Forge plugins and the settings overlay");  // (the overlay draws from the update)
     const char *lv = getenv("MHGU_FORGE_LOG");  // debug, info, warn, error
     if (lv && log_level_of(lv) >= 0) log_level = log_level_of(lv), env_level = true;
     main_text = g_modules[0].base + g_modules[0].text_off;
@@ -1386,6 +1386,12 @@ void forge_init(void) {
     snprintf(base, sizeof base, "%s/romfs", g_game_dir);
     layers[0] = base;
     int nl = 1 + mods_romfs_layers(layers + 1, 64), nf = 0;
+    if (!FORGE_PORTED) {  // (MHXX: the frame update is known, the rest of Forge's addresses are not: the overlay only)
+        LOG("[port] Forge plugins: not ported to MHXX yet (runtime/game/addr.h): off; the settings overlay is on\n");
+        fnhook_set(text_addr(OFF_UPDATE), hle_register("forge:update", frame_update));
+        overlay_start(layers, nl);
+        return;
+    }
     for (int l = 0; l < nl; l++) {
         if (!ci_path(layers[l], "nativeNX/plugins", dir, sizeof dir)) continue;
         DIR *d = opendir(dir);
