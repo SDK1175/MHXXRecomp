@@ -277,6 +277,30 @@ static const char DEFAULT_INI[] =
     "ItemLeft = Wheel Up\n"
     "ItemRight = Wheel Down\n"
     "\n"
+    "[Controller]\n"
+    "; The controller button for each Switch button. Default: the usual one (the face buttons as FaceButtons says).\n"
+    "; Buttons are named by where they are, so a setting means the same place on any controller:\n"
+    "; South, East, West, North (the face buttons: A, B, X, Y on an Xbox controller; cross, circle, square, triangle on\n"
+    "; a PlayStation one), LB, RB, LT, RT, Start, Back, DpadUp, DpadDown, DpadLeft, DpadRight, LeftStick, RightStick,\n"
+    "; Paddle1 to Paddle4, Misc (Share / Capture), Touchpad, or None.\n"
+    "; A button keeps its own job unless that is set to something else too: to swap two, set both\n"
+    "PadA = Default\n"
+    "PadB = Default\n"
+    "PadX = Default\n"
+    "PadY = Default\n"
+    "PadL = Default\n"
+    "PadR = Default\n"
+    "PadZL = Default\n"
+    "PadZR = Default\n"
+    "PadPlus = Default\n"
+    "PadMinus = Default\n"
+    "PadDpadUp = Default\n"
+    "PadDpadDown = Default\n"
+    "PadDpadLeft = Default\n"
+    "PadDpadRight = Default\n"
+    "PadLeftStickClick = Default\n"
+    "PadRightStickClick = Default\n"
+    "\n"
     "[Multiplayer]\n"
     "; Which port to host/join hubs on (TCP and UDP). A change counts from the next hub you host or search for\n"
     "; Default: 39500\n"
@@ -502,9 +526,16 @@ static bool parse_aspect(const char *v, float *out) {
 #define ERR_UPDATES "Invalid update setting."
 #define ERR_DRAW "Draw distance must be 0-10 (0: no limit)."
 #define ERR_KEYS "Invalid keybind."
+#define ERR_PAD "Invalid controller button."
 #define F(x) offsetof(Config, x)
 #define ON_OFF(section, key, field, restart) {section, key, SET_BOOL, F(field), 0, 0, 0, NULL, NULL, restart, ERR_TOGGLE}
 #define KEYS(key, bind) {"Keybinds", key, SET_KEYS, F(binds[bind]), 0, 0, 0, NULL, NULL, false, ERR_KEYS}
+// [Controller]: PAD_SRC_*'s names, in their order
+#define PAD_SOURCES                                                                                                    \
+    "Default,None,South|cross,East|circle,West|square,North|triangle,LB|leftshoulder|l1,RB|rightshoulder|r1,"         \
+    "LT|lefttrigger|l2,RT|righttrigger|r2,Start|options|menu,Back|select|view|share,DpadUp,DpadDown,DpadLeft,"        \
+    "DpadRight,LeftStick|l3|ls,RightStick|r3|rs,Paddle1,Paddle2,Paddle3,Paddle4,Misc|capture,Touchpad"
+#define PAD(key, pad) {"Controller", key, SET_CHOICE, F(pad_binds[pad]), 0, 0, 0, PAD_SOURCES, NULL, false, ERR_PAD}
 static const int anchor_values[] = {UI_CENTER, UI_21_9, UI_32_9, UI_EDGES}, msaa_values[] = {1, 2, 4, 8};
 const ConfigSetting g_settings[] = {
     {"Display", "Mode", SET_CHOICE, F(display_mode), 0, 0, 0,
@@ -546,6 +577,11 @@ const ConfigSetting g_settings[] = {
     KEYS("Plus", BIND_PLUS), KEYS("Minus", BIND_MINUS), KEYS("DpadUp", BIND_DPAD_UP), KEYS("DpadDown", BIND_DPAD_DOWN),
     KEYS("DpadLeft", BIND_DPAD_LEFT), KEYS("DpadRight", BIND_DPAD_RIGHT), KEYS("LeftStickClick", BIND_LSTICK),
     KEYS("RightStickClick", BIND_RSTICK), KEYS("ItemLeft", BIND_ITEM_LEFT), KEYS("ItemRight", BIND_ITEM_RIGHT),
+    PAD("PadA", PAD_A), PAD("PadB", PAD_B), PAD("PadX", PAD_X), PAD("PadY", PAD_Y), PAD("PadL", PAD_L),
+    PAD("PadR", PAD_R), PAD("PadZL", PAD_ZL), PAD("PadZR", PAD_ZR), PAD("PadPlus", PAD_PLUS),
+    PAD("PadMinus", PAD_MINUS), PAD("PadDpadUp", PAD_DPAD_UP), PAD("PadDpadDown", PAD_DPAD_DOWN),
+    PAD("PadDpadLeft", PAD_DPAD_LEFT), PAD("PadDpadRight", PAD_DPAD_RIGHT), PAD("PadLeftStickClick", PAD_LSTICK),
+    PAD("PadRightStickClick", PAD_RSTICK),
     {"Multiplayer", "Port", SET_INT, F(ldn_port), 0, 1, 65535, NULL, NULL, false, ERR_NET},
     {"Android", "SaveFolder", SET_TEXT, F(save_dir), sizeof g_config.save_dir, 0, 0, NULL, NULL, true, ERR_FOLDER},
     {"Android", "GameFolder", SET_TEXT, F(game_dir), sizeof g_config.game_dir, 0, 0, NULL, NULL, true, ERR_GAME_FOLDER},
@@ -575,6 +611,8 @@ const ConfigSetting g_settings[] = {
 };
 #undef ON_OFF
 #undef KEYS
+#undef PAD
+#undef PAD_SOURCES
 const int g_nsettings = (int)(sizeof g_settings / sizeof g_settings[0]);
 
 const ConfigSetting *config_bind_setting(int bind) {

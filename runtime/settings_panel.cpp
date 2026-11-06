@@ -27,7 +27,7 @@
 #include <vector>
 
 namespace {
-enum class View { Main, Keyboard, CloseChanges, Exit, Restart, Reset, Move, Conflicts, KeyCapture, Keybinds };
+enum class View { Main, Keyboard, CloseChanges, Exit, Restart, Reset, Move, Conflicts, KeyCapture, Keybinds, PadBinds };
 enum class Command { None, Save };
 struct Row {
     std::string id, title, value;
@@ -310,6 +310,8 @@ bool equal(const Config &a, const Config &b) {
     SAME(hp.village);
     SAME(hp.quests);
 #undef SAME
+    if (memcmp(a.pad_binds, b.pad_binds, sizeof a.pad_binds))
+        return false;
     if (memcmp(a.binds, b.binds, sizeof a.binds))
         return false;
     if (strcmp(a.ldn_join, b.ldn_join) || strcmp(a.ldn_server, b.ldn_server) || strcmp(a.ldn_key, b.ldn_key) ||
@@ -724,6 +726,60 @@ void keybind_rows(std::vector<Row> &r) {
     });
     action(r, "bind.back", tr("Back"), []() { pop(); });
 }
+// The Controller buttons submenu ([Controller], config.h PAD_*): a row per Switch button, the controller button that
+// presses it. The buttons are named as Button icons draws them (Xbox, Switch, PlayStation), with the face buttons'
+// place too.
+const char *const pad_titles[PAD_BINDS] = {"A", "B", "X", "Y", "L", "R", "ZL", "ZR", "Plus", "Minus", "D-pad up",
+                                           "D-pad down", "D-pad left", "D-pad right", "Left stick click",
+                                           "Right stick click"};
+const char *const pad_ini_keys[PAD_BINDS] = {"PadA", "PadB", "PadX", "PadY", "PadL", "PadR", "PadZL", "PadZR",
+                                             "PadPlus", "PadMinus", "PadDpadUp", "PadDpadDown", "PadDpadLeft",
+                                             "PadDpadRight", "PadLeftStickClick", "PadRightStickClick"};
+std::vector<std::string> pad_source_names() {
+    // PAD_SRC_SOUTH.. by layout (0 Xbox, 1 Switch, 2 PlayStation)
+    static const char *const names[3][PAD_SRCS - PAD_SRC_SOUTH] = {
+        {"A", "B", "X", "Y", "LB", "RB", "LT", "RT", "Menu", "View", "D-pad up", "D-pad down", "D-pad left",
+         "D-pad right", "LS", "RS", "Paddle 1", "Paddle 2", "Paddle 3", "Paddle 4", "Share", "Touchpad"},
+        {"B", "A", "Y", "X", "L", "R", "ZL", "ZR", "+", "-", "D-pad up", "D-pad down", "D-pad left", "D-pad right",
+         "L stick", "R stick", "Paddle 1", "Paddle 2", "Paddle 3", "Paddle 4", "Capture", "Touchpad"},
+        {"Cross", "Circle", "Square", "Triangle", "L1", "R1", "L2", "R2", "Options", "Share", "D-pad up",
+         "D-pad down", "D-pad left", "D-pad right", "L3", "R3", "Paddle 1", "Paddle 2", "Paddle 3", "Paddle 4",
+         "Mic", "Touchpad"}};
+    static const char *const places[4] = {"bottom", "right", "left", "top"};
+    int layout = std::clamp(s.draft.button_icons, 0, 2);
+    std::vector<std::string> v = {tr("Default"), tr("None")};
+    for (int i = 0; i < PAD_SRCS - PAD_SRC_SOUTH; i++) {
+        std::string n = tr(names[layout][i]);
+        if (i < 4)
+            n += std::string(" (") + tr(places[i]) + ")";
+        v.push_back(n);
+    }
+    return v;
+}
+void padbind_rows(std::vector<Row> &r) {
+    std::vector<std::string> names = pad_source_names();
+    header(r, "pad.buttons", tr("Switch button"));
+    for (int i = 0; i < PAD_BINDS; i++) {
+        std::string id = "pad." + std::to_string(i);
+        add_choice(r, id.c_str(), pad_titles[i], s.draft.pad_binds[i], names,
+                   [i](int v) { s.draft.pad_binds[i] = v; }, ini(pad_ini_keys[i]));
+        // what a controller button does besides (its usual job, or another row's): red, as Keybinds does
+        int src = s.draft.pad_binds[i];
+        if (src >= PAD_SRC_SOUTH) {
+            for (int j = 0; j < PAD_BINDS; j++)
+                if (j != i && s.draft.pad_binds[j] == src) {
+                    r.back().value += std::string(" (") + tr("in use:") + " " + tr(pad_titles[j]) + ")";
+                    r.back().warn = true;
+                    break;
+                }
+        }
+    }
+    action(r, "pad.reset", tr("Reset controller buttons"), []() {
+        Config f = config_defaults();
+        memcpy(s.draft.pad_binds, f.pad_binds, sizeof f.pad_binds);
+    });
+    action(r, "pad.back", tr("Back"), []() { pop(); });
+}
 void reset_section() {
     Config f = config_defaults(), &c = s.draft;
     switch (s.page) {
@@ -765,6 +821,7 @@ void reset_section() {
         c.mouse_sensitivity = f.mouse_sensitivity;
         SDL_strlcpy(c.chat_key, f.chat_key, sizeof c.chat_key);
         memcpy(c.binds, f.binds, sizeof c.binds);
+        memcpy(c.pad_binds, f.pad_binds, sizeof c.pad_binds);
         break;
     case 3:
         c.ldn_port = f.ldn_port;
@@ -1147,6 +1204,8 @@ std::vector<Row> main_rows() {
         number(r, "mouse", tr("Mouse sensitivity"), &c.mouse_sensitivity, lo("MouseSensitivity"), hi("MouseSensitivity"), .05f, ini("MouseSensitivity"));
         action(r, "keybinds", tr("Keybinds"), []() { push(View::Keybinds, "bind.0"); });
         r.back().help = tr("The keys and mouse buttons for the Switch controller's buttons, for moving and for the item bar, and the chat key.");
+        action(r, "padbinds", tr("Controller buttons"), []() { push(View::PadBinds, "pad.0"); });
+        r.back().help = tr("Which controller button presses each Switch button. Default keeps the usual one. To swap two buttons, set both. This menu itself always uses the usual buttons, so a wrong setting can be undone with the controller.");
         add_bool(r, "menu.chord", "Plus + Minus opens this menu", &c.menu_chord, ini("MenuChord"));
         r.back().help = tr("Pressing Plus and Minus together (Start + Back on a controller) opens this menu. Turn it off to keep that combination for the game or a cheat, for example when you play with a keyboard and mouse. F1 still opens the menu.");
         break;
@@ -1402,6 +1461,8 @@ std::vector<Row> rows_for_view(bool *open) {
         action(r, "conflicts.back", tr("Back"), []() { pop(); });
     } else if (s.view == View::Keybinds) {
         keybind_rows(r);
+    } else if (s.view == View::PadBinds) {
+        padbind_rows(r);
     } else if (s.view == View::KeyCapture) {
         int key = captured_key.exchange(-1);
         const char *name = key > 0 && key < KEY_MOUSE ? SDL_GetScancodeName((SDL_Scancode)key) : "";
@@ -2093,6 +2154,7 @@ void settings_panel(bool *open) {
                                      : s.view == View::Move       ? "Move menu"
                                      : s.view == View::Conflicts  ? "Mod conflicts"
                                      : s.view == View::Keybinds   ? "Keybinds"
+                                     : s.view == View::PadBinds   ? "Controller buttons"
                                      : s.view == View::KeyCapture ? "Press the key for chat (Esc: cancel)"
                                                                   : "Unsaved changes");
         ImGui::TextWrapped("%s", title.c_str());

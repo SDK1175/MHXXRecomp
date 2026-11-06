@@ -702,6 +702,43 @@ static void rumble_update(void) {
     sent = v, sent_ns = now;
 }
 
+// [Controller] (config.h PAD_*): the Switch button each row is for, and the controller buttons PAD_SRC_* name (from
+// PAD_SRC_SOUTH; -1: a trigger, read as an axis)
+static const int pad_bind_buttons[PAD_BINDS] = {BTN_A, BTN_B, BTN_X, BTN_Y, BTN_L, BTN_R, BTN_ZL, BTN_ZR, BTN_PLUS,
+                                                BTN_MINUS, BTN_UP, BTN_DOWN, BTN_LEFT, BTN_RIGHT, BTN_LSTICK, BTN_RSTICK};
+static const int pad_sources[PAD_SRCS - PAD_SRC_SOUTH] = {
+    SDL_GAMEPAD_BUTTON_SOUTH, SDL_GAMEPAD_BUTTON_EAST, SDL_GAMEPAD_BUTTON_WEST, SDL_GAMEPAD_BUTTON_NORTH,
+    SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, -1, -1, SDL_GAMEPAD_BUTTON_START,
+    SDL_GAMEPAD_BUTTON_BACK, SDL_GAMEPAD_BUTTON_DPAD_UP, SDL_GAMEPAD_BUTTON_DPAD_DOWN, SDL_GAMEPAD_BUTTON_DPAD_LEFT,
+    SDL_GAMEPAD_BUTTON_DPAD_RIGHT, SDL_GAMEPAD_BUTTON_LEFT_STICK, SDL_GAMEPAD_BUTTON_RIGHT_STICK,
+    SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1, SDL_GAMEPAD_BUTTON_LEFT_PADDLE1, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2,
+    SDL_GAMEPAD_BUTTON_LEFT_PADDLE2, SDL_GAMEPAD_BUTTON_MISC1, SDL_GAMEPAD_BUTTON_TOUCHPAD,
+};
+static bool pad_source_held(int src) {
+    if (src == PAD_SRC_LT) return SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 8000;
+    if (src == PAD_SRC_RT) return SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 8000;
+    if (src < PAD_SRC_SOUTH || src >= PAD_SRCS) return false;
+    return SDL_GetGamepadButton(pad, (SDL_GamepadButton)pad_sources[src - PAD_SRC_SOUTH]);
+}
+// The controller's Switch buttons with [Controller] applied to what it presses the usual way (usual): a row set to a
+// button takes that button's state, None never presses. The settings menu keeps the usual ones, so a wrong setting
+// can always be undone with the controller.
+static uint64_t pad_remap(uint64_t usual) {
+    static bool held[PAD_BINDS];  // (a button held as its row changed waits for its release: no stray press)
+    static int was[PAD_BINDS];
+    uint64_t b = usual;
+    for (int i = 0; i < PAD_BINDS; i++) {
+        int src = config_live_pad_bind(i);
+        if (src != was[i]) held[i] = true, was[i] = src;
+        if (src == PAD_SRC_DEFAULT) { held[i] = false; continue; }
+        bool on = pad_source_held(src);
+        if (!on) held[i] = false;
+        b &= ~B(pad_bind_buttons[i]);
+        if (on && !held[i]) b |= B(pad_bind_buttons[i]);
+    }
+    return b;
+}
+
 void host_input_update(void) {
     if (nscript < 0) script_parse();
     rumble_update();
@@ -731,6 +768,8 @@ void host_input_update(void) {
     lx += kx * k, ly += ky * k;
     mouse_update(&rx, &ry);
 
+    uint64_t kb = b;  // (the keyboard's and mouse's: [Controller] leaves them alone)
+    b = 0;
     if (pad) {
         static const struct { SDL_GamepadButton sdl; int btn; } pad_buttons[] = {
             {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, BTN_L}, {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, BTN_R},
@@ -804,25 +843,27 @@ void host_input_update(void) {
         static bool scanned;  // (controllers present at startup send no ADDED event to a loop that started after them)
         if (!scanned) scanned = true, pick_pad();
     }
+    uint64_t mb = kb | b;  // what the settings menu reads: the controller's usual buttons
+    b = kb | (pad ? pad_remap(b) : b);
 
     uint64_t frame = g_present_count;
     for (int i = 0; i < nscript; i++) {
         const ScriptStep *st = &script[i];
         if (frame < st->start || frame >= st->start + st->len) continue;
-        b |= st->buttons;
+        b |= st->buttons, mb |= st->buttons;
         if (st->stick == 0) lx = st->x, ly = st->y;
         if (st->stick == 1) rx = st->x, ry = st->y;
     }
 
     // A controller can reach host settings without needing a keyboard.
     static bool settings_chord;
-    bool chord = config_menu_chord() && (b & (B(BTN_PLUS) | B(BTN_MINUS))) == (B(BTN_PLUS) | B(BTN_MINUS));
+    bool chord = config_menu_chord() && (mb & (B(BTN_PLUS) | B(BTN_MINUS))) == (B(BTN_PLUS) | B(BTN_MINUS));
     if (chord && !settings_chord && !typing) overlay_toggle_settings();
     if (chord && !typing) settings_chord = true;
     if (settings_chord) {
         // Swallow releases as well: releasing one half must not activate the game's menu.
-        if (!(b & (B(BTN_PLUS) | B(BTN_MINUS)))) settings_chord = false;
-        b &= ~(B(BTN_PLUS) | B(BTN_MINUS));
+        if (!(mb & (B(BTN_PLUS) | B(BTN_MINUS)))) settings_chord = false;
+        b &= ~(B(BTN_PLUS) | B(BTN_MINUS)), mb &= ~(B(BTN_PLUS) | B(BTN_MINUS));
     }
     static bool menu, menu_face_release;
     if (overlay_menu_open() != menu) {
@@ -832,9 +873,9 @@ void host_input_update(void) {
         mouse_held = 0;
     }
     if (menu) {  // Forge's menu has the controller (as in Forge: A activates, B cancels, stick and d-pad move)
-        OverlayPad p = {b & B(BTN_A), b & B(BTN_B), b & B(BTN_X), b & B(BTN_Y), b & B(BTN_UP), b & B(BTN_DOWN),
-                        b & B(BTN_LEFT), b & B(BTN_RIGHT), b & B(BTN_L), b & B(BTN_R), b & B(BTN_PLUS),
-                        b & B(BTN_MINUS), clamp_axis(lx) / 32767.0f, clamp_axis(ly) / 32767.0f};
+        OverlayPad p = {mb & B(BTN_A), mb & B(BTN_B), mb & B(BTN_X), mb & B(BTN_Y), mb & B(BTN_UP), mb & B(BTN_DOWN),
+                        mb & B(BTN_LEFT), mb & B(BTN_RIGHT), mb & B(BTN_L), mb & B(BTN_R), mb & B(BTN_PLUS),
+                        mb & B(BTN_MINUS), clamp_axis(lx) / 32767.0f, clamp_axis(ly) / 32767.0f};
         overlay_pad(&p);
         b = 0, lx = ly = rx = ry = 0;
     }

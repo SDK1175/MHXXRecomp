@@ -24,6 +24,20 @@ enum {
     BIND_ITEM_LEFT, BIND_ITEM_RIGHT, BINDS
 };
 #define BIND_KEYS 2
+
+// [Controller]: which controller button presses each Switch button (runtime/host_input.c), in the file's order.
+// PAD_SRC_DEFAULT: the usual one (the face buttons as FaceButtons says); PAD_SRC_NONE: none. Named by position (SDL's
+// south / east / west / north), so one setting means the same place on an Xbox, PlayStation or Switch controller.
+enum {
+    PAD_A, PAD_B, PAD_X, PAD_Y, PAD_L, PAD_R, PAD_ZL, PAD_ZR, PAD_PLUS, PAD_MINUS,
+    PAD_DPAD_UP, PAD_DPAD_DOWN, PAD_DPAD_LEFT, PAD_DPAD_RIGHT, PAD_LSTICK, PAD_RSTICK, PAD_BINDS
+};
+enum {
+    PAD_SRC_DEFAULT, PAD_SRC_NONE, PAD_SRC_SOUTH, PAD_SRC_EAST, PAD_SRC_WEST, PAD_SRC_NORTH,
+    PAD_SRC_LB, PAD_SRC_RB, PAD_SRC_LT, PAD_SRC_RT, PAD_SRC_START, PAD_SRC_BACK,
+    PAD_SRC_DPAD_UP, PAD_SRC_DPAD_DOWN, PAD_SRC_DPAD_LEFT, PAD_SRC_DPAD_RIGHT, PAD_SRC_LSTICK, PAD_SRC_RSTICK,
+    PAD_SRC_PADDLE1, PAD_SRC_PADDLE2, PAD_SRC_PADDLE3, PAD_SRC_PADDLE4, PAD_SRC_MISC, PAD_SRC_TOUCHPAD, PAD_SRCS
+};
 #define KEY_MOUSE 0x1000
 #define KEY_WHEEL_UP (KEY_MOUSE + 0x10)
 #define KEY_WHEEL_DOWN (KEY_MOUSE + 0x11)
@@ -84,6 +98,7 @@ typedef struct {
                               // name for it ("/", "Y"...); "" none
     int fxaa_mode;            // [Anti-aliasing] FXAAMode: FXAA_*, which FXAA draws while FXAA is on
     int smooth_gradients;     // [Graphics] SmoothGradients: the game's RGBA8 render targets as RGBA16 (nvn/vulkan/textures.c)
+    int pad_binds[PAD_BINDS];     // [Controller]: PAD_* -> PAD_SRC_* (0: the usual button)
     int binds[BINDS][BIND_KEYS];  // [Keybinds]: BIND_* -> its keys (an SDL scancode or KEY_MOUSE + button; 0 none)
     int menu_theme;           // [Application] Theme: THEME_*, the settings menu's colours (runtime/settings_panel.cpp)
     int discord;              // [Discord] RichPresence: what you play, on your Discord profile (runtime/net/discord.c)
@@ -175,6 +190,7 @@ int config_live_background_input(void);
 int config_live_combo_window(void);
 int config_live_chat_key(void);  // [Controls] ChatKey as an SDL scancode (0: none)
 int config_live_bind(int bind, int slot);  // [Keybinds]: one of BIND_*'s keys (Config.binds)
+int config_live_pad_bind(int pad);         // [Controller]: PAD_*'s PAD_SRC_* (Config.pad_binds)
 int config_live_fxaa_mode(void);
 int config_live_smooth_gradients(void);
 float config_live_fsr_sharpness(void);  // [Upscaler] Sharpness, read by each FSR dispatch (nvn/vulkan/fsr.c)

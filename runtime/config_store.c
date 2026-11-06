@@ -43,6 +43,8 @@ static SDL_AtomicInt live_background = {1};
 static SDL_AtomicInt live_combo;
 static SDL_AtomicInt live_chat_key;
 static SDL_AtomicInt menu_chord = {1};
+// [Controller]
+static SDL_AtomicInt live_pad[PAD_BINDS];
 // [Mouse]
 static SDL_AtomicInt live_mouse;
 // [Keybinds]
@@ -104,6 +106,8 @@ static void publish_live(const Config *c, bool all) {
         live_hp = c->hp;
         SDL_UnlockSpinlock(&live_hp_lock);
     }
+    for (int i = 0; i < PAD_BINDS; i++)
+        if (all || c->pad_binds[i] != saved.pad_binds[i]) SDL_SetAtomicInt(&live_pad[i], c->pad_binds[i]);
     for (int i = 0; i < BINDS; i++)
         for (int k = 0; k < BIND_KEYS; k++)
             if (all || c->binds[i][k] != saved.binds[i][k]) SDL_SetAtomicInt(&live_binds[i][k], c->binds[i][k]);
@@ -148,6 +152,7 @@ int config_live_fxaa(void) { return runtime_fsr ? 0 : SDL_GetAtomicInt(&live_fxa
 int config_live_msaa(void) { return runtime_fsr ? 1 : SDL_GetAtomicInt(&live_msaa); }
 int config_live_vsync(void) { return SDL_GetAtomicInt(&live_vsync); }
 int config_live_menu_confirm(void) { return SDL_GetAtomicInt(&live_menu_confirm); }
+int config_live_pad_bind(int pad) { return pad >= 0 && pad < PAD_BINDS ? SDL_GetAtomicInt(&live_pad[pad]) : 0; }
 int config_live_face_buttons(void) { return SDL_GetAtomicInt(&live_face); }
 int config_live_background_input(void) { return SDL_GetAtomicInt(&live_background); }
 int config_live_combo_window(void) { return SDL_GetAtomicInt(&live_combo); }
