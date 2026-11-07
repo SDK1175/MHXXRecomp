@@ -99,7 +99,7 @@ def main():
         print('done')
         return
     exe = tool_exe()
-    work = os.path.join(a.out, '_work')
+    work = os.path.abspath(os.path.join(a.out, '_work'))  # (realesrgan runs in its own folder: full paths)
     t0 = time.time()
     for c0 in range(0, len(color), CHUNK):
         part = color[c0:c0 + CHUNK]
