@@ -534,6 +534,18 @@ dist: all
 	$(if $(ANDROID_DIST),$(MAKE) PLATFORM=android ABI=arm64-v8a dist $(if $(BONUS),BONUS="$(abspath $(BONUS))"),@echo "dist: no Android SDK: no APK")
 endif
 
+# mhxx-texextract: every texture in the game files as PNG, named as [Graphics] TextureDump names them
+# (tools/texextract/texextract.c): make texextract, then
+#   build/mhxx-texextract <romfs folder> <output folder> [<mod romfs folder> ...]
+comma := ,
+TEXEXTRACT := $(B)/mhxx-texextract$(if $(filter windows,$(PLATFORM)),.exe)
+TEXEXTRACT_SRC := tools/texextract/texextract.c runtime/nvn/tegra.c runtime/nvn/formats.c runtime/nvn/bcn.c runtime/nvn/astc.c
+.PHONY: texextract
+texextract: $(TEXEXTRACT)
+$(TEXEXTRACT): $(TEXEXTRACT_SRC) runtime/nvn/tegra.h runtime/nvn/bcn.h runtime/nvn/astc.h
+	@mkdir -p $(dir $@)
+	$(CC) -O2 -o $@ $(TEXEXTRACT_SRC) $(if $(filter windows,$(PLATFORM)),-fuse-ld=lld -static-libgcc -Wl$(comma)-Bstatic -lz -Wl$(comma)-Bdynamic,-lz)
+
 .PHONY: all gen test-lift runtime-objs clean bundle data licenses pipelist dist FORCE
 
 ifeq ($(PLATFORM),android)
