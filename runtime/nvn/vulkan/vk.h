@@ -131,6 +131,7 @@ typedef struct TexBackend {
     uint64_t data_hash, sample_hash, checked_frame, full_frame;
     uint32_t wgen;       // page write tracking generation at the last upload check
     bool presented;
+    bool replaced;       // a texture pack's picture stands in for the game's (texpack.c, vk_tex_replace)
     void *pending_rgba;  // host-produced pixels waiting to be uploaded on the render thread
     uint32_t pending_w, pending_h, pending_stride;
     uint8_t astc_bw, astc_bh;  // ASTC without GPU support: decoded to RGBA8 on upload (runtime/nvn/astc.c)
@@ -156,7 +157,12 @@ void vk_tex_decode(const TexBackend *b, const uint8_t *blocks, uint32_t w, uint3
 TexBackend *vk_tex(NvnTexture *t, bool for_render);
 // (texpack.c) [Graphics] TextureDump: t's first upload, saved as textures/dump/<key>.png on a thread of its own
 void texpack_first_upload(NvnTexture *t, const uint8_t *mem, VkFormat vf, bool linear);
-uint64_t texpack_key(const uint8_t *level0, uint64_t size, uint32_t w, uint32_t h, uint32_t nvn_format);  // backend image (uploads CPU contents unless for_render)
+uint64_t texpack_key(const uint8_t *level0, uint64_t size, uint32_t w, uint32_t h, uint32_t nvn_format);
+// (texpack.c) t's first upload: true when textures/load/ has a picture for it, now in b (vk_tex_replace)
+bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat vf, bool linear);
+// b made a w x h RGBA8 image holding rgba (rows of w*4 bytes), its mip levels made by the GPU. false: no memory for it
+// (b unchanged)
+bool vk_tex_replace(TexBackend *b, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb);  // backend image (uploads CPU contents unless for_render)
 VkFormat vk_format(uint32_t nvn_format);
 bool vk_format_alpha_one(uint32_t nvn_format);
 bool renderer_format_is_depth(uint32_t f);

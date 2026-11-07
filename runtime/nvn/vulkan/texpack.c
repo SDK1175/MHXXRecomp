@@ -218,3 +218,126 @@ void texpack_first_upload(NvnTexture *t, const uint8_t *mem, VkFormat vf, bool l
     pthread_cond_signal(&q_cond);
     pthread_mutex_unlock(&q_lock);
 }
+
+// ================================================================== part two: the loader
+// textures/load/ (and its subfolders): <key>.png pictures, any size of the same shape as the texture (an upscale),
+// each standing in for the texture whose key it is named after - the dump's names, or mhxx-texextract's
+// (tools/texextract). Looked up when a texture is first uploaded; its picture is loaded then and becomes the image
+// (vk_tex_replace), with its own mip levels. A texture the game rewrites later goes back to its own.
+#define LOAD_DIR "textures/load"
+typedef struct { uint64_t key; char *path; } PackEnt;
+static PackEnt *pack;
+static uint32_t pack_cap, pack_n;
+static int pack_state = -1;  // -1 not scanned, 0 empty, 1 has pictures
+static uint32_t replaced_n;
+
+static bool hex16(const char *s, uint64_t *out) {
+    uint64_t v = 0;
+    for (int i = 0; i < 16; i++) {
+        char c = s[i];
+        int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+        if (d < 0) return false;
+        v = v << 4 | (uint64_t)d;
+    }
+    *out = v;
+    return true;
+}
+
+static void pack_add(uint64_t key, const char *path) {
+    if (pack_n * 2 >= pack_cap) {
+        uint32_t cap = pack_cap ? pack_cap * 2 : 4096;
+        PackEnt *n = calloc(cap, sizeof *n);
+        if (!n) return;
+        for (uint32_t i = 0; i < pack_cap; i++)
+            if (pack[i].path)
+                for (uint32_t j = (uint32_t)pack[i].key & (cap - 1);; j = (j + 1) & (cap - 1))
+                    if (!n[j].path) { n[j] = pack[i]; break; }
+        free(pack);
+        pack = n, pack_cap = cap;
+    }
+    for (uint32_t j = (uint32_t)key & (pack_cap - 1);; j = (j + 1) & (pack_cap - 1)) {
+        if (pack[j].path && pack[j].key == key) return;  // (the same name twice: the first found)
+        if (!pack[j].path) { pack[j].key = key, pack[j].path = SDL_strdup(path), pack_n++; return; }
+    }
+}
+
+static const char *pack_find(uint64_t key) {
+    if (!pack_n) return NULL;
+    for (uint32_t j = (uint32_t)key & (pack_cap - 1);; j = (j + 1) & (pack_cap - 1)) {
+        if (!pack[j].path) return NULL;
+        if (pack[j].key == key) return pack[j].path;
+    }
+}
+
+static void pack_scan(void) {
+    pack_state = 0;
+    int count = 0;
+    char **files = SDL_GlobDirectory(LOAD_DIR, NULL, 0, &count);  // (everything, subfolders too: .png picked below)
+    for (int i = 0; files && i < count; i++) {
+        const char *base = strrchr(files[i], '/');
+        const char *bs = strrchr(files[i], '\\');
+        if (bs && (!base || bs > base)) base = bs;
+        base = base ? base + 1 : files[i];
+        uint64_t key;
+        if (strlen(base) == 20 && SDL_strcasecmp(base + 16, ".png") == 0 && hex16(base, &key)) {
+            char path[1024];
+            snprintf(path, sizeof path, LOAD_DIR "/%s", files[i]);
+            pack_add(key, path);
+        }
+    }
+    SDL_free(files);
+    if (pack_n) {
+        pack_state = 1;
+        LOG("[texpack] texture pack: %u pictures in " LOAD_DIR "/\n", pack_n);
+    }
+}
+
+bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat vf, bool linear) {
+    if (pack_state < 0) pack_scan();
+    if (pack_state != 1 || linear) return false;
+    const FormatInfo *fi = t->layout.fmt;
+    if (!fi || t->target != 1 || t->depth > 1 || (t->layout.layers && t->layout.layers > 1)) return false;
+    if (t->width < MIN_SIDE || t->height < MIN_SIDE || t->samples > 1) return false;
+    bool srgb;
+    if (kind_of(vf, &srgb) == K_NONE && !(vf >= VK_FORMAT_ASTC_4x4_UNORM_BLOCK && vf <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK))
+        return false;
+    if (vf >= VK_FORMAT_ASTC_4x4_UNORM_BLOCK && vf <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK)
+        srgb = (vf - VK_FORMAT_ASTC_4x4_UNORM_BLOCK) & 1;
+    LevelLayout l = tegra_level(&t->layout, 0);
+    uint64_t size = (uint64_t)l.wb * l.hb * fi->bpb;
+    uint8_t *lin = malloc(size);
+    if (!lin) return false;
+    tegra_deswizzle(mem + l.offset, lin, l.wb, l.hb, 1, fi->bpb, l.block_height_log2, l.block_depth_log2);
+    uint64_t key = texpack_key(lin, size, l.w, l.h, t->format);
+    free(lin);
+    const char *path = pack_find(key);
+    if (!path) return false;
+    SDL_Surface *s = SDL_LoadPNG(path);
+    SDL_Surface *c = s ? SDL_ConvertSurface(s, SDL_PIXELFORMAT_ABGR8888) : NULL;  // (bytes R, G, B, A)
+    SDL_DestroySurface(s);
+    if (!c) {
+        LOG("[texpack] %s: can't be read (%s)\n", path, SDL_GetError());
+        return false;
+    }
+    uint32_t w = (uint32_t)c->w, h = (uint32_t)c->h;
+    bool ok = false;
+    if ((uint64_t)w * l.h != (uint64_t)h * l.w || w < l.w || w > 16384 || h > 16384) {
+        LOG("[texpack] %s: %ux%u, not the shape of the texture (%ux%u): left out\n", path, w, h, l.w, l.h);
+    } else {
+        uint8_t *px = c->pixels;
+        uint8_t *tight = NULL;
+        if (c->pitch != (int)w * 4) {
+            tight = malloc((uint64_t)w * h * 4);
+            if (tight)
+                for (uint32_t y = 0; y < h; y++) memcpy(tight + (uint64_t)y * w * 4, px + (uint64_t)y * c->pitch, (size_t)w * 4);
+            px = tight;
+        }
+        ok = px && vk_tex_replace(b, px, w, h, srgb);
+        free(tight);
+        if (ok && replaced_n++ < 20) LOG("[texpack] %016llx %ux%u -> %ux%u\n", (unsigned long long)key, l.w, l.h, w, h);
+        if (ok && !(replaced_n % 500)) LOG("[texpack] %u textures replaced\n", replaced_n);
+        if (!ok && px) LOG("[texpack] %s: no graphics memory for %ux%u: the game's own kept\n", path, w, h);
+    }
+    SDL_DestroySurface(c);
+    return ok;
+}

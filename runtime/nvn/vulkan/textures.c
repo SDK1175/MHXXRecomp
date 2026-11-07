@@ -544,8 +544,16 @@ static void upload_texture(NvnTexture *t, TexBackend *b) {
     if (b->uploaded && h == b->data_hash) return;
     if (b->uploaded && h != b->data_hash) b->dynamic = true;
     b->data_hash = h;
-    if (!b->uploaded && !b->dynamic) texpack_first_upload(t, mem, mf.vf, (t->flags & 0x10) != 0);
+    if (!b->uploaded && !b->dynamic) {
+        texpack_first_upload(t, mem, mf.vf, (t->flags & 0x10) != 0);
+        if (texpack_replace(t, b, mem, mf.vf, (t->flags & 0x10) != 0)) { b->uploaded = true; return; }
+    }
     b->uploaded = true;
+    if (b->replaced) {  // the game changed a texture a pack replaced: its own again, from now on
+        destroy_image(b);
+        create_image(t, b);
+        b->replaced = false;
+    }
     if (b->format != mf.vf && !vk_tex_decoded(b)) return;  // unsupported format: nothing sensible to copy
     VkCommandBuffer cb = vk_upload_cmd();
     uint32_t layers = t->layout.layers ? t->layout.layers : 1;
@@ -600,6 +608,43 @@ static void upload_texture(NvnTexture *t, TexBackend *b) {
             vkCmdCopyBufferToImage(cb, s.buf, b->image, VK_IMAGE_LAYOUT_GENERAL, 1, &rg);
         }
     }
+}
+
+bool vk_tex_replace(TexBackend *b, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb) {
+    uint32_t levels = 1;
+    for (uint32_t s = w > h ? w : h; s > 1; s >>= 1) levels++;
+    VkFormat vf = srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+    VkImageCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT,
+                            .imageType = VK_IMAGE_TYPE_2D, .format = vf, .extent = {w, h, 1}, .mipLevels = levels,
+                            .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
+                            .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
+    VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    VkImage img;
+    VmaAllocation mem;
+    if (vmaCreateImage(g_vk.vma, &ci, &ai, &img, &mem, NULL) != VK_SUCCESS) return false;
+    destroy_image(b);
+    b->image = img, b->mem = mem, b->format = vf;
+    b->width = w, b->height = h, b->depth = 1, b->layers = 1, b->levels = levels, b->samples = 1;
+    b->aspect = VK_IMAGE_ASPECT_COLOR_BIT, b->base_type = VK_IMAGE_VIEW_TYPE_2D;
+    b->astc_bw = b->astc_bh = 0, b->bcn = BCN_NONE;
+    b->replaced = true;
+    VkCommandBuffer cb = vk_upload_cmd();
+    vk_image_init_layout(cb, img, VK_IMAGE_ASPECT_COLOR_BIT);
+    VkSpan s = vk_transient_copy(rgba, (uint64_t)w * h * 4, 16);
+    VkBufferImageCopy rg = {.bufferOffset = s.off, .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                            .imageExtent = {w, h, 1}};
+    vkCmdCopyBufferToImage(cb, s.buf, img, VK_IMAGE_LAYOUT_GENERAL, 1, &rg);
+    for (uint32_t lv = 1; lv < levels; lv++) {  // each level a linear half of the one above
+        vk_full_barrier(cb);
+        VkImageBlit bl = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, lv - 1, 0, 1},
+                          .srcOffsets = {{0, 0, 0}, {(int32_t)level_w(b, lv - 1), (int32_t)level_h(b, lv - 1), 1}},
+                          .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, lv, 0, 1},
+                          .dstOffsets = {{0, 0, 0}, {(int32_t)level_w(b, lv), (int32_t)level_h(b, lv), 1}}};
+        vkCmdBlitImage(cb, img, VK_IMAGE_LAYOUT_GENERAL, img, VK_IMAGE_LAYOUT_GENERAL, 1, &bl, VK_FILTER_LINEAR);
+    }
+    vk_full_barrier(cb);
+    return true;
 }
 
 TexBackend *vk_tex(NvnTexture *t, bool for_render) {
