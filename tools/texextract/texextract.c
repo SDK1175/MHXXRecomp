@@ -122,6 +122,8 @@ static FILE *g_index;
 
 static void texture(const char *arc, const char *name, const uint8_t *t, uint64_t n) {
     if (n < 0x18 || memcmp(t, "TEX", 4)) return;
+    // header: "TEX\0", three packed words, the data's size (+0x10), then each level's offset into the data (+0x14,
+    // one word a level); the data follows that table (+0x18 with one level, +0x40 with eleven)
     uint32_t d1, d2, d3;
     memcpy(&d1, t + 4, 4), memcpy(&d2, t + 8, 4), memcpy(&d3, t + 12, 4);
     uint32_t levels = d2 & 0x3f, w = (d2 >> 6) & 0x1fff, h = (d2 >> 19) & 0x1fff, count = d3 & 0xff,
@@ -141,12 +143,17 @@ static void texture(const char *arc, const char *name, const uint8_t *t, uint64_
     LevelLayout l = tegra_level(&lay, 0);
     uint32_t bpb = lay.fmt->bpb;
     uint64_t size = (uint64_t)l.wb * l.hb * bpb;
-    if (0x18 + tegra_total_size(&lay) > n && 0x18 + l.offset + size > n) {
+    uint32_t level0;
+    uint64_t data = 0x14 + 4ull * lay.levels;
+    if (data > n) return;
+    memcpy(&level0, t + 0x14, 4);
+    data += level0;
+    if (data + size > n) {
         fprintf(stderr, "%s %s: shorter than its size says\n", arc, name);
         return;
     }
     uint8_t *lin = malloc(size);
-    tegra_deswizzle(t + 0x18 + l.offset, lin, l.wb, l.hb, 1, bpb, l.block_height_log2, l.block_depth_log2);
+    tegra_deswizzle(t + data, lin, l.wb, l.hb, 1, bpb, l.block_height_log2, l.block_depth_log2);
     uint64_t key = texpack_key(lin, size, w, h, f->nvn);
     n_known++;
     if (seen_add(key)) {
