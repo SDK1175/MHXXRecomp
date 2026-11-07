@@ -249,7 +249,7 @@ static void create_device(void) {
     b->dualSrcBlend = h->dualSrcBlend;
     b->logicOp = h->logicOp;
     b->fillModeNonSolid = h->fillModeNonSolid;
-    b->samplerAnisotropy = h->samplerAnisotropy;
+    b->samplerAnisotropy = g_vk.aniso = h->samplerAnisotropy;
     b->textureCompressionBC = g_vk.bc = h->textureCompressionBC && !(getenv("MHGU_NO_BC") && atoi(getenv("MHGU_NO_BC")));
     b->textureCompressionASTC_LDR = h->textureCompressionASTC_LDR;
     b->shaderInt64 = h->shaderInt64;

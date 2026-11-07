@@ -544,6 +544,7 @@ static void upload_texture(NvnTexture *t, TexBackend *b) {
     if (b->uploaded && h == b->data_hash) return;
     if (b->uploaded && h != b->data_hash) b->dynamic = true;
     b->data_hash = h;
+    if (!b->uploaded && !b->dynamic) texpack_first_upload(t, mem, mf.vf, (t->flags & 0x10) != 0);
     b->uploaded = true;
     if (b->format != mf.vf && !vk_tex_decoded(b)) return;  // unsupported format: nothing sensible to copy
     VkCommandBuffer cb = vk_upload_cmd();
@@ -849,7 +850,13 @@ VkSampler vk_sampler(NvnSamplerDesc *d) {
     if (mf > 1) si.mipLodBias += g_fsr_lod_bias;  // (FSR: textures as sharp as at the output size; config.c)
     const char *force = getenv("MHGU_TEX_LOD");  // (debug) mipmapped samplers: only this level (shows mip contents)
     if (force && mf > 1) { si.minLod = si.maxLod = (float)atof(force); si.mipLodBias = 0; }
-    if (d->max_aniso > 1) { si.anisotropyEnable = VK_TRUE; si.maxAnisotropy = fminf(d->max_aniso, 16); }
+    float aniso = d->max_aniso;
+    // [Graphics] Anisotropy: at least that much on the linear, mipmapped samplers (the textures on surfaces; not the
+    // render targets read back, the shadow maps or the UI's)
+    if (g_config.anisotropy > 0 && si.minFilter == VK_FILTER_LINEAR && si.magFilter == VK_FILTER_LINEAR && mf >= 2 &&
+        !d->compare_mode && !force)
+        aniso = fmaxf(aniso, (float)(1 << g_config.anisotropy));
+    if (aniso > 1 && g_vk.aniso) { si.anisotropyEnable = VK_TRUE; si.maxAnisotropy = fminf(aniso, 16); }
     if (d->compare_mode) { si.compareEnable = VK_TRUE; si.compareOp = compare_op(d->compare_func); }
     VkSamplerCustomBorderColorCreateInfoEXT cb = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT};
     if (border) {  // the standard colours; others need VK_EXT_custom_border_color (else the nearest standard one)

@@ -53,6 +53,7 @@ typedef struct {
 #else
     void *set_depth_bias2;
 #endif
+    bool aniso;                // samplerAnisotropy (textures.c: [Graphics] Anisotropy)
     bool bc;                   // textureCompressionBC (MHGU_NO_BC=1: off, as phone GPUs report; textures.c decodes BC)
     volatile uint32_t msaa;    // samples for the 3D scene's passes (settings MSAA, as far as the GPU allows): 1 = off
     uint32_t msaa_counts;      // the sample counts MSAA can use (bits 2, 4, 8)
@@ -152,7 +153,10 @@ static inline bool vk_tex_decoded(const TexBackend *b) { return b->astc_bw || b-
 uint32_t vk_tex_texel_size(const TexBackend *b);
 void vk_tex_decode(const TexBackend *b, const uint8_t *blocks, uint32_t w, uint32_t h, uint8_t *out);
 
-TexBackend *vk_tex(NvnTexture *t, bool for_render);  // backend image (uploads CPU contents unless for_render)
+TexBackend *vk_tex(NvnTexture *t, bool for_render);
+// (texpack.c) [Graphics] TextureDump: t's first upload, saved as textures/dump/<key>.png on a thread of its own
+void texpack_first_upload(NvnTexture *t, const uint8_t *mem, VkFormat vf, bool linear);
+uint64_t texpack_key(const uint8_t *level0, uint64_t size, uint32_t w, uint32_t h, uint32_t nvn_format);  // backend image (uploads CPU contents unless for_render)
 VkFormat vk_format(uint32_t nvn_format);
 bool vk_format_alpha_one(uint32_t nvn_format);
 bool renderer_format_is_depth(uint32_t f);

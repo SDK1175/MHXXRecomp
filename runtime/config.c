@@ -48,6 +48,7 @@
     .fsr_animsurf = 1,                                                                              \
     /* [Graphics] */                                                                                \
     .draw_distance = 1.0f,                                                                          \
+    .anisotropy = 4,                                                                                \
     .smooth_gradients = 0,                                                                          \
     /* [Performance] */                                                                             \
     .show_fps = 0,                                                                                  \
@@ -181,6 +182,17 @@ static const char DEFAULT_INI[] =
     "; Between 0 and 10\n"
     "; Default: 1.0\n"
     "DrawDistance = 1.0\n"
+    "\n"
+    "; Anisotropic filtering: keeps the ground, walls and other textures seen at a slant sharp instead of blurred.\n"
+    "; The Switch used little or none of it; 16x costs almost nothing on a PC graphics card. Takes effect at the next start\n"
+    "; Game, 2x, 4x, 8x, 16x\n"
+    "; Default: 16x\n"
+    "Anisotropy = 16x\n"
+    "\n"
+    "; Saves every texture the game shows, once, as textures/dump/<name>.png: the start of a texture pack (upscale\n"
+    "; them, keep the names). Slows loading a little while on. Takes effect at the next start\n"
+    "; Default: Off\n"
+    "TextureDump = Off\n"
     "\n"
     "; Renders the picture with 16 bits per colour instead of 8, so dark skies and soft glows show no colour bands.\n"
     "; Costs GPU time: about 1 ms a frame at 1600x1000, more at higher resolutions\n"
@@ -557,6 +569,9 @@ const ConfigSetting g_settings[] = {
     {"Upscaler", "Reactive", SET_FLOAT, F(fsr_reactive), 0, 0.0f, 1.0f, NULL, NULL, false, ERR_FSR},
     ON_OFF("Upscaler", "AnimSurf", fsr_animsurf, true),
     {"Graphics", "DrawDistance", SET_FLOAT, F(draw_distance), 0, 0.0f, 10.0f, NULL, NULL, false, ERR_DRAW},
+    {"Graphics", "Anisotropy", SET_CHOICE, F(anisotropy), 0, 0, 0, "Game|off|original,2x|2,4x|4,8x|8,16x|16", NULL, true,
+     "Invalid anisotropic filtering."},
+    ON_OFF("Graphics", "TextureDump", texture_dump, true),
     ON_OFF("Graphics", "SmoothGradients", smooth_gradients, false),
     ON_OFF("Performance", "ShowFPS", show_fps, false),
     {"Performance", "ShowBattery", SET_CHOICE, F(show_battery), 0, 0, 0, "Off,WithFPS,ByItself", NULL, false, ERR_MISC},

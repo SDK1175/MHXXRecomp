@@ -97,6 +97,8 @@ typedef struct {
     char chat_key[32];        // [Controls] ChatKey: the key that opens a line of chat (runtime/hle/chat.c), by SDL's
                               // name for it ("/", "Y"...); "" none
     int fxaa_mode;            // [Anti-aliasing] FXAAMode: FXAA_*, which FXAA draws while FXAA is on
+    int texture_dump;         // [Graphics] TextureDump: textures saved to textures/dump/ (nvn/vulkan/texpack.c)
+    int anisotropy;           // [Graphics] Anisotropy: 0 the game's own, 1..4 at least 2x / 4x / 8x / 16x (nvn/vulkan/textures.c)
     int smooth_gradients;     // [Graphics] SmoothGradients: the game's RGBA8 render targets as RGBA16 (nvn/vulkan/textures.c)
     int pad_binds[PAD_BINDS];     // [Controller]: PAD_* -> PAD_SRC_* (0: the usual button)
     int binds[BINDS][BIND_KEYS];  // [Keybinds]: BIND_* -> its keys (an SDL scancode or KEY_MOUSE + button; 0 none)

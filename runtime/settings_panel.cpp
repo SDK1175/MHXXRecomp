@@ -284,6 +284,8 @@ bool equal(const Config &a, const Config &b) {
     SAME(shader_prewarm);
     SAME(draw_distance);
     SAME(smooth_gradients);
+    SAME(anisotropy);
+    SAME(texture_dump);
     SAME(msaa);
     SAME(fxaa);
     SAME(fxaa_mode);
@@ -831,6 +833,8 @@ void reset_section() {
         c.shader_prewarm = f.shader_prewarm;
         c.draw_distance = f.draw_distance;
         c.smooth_gradients = f.smooth_gradients;
+        c.anisotropy = f.anisotropy;
+        c.texture_dump = f.texture_dump;
         c.msaa = f.msaa;
         c.fxaa = f.fxaa;
         c.fxaa_mode = f.fxaa_mode;
@@ -1206,7 +1210,10 @@ std::vector<Row> main_rows() {
                ini("DrawDistance"));
         if (c.draw_distance == 0)
             r.back().value = tr("No limit");
+        add_choice(r, "aniso", "Anisotropic filtering", c.anisotropy, {tr("Game"), "2x", "4x", "8x", "16x"},
+                   [](int v) { s.draft.anisotropy = v; }, ini("Anisotropy"));
         add_bool(r, "smooth", "Smooth gradients", &c.smooth_gradients, ini("SmoothGradients"));
+        add_bool(r, "texdump", "Dump textures", &c.texture_dump, ini("TextureDump"));
         add_bool(r, "fsr", "FSR", &c.fsr, ini("FSR"));
         if (c.fsr) {
             add_choice(
