@@ -5,6 +5,10 @@
 // starts this again.
 //
 // Everything else stays in the game's menu (F1), which keeps these settings too.
+//
+// Without the game files (or from "Install game files") it first shows the setup: the player picks their own game
+// (NSP / XCI), its 1.5.1 update, their console's keys and, if they like, the Korean patch's .zip, and nxinstall.cpp
+// puts the game files in data/ and the patch in mods/.
 #include <SDL3/SDL.h>
 
 #ifdef _WIN32
@@ -18,13 +22,16 @@
 #include <cfloat>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <string>
+#include <thread>
 
 #include "app_actions.h"
 #include "config.h"
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlrenderer3.h"
+#include "nxinstall.h"
 #include "settings_locale.h"
 #include "settings_panel.h"
 #include "title_art.h"
@@ -292,6 +299,181 @@ static bool start_game(std::string &error) {
     return true;
 }
 
+// ---------------------------------------------------------------- the setup: the game files from the player's own
+static std::mutex g_pick_lock;
+static std::string g_picked_file[4];  // (the file dialogs' answers, from whatever thread SDL calls them on)
+static void SDLCALL file_picked(void *slot, const char *const *list, int) {
+    if (!list || !list[0]) return;
+    std::lock_guard<std::mutex> g(g_pick_lock);
+    g_picked_file[(intptr_t)slot] = list[0];
+}
+struct Setup {
+    std::string path[4];  // the game, the update, the keys, the Korean patch
+    bool keys_found = false;
+    InstallJob *job = nullptr;
+    std::thread th;
+    std::string error;
+    bool installed = false;
+    void begin() {
+        if (path[2].empty()) path[2] = install_find_keys(), keys_found = !path[2].empty();
+        error.clear(), installed = false;
+    }
+    void poll() {
+        std::lock_guard<std::mutex> g(g_pick_lock);
+        for (int i = 0; i < 4; i++)
+            if (!g_picked_file[i].empty()) {
+                path[i] = g_picked_file[i], g_picked_file[i].clear();
+                if (i == 2) keys_found = false;
+            }
+        if (job && job->finished) {
+            th.join();
+            if (job->ok) installed = true;
+            else {
+                std::lock_guard<std::mutex> j(job->lock);
+                error = job->error;
+            }
+            delete job;
+            job = nullptr;
+        }
+    }
+    void stop() {  // (the window closed while it installs)
+        if (!job) return;
+        job->cancel = true;
+        th.join();
+        delete job;
+        job = nullptr;
+    }
+};
+static std::string file_name(const std::string &p) {
+    size_t s = p.find_last_of("/\\");
+    return s == std::string::npos ? p : p.substr(s + 1);
+}
+static std::string gb(uint64_t n) {
+    char b[32];
+    SDL_snprintf(b, sizeof b, "%.2f GB", n / 1073741824.0);
+    return b;
+}
+// The setup screen: 0 still on it, 1 installed, 2 later (to the launcher without them)
+static int setup_screen(Setup &st, SDL_Window *win, int w, int h, float s, bool have_game) {
+    st.poll();
+    float pad = 18 * s, dw = std::min(820 * s, (float)w - pad * 2);
+    ImGui::SetNextWindowPos(ImVec2(w * .5f, h * .5f), ImGuiCond_Always, ImVec2(.5f, .5f));
+    ImGui::SetNextWindowSize(ImVec2(dw, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(30 * s, 26 * s));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(.03f, .07f, .17f, .95f));
+    ImGui::Begin("##setup", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+    ImDrawList *d = ImGui::GetWindowDrawList();
+    float cw = ImGui::GetContentRegionAvail().x;
+    ImGui::SetWindowFontScale(1.3f);
+    ImGui::TextColored(GOLD_TEXT, "%s", tr("Game file setup"));
+    ImGui::SetWindowFontScale(1.0f);
+    divider(d, cw, s);
+    int result = 0;
+    float bh = ImGui::GetFrameHeight() * 1.6f;
+    if (st.job) {  // installing
+        int stage = st.job->stage;
+        static const char *names[] = {"",
+                                      "Reading the keys",
+                                      "Reading the game",
+                                      "Reading the update",
+                                      "Writing the ExeFS",
+                                      "Merging the update into the RomFS",
+                                      "Unpacking the Korean patch",
+                                      "Putting the files in place",
+                                      "Installed"};
+        ImGui::TextColored(GOLD_TEXT, "%s", tr(names[std::clamp(stage, 0, 8)]));
+        uint64_t done = st.job->done, total = st.job->total;
+        float f = total ? std::min(1.f, (float)((double)done / total)) : 0;
+        ImGui::Dummy(ImVec2(0, 6 * s));
+        ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + cw, a.y + 26 * s);
+        d->AddRectFilled(a, b, IM_COL32(8, 14, 34, 255), 4 * s);
+        if (f > 0)
+            d->AddRectFilledMultiColor(ImVec2(a.x + 2, a.y + 2), ImVec2(a.x + 2 + (cw - 4) * f, b.y - 2), IM_COL32(255, 200, 90, 255),
+                                       IM_COL32(255, 200, 90, 255), IM_COL32(190, 110, 20, 255), IM_COL32(190, 110, 20, 255));
+        d->AddRect(a, b, GOLD, 4 * s, 0, 1.5f * s);
+        ImGui::Dummy(ImVec2(cw, 26 * s));
+        if (total) ImGui::TextColored(DIM_TEXT, "%d%%  %s / %s", (int)(f * 100), gb(done).c_str(), gb(total).c_str());
+        std::string cur;
+        {
+            std::lock_guard<std::mutex> g(st.job->lock);
+            cur = st.job->current;
+        }
+        if (!cur.empty()) ImGui::TextColored(DIM_TEXT, "%s", cur.c_str());
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        ImGui::TextWrapped("%s", tr("Don't close the launcher until it is done."));
+    } else if (st.installed) {
+        ImGui::TextWrapped("%s", tr("The game files are in place."));
+        ImGui::Dummy(ImVec2(0, 10 * s));
+        if (hunter_button("setup.ok", tr("OK"), ImVec2(cw, bh), true, true, s) || ImGui::IsKeyPressed(ImGuiKey_Enter) ||
+            ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown))
+            result = 1;
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.88f, .9f, .95f, 1));
+        ImGui::TextWrapped("%s", tr("Pick the files of your own Switch: the game, its 1.5.1 update and your console's keys. The launcher decrypts them and puts the game files in place. Nothing of the game comes with this program."));
+        ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0, 8 * s));
+        static const char *labels[] = {"Game (1.0.0, NSP or XCI)", "Update (1.5.1, NSP)", "Keys (prod.keys)",
+                                       "Korean patch (zip, optional)"};
+        static const SDL_DialogFileFilter game_f[] = {{"NSP / XCI", "nsp;xci"}}, upd_f[] = {{"NSP", "nsp"}},
+                                          keys_f[] = {{"prod.keys", "keys"}}, zip_f[] = {{"zip", "zip"}};
+        static const SDL_DialogFileFilter *filters[] = {game_f, upd_f, keys_f, zip_f};
+        float bw = 130 * s;
+        for (int i = 0; i < 4; i++) {
+            ImGui::PushID(i);
+            ImVec2 row = ImGui::GetCursorScreenPos();
+            float rh = ImGui::GetTextLineHeightWithSpacing() * 2.2f;
+            d->AddRectFilled(row, ImVec2(row.x + cw, row.y + rh), IM_COL32(255, 255, 255, 8), 4 * s);
+            float r = 3.5f * s, cy = row.y + ImGui::GetTextLineHeight() * .5f + 4 * s;
+            d->AddQuadFilled(ImVec2(row.x + 8 * s + r, cy - r), ImVec2(row.x + 8 * s + 2 * r, cy),
+                             ImVec2(row.x + 8 * s + r, cy + r), ImVec2(row.x + 8 * s, cy), GOLD);
+            ImGui::SetCursorScreenPos(ImVec2(row.x + 22 * s, row.y + 4 * s));
+            ImGui::TextColored(GOLD_TEXT, "%s", tr(labels[i]));
+            ImGui::SetCursorScreenPos(ImVec2(row.x + 22 * s, ImGui::GetCursorScreenPos().y));
+            std::string shown = st.path[i].empty() ? tr("Not chosen") : file_name(st.path[i]);
+            if (i == 2 && st.keys_found) shown += std::string("  (") + tr("found in an emulator's folder") + ")";
+            ImGui::PushTextWrapPos(row.x + cw - bw - 16 * s);
+            ImGui::TextColored(st.path[i].empty() ? ImVec4(.6f, .64f, .72f, 1) : ImVec4(.92f, .93f, .96f, 1), "%s", shown.c_str());
+            ImGui::PopTextWrapPos();
+            if (!st.path[i].empty() && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", st.path[i].c_str());
+            ImGui::SetCursorScreenPos(ImVec2(row.x + cw - bw - 6 * s, row.y + (rh - ImGui::GetFrameHeight() * 1.4f) * .5f));
+            if (hunter_button("browse", tr("Browse"), ImVec2(bw, ImGui::GetFrameHeight() * 1.4f), false, true, s))
+                SDL_ShowOpenFileDialog(file_picked, (void *)(intptr_t)i, win, filters[i], 1, nullptr, false);
+            ImGui::SetCursorScreenPos(ImVec2(row.x, row.y + rh + 6 * s));
+            ImGui::Dummy(ImVec2(cw, 0));
+            ImGui::PopID();
+        }
+        if (have_game) ImGui::TextColored(DIM_TEXT, "%s", tr("The game files already here will be replaced."));
+        if (!st.error.empty()) {
+            char msg[1024];
+            SDL_snprintf(msg, sizeof msg, tr("Could not install: %s"), st.error.c_str());
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .55f, .4f, 1));
+            ImGui::TextWrapped("%s", msg);
+            ImGui::PopStyleColor();
+            ImGui::TextColored(DIM_TEXT, "%s", tr("The details are in install.log."));
+        }
+        ImGui::Dummy(ImVec2(0, 8 * s));
+        bool can = !st.path[0].empty() && !st.path[1].empty() && !st.path[2].empty();
+        float b1 = (cw - 12 * s) * .62f, b2 = cw - 12 * s - b1;
+        if (hunter_button("setup.install", tr("Install"), ImVec2(b1, bh), true, can, s)) {
+            st.error.clear();
+            st.job = new InstallJob;
+            st.job->base = st.path[0], st.job->update = st.path[1], st.job->keys = st.path[2], st.job->patch = st.path[3];
+            st.job->game_dir = g_game_dir;
+            st.th = std::thread(install_run, st.job);
+        }
+        ImGui::SameLine(0, 12 * s);
+        if (hunter_button("setup.later", tr(have_game ? "Cancel" : "Later"), ImVec2(b2, bh), false, true, s)) result = 2;
+    }
+    ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
+    gold_frame(ImGui::GetForegroundDrawList(), wp, ImVec2(wp.x + ws.x, wp.y + ws.y), s);
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+    return result;
+}
+
 int main(int argc, char **argv) {
     (void)argc, (void)argv;
     {  // (the game's folder: its settings, data and mods are beside the programs)
@@ -347,12 +529,15 @@ int main(int argc, char **argv) {
     char exefs[64];
     SDL_snprintf(exefs, sizeof exefs, "%s/exefs/main", g_game_dir);
     bool have_game = SDL_GetPathInfo(exefs, nullptr);
+    Setup setup;
+    bool in_setup = !have_game || (SDL_getenv("MHXX_LAUNCHER_SHOT") && SDL_getenv("MHXX_LAUNCHER_SHOT_SETUP"));
+    if (in_setup) setup.begin();
     std::string error;
     bool open = true, quit = false, start = false;
     bool confirm_quit = SDL_getenv("MHXX_LAUNCHER_SHOT") && SDL_getenv("MHXX_LAUNCHER_SHOT_QUIT"), running = false;
     uint64_t running_checked = 0;
-    std::string mods_text, pack_text;  // (the left column's summary: counted once)
-    {
+    std::string mods_text, pack_text;  // (the left column's summary: counted at the start and after the setup)
+    auto count = [&]() {
         int n = 0, mods = 0, pngs = 0;
         char **e = SDL_GlobDirectory("mods", "*", 0, &n);
         for (int i = 0; e && i < n; i++)
@@ -373,7 +558,8 @@ int main(int argc, char **argv) {
         mods_text = mods ? buf : tr("None");
         SDL_snprintf(buf, sizeof buf, tr("%d textures"), pngs);
         pack_text = pngs ? buf : tr("None");
-    }
+    };
+    count();
 #ifdef _WIN32
     bool ask_shortcut = !shortcut_asked();
 #else
@@ -389,10 +575,12 @@ int main(int argc, char **argv) {
         while (SDL_PollEvent(&e)) {
             ImGui_ImplSDL3_ProcessEvent(&e);
             if (e.type == SDL_EVENT_QUIT || (e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && e.window.windowID == SDL_GetWindowID(win))) {
-                if (!ask_shortcut && !running && settings_panel_dirty()) confirm_quit = true;  // (unsaved: ask)
+                if (in_setup) quit = true;  // (an install going on stops: what it wrote so far is removed)
+                else if (!ask_shortcut && !running && settings_panel_dirty()) confirm_quit = true;  // (unsaved: ask)
                 else quit = true;
             }
-            if (e.type == SDL_EVENT_KEY_DOWN && !ask_shortcut && !confirm_quit && !running) settings_panel_key(e.key.scancode);
+            if (e.type == SDL_EVENT_KEY_DOWN && !ask_shortcut && !confirm_quit && !running && !in_setup)
+                settings_panel_key(e.key.scancode);
         }
         if (SDL_GetWindowFlags(win) & SDL_WINDOW_MINIMIZED) {
             SDL_Delay(50);
@@ -410,7 +598,7 @@ int main(int argc, char **argv) {
             running_checked = SDL_GetTicks();
             running = game_running();
         }
-        if (!ask_shortcut && !confirm_quit && !running) settings_panel_before_frame(open);
+        if (!ask_shortcut && !confirm_quit && !running && !in_setup) settings_panel_before_frame(open);
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
@@ -487,6 +675,36 @@ int main(int argc, char **argv) {
             continue;
         }
 
+        if (in_setup) {  // the game files first (none yet, or "Install game files")
+            if (!art.background)
+                ImGui::GetBackgroundDrawList()->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)w, (float)h), NAVY_TOP,
+                                                                         NAVY_TOP, NAVY_BOTTOM, NAVY_BOTTOM);
+            int r = setup_screen(setup, win, w, h, scale, have_game);
+            if (r) {
+                in_setup = false;
+                if (r == 1) {  // (installed: the game's own title screen behind the launcher now, the mods counted again)
+                    have_game = SDL_GetPathInfo(exefs, nullptr);
+                    for (SDL_Texture *t : {art.background, art.logo, art.emblem})
+                        if (t) SDL_DestroyTexture(t);
+                    title_art_load(rd, g_game_dir, &art);
+                    count();
+                    error.clear();
+                }
+            }
+            ImGui::Render();
+            SDL_SetRenderScale(rd, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
+            SDL_SetRenderDrawColor(rd, 4, 10, 28, 255);
+            SDL_RenderClear(rd);
+            draw_background(rd, art, w, h);
+            ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), rd);
+            if (shot && ++frames == 20) {
+                if (SDL_Surface *sf = SDL_RenderReadPixels(rd, nullptr)) SDL_SavePNG(sf, shot), SDL_DestroySurface(sf);
+                quit = true;
+            }
+            SDL_RenderPresent(rd);
+            continue;
+        }
+
         // ---- the look: the title screen behind everything, a hunter's notice board on the left
         ImDrawList *bg = ImGui::GetBackgroundDrawList();
         ImVec2 W((float)w, (float)h);
@@ -537,11 +755,11 @@ int main(int argc, char **argv) {
         if (!have_game) {
             ImGui::Spacing();
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .55f, .4f, 1));
-            ImGui::TextWrapped("%s", tr("Game files not found: put the game's exefs and romfs folders in the data folder."));
+            ImGui::TextWrapped("%s", tr("Game files not found: put them in with Install game files."));
             ImGui::PopStyleColor();
         }
         float big = ImGui::GetFrameHeight() * 2.4f, small = ImGui::GetFrameHeight() * 1.5f, gap = 10 * scale;
-        float y = ImGui::GetWindowHeight() - big - small - gap - ImGui::GetStyle().WindowPadding.y * 2;
+        float y = ImGui::GetWindowHeight() - big - small * 2 - gap * 2 - ImGui::GetStyle().WindowPadding.y * 2;
         if (!error.empty()) {
             ImGui::SetCursorPosY(y - ImGui::GetTextLineHeightWithSpacing() * 2.2f);
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .55f, .4f, 1));
@@ -552,6 +770,12 @@ int main(int argc, char **argv) {
         bool can_start = have_game && !running && !confirm_quit;
         if (hunter_button("start", tr(running ? "Game is running" : "Start game"), ImVec2(cw, big), true, can_start, scale))
             start = true;
+        ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
+        if (hunter_button("setup", tr("Install game files"), ImVec2(cw, small), false, !running && !confirm_quit, scale)) {
+            if (settings_panel_dirty()) settings_panel_save_now();  // (the settings changed here: kept)
+            in_setup = true;
+            setup.begin();
+        }
         ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
         if (hunter_button("quit", tr("Quit"), ImVec2(cw, small), false, !confirm_quit, scale)) {
             if (!running && settings_panel_dirty()) confirm_quit = true;
@@ -644,6 +868,7 @@ int main(int argc, char **argv) {
             } else quit = true;
         }
     }
+    setup.stop();
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
