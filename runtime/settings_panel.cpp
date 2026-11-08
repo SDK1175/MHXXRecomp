@@ -1656,7 +1656,8 @@ std::vector<Row> rows_for_view(bool *open) {
             action(r, "dialog.yes", tr("Exit to desktop"), [leave]() { leave(0); });
         } else
             action(r, "dialog.yes", tr("Yes"), [leave]() { leave(0); });
-        action(r, "dialog.cancel", tr("No"), []() { pop(); });
+        // ("Where do you want to go?" is answered with Cancel; "Do you really want to exit?" with No)
+        action(r, "dialog.cancel", tr(launcher_present() ? "Cancel" : "No"), []() { pop(); });
     } else {
         action(r, "dialog.cancel", tr("Cancel"), []() { pop(); });
         if (s.view == View::Reset)
