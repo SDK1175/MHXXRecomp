@@ -220,12 +220,13 @@ void texpack_first_upload(NvnTexture *t, const uint8_t *mem, VkFormat vf, bool l
 }
 
 // ================================================================== part two: the loader
-// textures/load/ (and its subfolders): <key>.png pictures, any size of the same shape as the texture (an upscale),
+// textures/load/ (and its subfolders): <key>.dds (compressed: BC1..BC7 with their own mip levels, made by
+// tools/texpack/compress.py; smaller on disk and in graphics memory) or <key>.png pictures, any size of the same shape as the texture (an upscale),
 // each standing in for the texture whose key it is named after - the dump's names, or mhxx-texextract's
 // (tools/texextract). Looked up when a texture is first uploaded; its picture is loaded then and becomes the image
 // (vk_tex_replace), with its own mip levels. A texture the game rewrites later goes back to its own.
 #define LOAD_DIR "textures/load"
-typedef struct { uint64_t key; char *path; } PackEnt;
+typedef struct { uint64_t key; char *path, *dds; } PackEnt;  // (either may be NULL; .dds is tried first)
 static PackEnt *pack;
 static uint32_t pack_cap, pack_n;
 static int pack_state = -1;  // -1 not scanned, 0 empty, 1 has pictures
@@ -243,29 +244,34 @@ static bool hex16(const char *s, uint64_t *out) {
     return true;
 }
 
-static void pack_add(uint64_t key, const char *path) {
+static void pack_add(uint64_t key, const char *path, bool dds) {
     if (pack_n * 2 >= pack_cap) {
         uint32_t cap = pack_cap ? pack_cap * 2 : 4096;
         PackEnt *n = calloc(cap, sizeof *n);
         if (!n) return;
         for (uint32_t i = 0; i < pack_cap; i++)
-            if (pack[i].path)
+            if (pack[i].path || pack[i].dds)
                 for (uint32_t j = (uint32_t)pack[i].key & (cap - 1);; j = (j + 1) & (cap - 1))
-                    if (!n[j].path) { n[j] = pack[i]; break; }
+                    if (!n[j].path && !n[j].dds) { n[j] = pack[i]; break; }
         free(pack);
         pack = n, pack_cap = cap;
     }
     for (uint32_t j = (uint32_t)key & (pack_cap - 1);; j = (j + 1) & (pack_cap - 1)) {
-        if (pack[j].path && pack[j].key == key) return;  // (the same name twice: the first found)
-        if (!pack[j].path) { pack[j].key = key, pack[j].path = SDL_strdup(path), pack_n++; return; }
+        PackEnt *e = &pack[j];
+        bool used = e->path || e->dds;
+        if (used && e->key != key) continue;
+        if (!used) e->key = key, pack_n++;
+        char **slot = dds ? &e->dds : &e->path;
+        if (!*slot) *slot = SDL_strdup(path);  // (the same name twice: the first found)
+        return;
     }
 }
 
-static const char *pack_find(uint64_t key) {
+static const PackEnt *pack_find(uint64_t key) {
     if (!pack_n) return NULL;
     for (uint32_t j = (uint32_t)key & (pack_cap - 1);; j = (j + 1) & (pack_cap - 1)) {
-        if (!pack[j].path) return NULL;
-        if (pack[j].key == key) return pack[j].path;
+        if (!pack[j].path && !pack[j].dds) return NULL;
+        if (pack[j].key == key) return &pack[j];
     }
 }
 
@@ -279,10 +285,12 @@ static void pack_scan(void) {
         if (bs && (!base || bs > base)) base = bs;
         base = base ? base + 1 : files[i];
         uint64_t key;
-        if (strlen(base) == 20 && SDL_strcasecmp(base + 16, ".png") == 0 && hex16(base, &key)) {
+        bool png = strlen(base) == 20 && SDL_strcasecmp(base + 16, ".png") == 0;
+        bool dds = strlen(base) == 20 && SDL_strcasecmp(base + 16, ".dds") == 0;
+        if ((png || dds) && hex16(base, &key)) {
             char path[1024];
             snprintf(path, sizeof path, LOAD_DIR "/%s", files[i]);
-            pack_add(key, path);
+            pack_add(key, path, dds);
         }
     }
     SDL_free(files);
@@ -290,6 +298,70 @@ static void pack_scan(void) {
         pack_state = 1;
         LOG("[texpack] texture pack: %u pictures in " LOAD_DIR "/\n", pack_n);
     }
+}
+
+static uint32_t rd32(const uint8_t *p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
+
+// A .dds picture (DirectX texture: a 128-byte header, with DX10 a 20-byte one more, then each level's blocks) for a
+// tw x th texture: BC1, BC2, BC3, BC4, BC5, BC7 or RGBA8.
+static bool load_dds(const char *path, TexBackend *b, uint32_t tw, uint32_t th, bool srgb, uint64_t key) {
+    size_t n = 0;
+    uint8_t *d = SDL_LoadFile(path, &n);
+    if (!d) { LOG("[texpack] %s: can't be read (%s)\n", path, SDL_GetError()); return false; }
+    bool ok = false;
+    uint32_t h = 0, w = 0, levels = 0;
+    VkFormat vf = VK_FORMAT_UNDEFINED;
+    size_t off = 128;
+    if (n >= 128 && !memcmp(d, "DDS ", 4)) {
+        h = rd32(d + 12), w = rd32(d + 16), levels = rd32(d + 28);
+        uint32_t pf_flags = rd32(d + 80);
+        const uint8_t *cc = d + 84;
+        if (!levels) levels = 1;
+        if ((pf_flags & 4) && !memcmp(cc, "DX10", 4) && n >= 148) {
+            off = 148;
+            switch (rd32(d + 128)) {
+            case 28: vf = VK_FORMAT_R8G8B8A8_UNORM; break;
+            case 29: vf = VK_FORMAT_R8G8B8A8_SRGB; break;
+            case 71: vf = VK_FORMAT_BC1_RGBA_UNORM_BLOCK; break;
+            case 72: vf = VK_FORMAT_BC1_RGBA_SRGB_BLOCK; break;
+            case 74: vf = VK_FORMAT_BC2_UNORM_BLOCK; break;
+            case 75: vf = VK_FORMAT_BC2_SRGB_BLOCK; break;
+            case 77: vf = VK_FORMAT_BC3_UNORM_BLOCK; break;
+            case 78: vf = VK_FORMAT_BC3_SRGB_BLOCK; break;
+            case 80: vf = VK_FORMAT_BC4_UNORM_BLOCK; break;
+            case 83: vf = VK_FORMAT_BC5_UNORM_BLOCK; break;
+            case 98: vf = VK_FORMAT_BC7_UNORM_BLOCK; break;
+            case 99: vf = VK_FORMAT_BC7_SRGB_BLOCK; break;
+            default: break;
+            }
+        } else if (pf_flags & 4) {
+            if (!memcmp(cc, "DXT1", 4)) vf = VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+            else if (!memcmp(cc, "DXT3", 4)) vf = VK_FORMAT_BC2_UNORM_BLOCK;
+            else if (!memcmp(cc, "DXT5", 4)) vf = VK_FORMAT_BC3_UNORM_BLOCK;
+            else if (!memcmp(cc, "ATI1", 4) || !memcmp(cc, "BC4U", 4)) vf = VK_FORMAT_BC4_UNORM_BLOCK;
+            else if (!memcmp(cc, "ATI2", 4) || !memcmp(cc, "BC5U", 4)) vf = VK_FORMAT_BC5_UNORM_BLOCK;
+        }
+    }
+    if (srgb) {  // (the texture's colour space wins over the file's)
+        switch (vf) {
+        case VK_FORMAT_R8G8B8A8_UNORM: vf = VK_FORMAT_R8G8B8A8_SRGB; break;
+        case VK_FORMAT_BC1_RGBA_UNORM_BLOCK: vf = VK_FORMAT_BC1_RGBA_SRGB_BLOCK; break;
+        case VK_FORMAT_BC2_UNORM_BLOCK: vf = VK_FORMAT_BC2_SRGB_BLOCK; break;
+        case VK_FORMAT_BC3_UNORM_BLOCK: vf = VK_FORMAT_BC3_SRGB_BLOCK; break;
+        case VK_FORMAT_BC7_UNORM_BLOCK: vf = VK_FORMAT_BC7_SRGB_BLOCK; break;
+        default: break;
+        }
+    }
+    if (vf == VK_FORMAT_UNDEFINED)
+        LOG("[texpack] %s: not a DDS of a format the loader knows (BC1-5, BC7, RGBA8)\n", path);
+    else if ((uint64_t)w * th != (uint64_t)h * tw || w < tw || w > 16384 || h > 16384)
+        LOG("[texpack] %s: %ux%u, not the shape of the texture (%ux%u): left out\n", path, w, h, tw, th);
+    else if (!(ok = vk_tex_replace_blocks(b, vf, w, h, levels, d + off, n - off)))
+        LOG("[texpack] %s: the graphics card can't take it (format %d, %u levels, %zu bytes)\n", path, vf, levels, n);
+    if (ok && replaced_n++ < 20) LOG("[texpack] %016llx %ux%u -> %ux%u (dds)\n", (unsigned long long)key, tw, th, w, h);
+    if (ok && !(replaced_n % 500)) LOG("[texpack] %u textures replaced\n", replaced_n);
+    SDL_free(d);
+    return ok;
 }
 
 bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat vf, bool linear) {
@@ -310,7 +382,10 @@ bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat 
     tegra_deswizzle(mem + l.offset, lin, l.wb, l.hb, 1, fi->bpb, l.block_height_log2, l.block_depth_log2);
     uint64_t key = texpack_key(lin, size, l.w, l.h, t->format);
     free(lin);
-    const char *path = pack_find(key);
+    const PackEnt *e = pack_find(key);
+    if (!e) return false;
+    if (e->dds && load_dds(e->dds, b, l.w, l.h, srgb, key)) return true;
+    const char *path = e->path;
     if (!path) return false;
     SDL_Surface *s = SDL_LoadPNG(path);
     SDL_Surface *c = s ? SDL_ConvertSurface(s, SDL_PIXELFORMAT_ABGR8888) : NULL;  // (bytes R, G, B, A)
