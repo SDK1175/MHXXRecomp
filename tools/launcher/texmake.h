@@ -5,7 +5,8 @@
 // card (realesrgan-ncnn-vulkan: downloaded from its GitHub release the first time), the normal maps and masks
 // resized smoothly, into textures/load/gear and textures/load/monsters where the game reads them ([Graphics]
 // TexturePack: which of the two). A pack from before those folders is moved into them as it goes. What is there
-// already is kept, so it can be stopped and started again.
+// already is kept, so it can be stopped and started again. Or the pack of another folder of the game on the same
+// computer (an older version's) is copied in (import_from).
 #include <atomic>
 #include <mutex>
 #include <string>
@@ -14,6 +15,7 @@ struct TexJob {
     bool gear = true;      // armour, weapons, Palico gear: 4x (128 -> 512)
     bool monsters = true;  // monsters: 2x (1024 -> 2048)
     std::string game_dir = "data", mods_dir = "mods";
+    std::string import_from;  // not empty: copy the pack of this folder (another copy of the game's) instead of making one
     std::atomic<int> stage{0};  // TexStage
     std::atomic<uint64_t> done{0}, total{0};
     std::atomic<uint64_t> started{0};  // (SDL_GetTicks of the stage's start: the time left)
@@ -21,7 +23,7 @@ struct TexJob {
     std::mutex lock;
     std::string error;
 };
-enum TexStage { TEX_EXTRACT = 1, TEX_DOWNLOAD, TEX_RESIZE, TEX_UPSCALE, TEX_DONE };
+enum TexStage { TEX_EXTRACT = 1, TEX_DOWNLOAD, TEX_RESIZE, TEX_UPSCALE, TEX_DONE, TEX_IMPORT };
 void texmake_run(TexJob *job);
 // textures/load: how many pictures are in it
 int texmake_pack_count();

@@ -6,9 +6,11 @@
 #include <zlib.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -378,6 +380,109 @@ bool upscale(TexJob *job, const std::vector<Tex> &v, const std::string &tooldir)
     return true;
 }
 
+// ---------------------------------------------------------------- the pack of another folder
+std::string norm(std::string p) {
+    for (char &c : p)
+        if (c == '\\') c = '/';
+    while (p.size() > 1 && p.back() == '/') p.pop_back();
+    return p;
+}
+bool is_key_png(const std::string &n) {
+    if (n.size() != 20 || SDL_strcasecmp(n.c_str() + 16, ".png")) return false;
+    for (int i = 0; i < 16; i++)
+        if (!isxdigit((unsigned char)n[i])) return false;
+    return true;
+}
+// index.txt of mhxx-texextract: key -> its pack folder (gear / monsters), for a pack from before the folders
+void read_groups(const std::string &index, std::map<std::string, const char *> &out) {
+    size_t n = 0;
+    char *d = (char *)SDL_LoadFile(index.c_str(), &n);
+    if (!d) return;
+    std::string s(d, n);
+    SDL_free(d);
+    size_t pos = 0;
+    while (pos < s.size()) {
+        size_t e = s.find('\n', pos);
+        if (e == std::string::npos) e = s.size();
+        std::string line = s.substr(pos, e - pos);
+        pos = e + 1;
+        size_t a = 0;
+        for (int i = 0; i < 4 && a != std::string::npos; i++) a = line.find(' ', a), a = a == std::string::npos ? a : a + 1;
+        if (a == std::string::npos || line.size() < 16) continue;
+        std::string group = line.substr(a, line.find_first_of("\\/", a) - a);
+        for (char &c : group) c = (char)tolower((unsigned char)c);
+        if (group == "player" || group == "weapon" || group == "otomo") out[line.substr(0, 16)] = "gear";
+        else if (group == "enemy") out[line.substr(0, 16)] = "monsters";
+    }
+}
+struct Copy {
+    std::string from, to;
+};
+void collect(const std::string &dir, const std::string &rel, int depth, std::vector<Copy> &out, const std::string &dest,
+             bool pngs_only) {
+    if (depth > 4) return;
+    for (const std::string &n : list(dir)) {
+        std::string p = dir + "/" + n, r = rel.empty() ? n : rel + "/" + n;
+        if (is_dir(p)) {
+            if (n != "_work") collect(p, r, depth + 1, out, dest, pngs_only);
+        } else if (!pngs_only || is_key_png(n))
+            out.push_back({p, dest + "/" + r});
+    }
+}
+bool import_pack(TexJob *job) {
+    job->stage = TEX_IMPORT, job->done = 0, job->total = 0, job->started = SDL_GetTicks();
+    std::string src = norm(job->import_from), pack;
+    for (const std::string &c : {src + "/textures/load", src + "/load", src})  // (the game's folder, its textures, the pack)
+        if (is_dir(c)) {
+            std::vector<Copy> probe;
+            collect(c, "", 0, probe, "", true);
+            if (!probe.empty()) { pack = c; break; }
+        }
+    if (pack.empty()) return fail(job, "no texture pack in " + src), false;
+    auto same = [](std::string a, std::string b) {
+        a = norm(a), b = norm(b);
+#ifdef _WIN32
+        for (char &c : a) c = (char)tolower((unsigned char)c);
+        for (char &c : b) c = (char)tolower((unsigned char)c);
+#endif
+        return a == b;
+    };
+    if (same(pack, absolute(PACK)) || same(pack, PACK)) return fail(job, "that is this folder's own pack"), false;
+    std::string root = pack.size() > 14 && pack.compare(pack.size() - 14, 14, "/textures/load") == 0 ? pack.substr(0, pack.size() - 14) : "";
+    std::map<std::string, const char *> groups;  // (pictures not in a folder yet: which one, from either index)
+    if (!root.empty()) read_groups(root + "/" + EXTRACTED + "/index.txt", groups);
+    read_groups(std::string(EXTRACTED) + "/index.txt", groups);
+    std::vector<Copy> files;
+    collect(pack, "", 0, files, PACK, true);
+    for (Copy &c : files) {
+        std::string name = c.to.substr(c.to.rfind('/') + 1), rel = c.to.substr(strlen(PACK) + 1);
+        auto g = groups.find(name.substr(0, 16));
+        if (rel == name && g != groups.end()) c.to = std::string(PACK) + "/" + g->second + "/" + name;
+    }
+    // (the textures that one took out of the game files too, when this folder hasn't: the next Make skips that step)
+    if (!root.empty() && exists(root + "/" + EXTRACTED + "/.complete") && !exists(std::string(EXTRACTED) + "/.complete")) {
+        remove_tree(EXTRACTED);
+        std::vector<Copy> ex;
+        collect(root + "/" + EXTRACTED, "", 0, ex, EXTRACTED, false);
+        std::stable_partition(ex.begin(), ex.end(), [](const Copy &c) { return c.to.find(".complete") == std::string::npos; });
+        files.insert(files.end(), ex.begin(), ex.end());  // (.complete last: only when all of it is here)
+    }
+    job->total = files.size();
+    SDL_Log("[texmake] import from %s: %d files", pack.c_str(), (int)files.size());
+    for (const Copy &c : files) {
+        if (job->cancel) return fail(job, "cancelled"), false;
+        SDL_PathInfo a, b;
+        bool have = SDL_GetPathInfo(c.to.c_str(), &b) && SDL_GetPathInfo(c.from.c_str(), &a) && a.size == b.size;
+        if (!have) {
+            size_t s = c.to.rfind('/');
+            SDL_CreateDirectory(c.to.substr(0, s).c_str());
+            if (!SDL_CopyFile(c.from.c_str(), c.to.c_str())) return fail(job, "can't copy " + c.from + ": " + SDL_GetError()), false;
+        }
+        job->done++;
+    }
+    return true;
+}
+
 }  // namespace
 
 int texmake_pack_count() {
@@ -397,6 +502,7 @@ void texmake_run(TexJob *job) {
     };
     SDL_CreateDirectory((std::string(PACK) + "/gear").c_str());
     SDL_CreateDirectory((std::string(PACK) + "/monsters").c_str());
+    if (!job->import_from.empty()) return finish(import_pack(job));
     job->stage = TEX_EXTRACT;
     if (!extract(job)) return finish(false);
     std::vector<Tex> v = todo(job), color, other;

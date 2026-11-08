@@ -506,15 +506,35 @@ static void measure_gpu() {
 }
 
 // ---------------------------------------------------------------- high-resolution textures (texmake.cpp)
+static std::string g_picked_pack;  // (the folder dialog's answer: a pack to copy in)
+static void SDLCALL pack_picked(void *, const char *const *list, int) {
+    if (!list || !list[0]) return;
+    std::lock_guard<std::mutex> g(g_pick_lock);
+    g_picked_pack = list[0];
+}
 struct TexMaker {
     bool gear = true, monsters = true;
+    bool imported = false;
     TexJob *job = nullptr;
     std::thread th;
     std::string error;
     bool made = false;
     int pack = 0;
-    void begin() { error.clear(), made = false, pack = texmake_pack_count(); }
+    void begin() { error.clear(), made = false, imported = false, pack = texmake_pack_count(); }
+    void start(const std::string &from) {
+        error.clear();
+        imported = !from.empty();
+        job = new TexJob;
+        job->gear = gear, job->monsters = monsters, job->game_dir = g_game_dir, job->import_from = from;
+        th = std::thread(texmake_run, job);
+    }
     void poll() {
+        std::string from;
+        {
+            std::lock_guard<std::mutex> g(g_pick_lock);
+            from.swap(g_picked_pack);
+        }
+        if (!from.empty() && !job) start(from);
         if (job && job->finished) {
             th.join();
             if (job->ok) made = true;
@@ -550,7 +570,7 @@ static void check(const char *id, const char *label, bool *v, float s) {  // (a 
     ImGui::PopID();
 }
 // The high-resolution textures screen: 0 still on it, 1 closed
-static int tex_screen(TexMaker &tm, int w, int h, float s, bool have_game) {
+static int tex_screen(TexMaker &tm, SDL_Window *win, int w, int h, float s, bool have_game) {
     tm.poll();
     float pad = 18 * s, dw = std::min(820 * s, (float)w - pad * 2);
     ImGui::SetNextWindowPos(ImVec2(w * .5f, h * .5f), ImGuiCond_Always, ImVec2(.5f, .5f));
@@ -571,8 +591,9 @@ static int tex_screen(TexMaker &tm, int w, int h, float s, bool have_game) {
         int stage = tm.job->stage;
         uint64_t done = tm.job->done, total = tm.job->total;
         static const char *names[] = {"", "Taking the textures out of the game files", "Downloading the upscaler (Real-ESRGAN)",
-                                      "Resizing the normal maps and masks", "Upscaling with AI on the graphics card", "Done"};
-        ImGui::TextColored(GOLD_TEXT, "%s", tr(names[std::clamp(stage, 0, 5)]));
+                                      "Resizing the normal maps and masks", "Upscaling with AI on the graphics card", "Done",
+                                      "Copying the texture pack"};
+        ImGui::TextColored(GOLD_TEXT, "%s", tr(names[std::clamp(stage, 0, 6)]));
         float f = total ? std::min(1.f, (float)((double)done / total)) : 0;
         ImGui::Dummy(ImVec2(0, 6 * s));
         ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + cw, a.y + 26 * s);
@@ -606,6 +627,7 @@ static int tex_screen(TexMaker &tm, int w, int h, float s, bool have_game) {
     } else if (tm.made) {
         char msg[256];
         SDL_snprintf(msg, sizeof msg, tr("%d high-resolution textures are ready. They are used from the next start of the game."), tm.pack);
+        if (tm.imported) SDL_snprintf(msg, sizeof msg, tr("The pack is copied: %d high-resolution textures are ready. They are used from the next start of the game."), tm.pack);
         ImGui::TextWrapped("%s", msg);
         ImGui::Dummy(ImVec2(0, 10 * s));
         if (hunter_button("tex.ok", tr("OK"), ImVec2(cw, bh), true, true, s)) result = 1;
@@ -645,14 +667,17 @@ static int tex_screen(TexMaker &tm, int w, int h, float s, bool have_game) {
         }
         ImGui::Dummy(ImVec2(0, 8 * s));
         float b1 = (cw - 12 * s) * .62f, b2 = cw - 12 * s - b1;
-        if (hunter_button("tex.make", tr("Make"), ImVec2(b1, bh), true, have_game && (tm.gear || tm.monsters), s)) {
-            tm.error.clear();
-            tm.job = new TexJob;
-            tm.job->gear = tm.gear, tm.job->monsters = tm.monsters, tm.job->game_dir = g_game_dir;
-            tm.th = std::thread(texmake_run, tm.job);
-        }
+        if (hunter_button("tex.make", tr("Make"), ImVec2(b1, bh), true, have_game && (tm.gear || tm.monsters), s)) tm.start("");
         ImGui::SameLine(0, 12 * s);
         if (hunter_button("tex.close", tr("Close"), ImVec2(b2, bh), false, true, s)) result = 1;
+        // (a pack made before, in another folder of the game on this computer: copied in instead of made again)
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        divider(d, cw, s);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.62f, .68f, .8f, 1));
+        ImGui::TextWrapped("%s", tr("Made them before in another folder (an older version)? Pick that folder: its pack is copied here, nothing is made again."));
+        ImGui::PopStyleColor();
+        if (hunter_button("tex.import", tr("Bring the pack from another folder"), ImVec2(cw, ImGui::GetFrameHeight() * 1.4f), false, true, s))
+            SDL_ShowOpenFolderDialog(pack_picked, nullptr, win, nullptr, false);
     }
     ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
     gold_frame(ImGui::GetForegroundDrawList(), wp, ImVec2(wp.x + ws.x, wp.y + ws.y), s);
@@ -871,7 +896,7 @@ int main(int argc, char **argv) {
             if (!art.background)
                 ImGui::GetBackgroundDrawList()->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)w, (float)h), NAVY_TOP,
                                                                          NAVY_TOP, NAVY_BOTTOM, NAVY_BOTTOM);
-            if (tex_screen(texmaker, w, h, scale, have_game)) in_tex = false, count();
+            if (tex_screen(texmaker, win, w, h, scale, have_game)) in_tex = false, count();
             ImGui::Render();
             SDL_SetRenderScale(rd, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
             SDL_SetRenderDrawColor(rd, 4, 10, 28, 255);
