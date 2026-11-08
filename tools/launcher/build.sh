@@ -31,7 +31,7 @@ done
 case "$(uname -s)" in
 MINGW*|MSYS*)
     clang++ -o "$B/mhxx-launcher.exe" $OBJS -fuse-ld=lld -mwindows -lSDL3 -static-libgcc -static-libstdc++ \
-        -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic ;;
+        -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic -lole32 -luuid -lshell32 ;;
 *) clang++ -o "$B/mhxx-launcher" $OBJS -lSDL3 -lm -pthread ;;
 esac
 echo "built: $B/mhxx-launcher"

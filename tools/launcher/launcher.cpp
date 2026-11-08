@@ -13,6 +13,7 @@
 #else
 #include <unistd.h>
 #endif
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -91,6 +92,79 @@ static const char *korean_font() {
     return nullptr;
 }
 
+// ---------------------------------------------------------------- the desktop shortcut (asked at the first start)
+// launcher.ini beside the programs remembers that it was asked (Shortcut = asked)
+#define LAUNCHER_INI "launcher.ini"
+static bool shortcut_asked() {
+    size_t n = 0;
+    char *d = (char *)SDL_LoadFile(LAUNCHER_INI, &n);
+    bool asked = d && strstr(d, "ShortcutAsked = 1");
+    SDL_free(d);
+    return asked;
+}
+static void shortcut_remember() {
+    const char *text = "; mhxx-launcher\nShortcutAsked = 1\n";
+    SDL_SaveFile(LAUNCHER_INI, text, strlen(text));
+}
+
+#ifdef _WIN32
+#include <objbase.h>
+#include <shlobj.h>
+#include <shobjidl.h>
+#include <knownfolders.h>
+// A shortcut to this launcher named name.lnk on the user's desktop (its icon: the game's). false: error says why.
+static bool make_shortcut(const char *name_utf8, std::string &error) {
+    std::string name;
+    for (const char *c = name_utf8; *c; c++)
+        if (!strchr("\\/:*?\"<>|", *c) && (unsigned char)*c >= 32) name += *c;
+    while (!name.empty() && (name.back() == ' ' || name.back() == '.')) name.pop_back();
+    if (name.empty()) name = "MHXX Recomp";
+    wchar_t wname[256], exe[1024], dir[1024], icon[1024];
+    MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, wname, 256);
+    GetModuleFileNameW(NULL, exe, 1024);
+    wcscpy(dir, exe);
+    if (wchar_t *slash = wcsrchr(dir, L'\\')) *slash = 0;
+    swprintf(icon, 1024, L"%ls\\mhgurecomp.exe", dir);
+    PWSTR desktop = NULL;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, NULL, &desktop))) {
+        error = "desktop folder not found";
+        return false;
+    }
+    wchar_t lnk[1024];
+    swprintf(lnk, 1024, L"%ls\\%ls.lnk", desktop, wname);
+    CoTaskMemFree(desktop);
+    HRESULT init = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    IShellLinkW *sl = NULL;
+    HRESULT hr = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLinkW, (void **)&sl);
+    if (SUCCEEDED(hr)) {
+        sl->SetPath(exe);
+        sl->SetWorkingDirectory(dir);
+        sl->SetIconLocation(icon, 0);
+        sl->SetDescription(L"MHXX Recomp launcher");
+        IPersistFile *pf = NULL;
+        hr = sl->QueryInterface(IID_IPersistFile, (void **)&pf);
+        if (SUCCEEDED(hr)) {
+            hr = pf->Save(lnk, TRUE);
+            pf->Release();
+        }
+        sl->Release();
+    }
+    if (SUCCEEDED(init)) CoUninitialize();
+    if (FAILED(hr)) {
+        char msg[64];
+        SDL_snprintf(msg, sizeof msg, "error %#lx", (unsigned long)hr);
+        error = msg;
+        return false;
+    }
+    return true;
+}
+#else
+static bool make_shortcut(const char *, std::string &error) {
+    error = "only on Windows";
+    return false;
+}
+#endif
+
 static bool start_game(std::string &error) {
     const char *base = SDL_GetBasePath();
     std::string exe = std::string(base ? base : "") + "mhgurecomp"
@@ -157,13 +231,20 @@ int main(int argc, char **argv) {
     bool have_game = SDL_GetPathInfo(exefs, nullptr);
     std::string error;
     bool open = true, quit = false, start = false;
+#ifdef _WIN32
+    bool ask_shortcut = !shortcut_asked();
+#else
+    bool ask_shortcut = false;
+#endif
+    char shortcut_name[128] = "MHXX Recomp";
+    bool name_focus = true;
     while (!quit) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             ImGui_ImplSDL3_ProcessEvent(&e);
             if (e.type == SDL_EVENT_QUIT || (e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && e.window.windowID == SDL_GetWindowID(win)))
                 quit = true;
-            if (e.type == SDL_EVENT_KEY_DOWN) settings_panel_key(e.key.scancode);
+            if (e.type == SDL_EVENT_KEY_DOWN && !ask_shortcut) settings_panel_key(e.key.scancode);
         }
         if (SDL_GetWindowFlags(win) & SDL_WINDOW_MINIMIZED) {
             SDL_Delay(50);
@@ -177,10 +258,61 @@ int main(int argc, char **argv) {
         float side = 300 * scale, pad = 16 * scale;
         settings_panel_set_launcher(side + pad, pad, w - side - pad * 2, h - pad * 2);
         open = true;
-        settings_panel_before_frame(open);
+        if (!ask_shortcut) settings_panel_before_frame(open);
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
+
+        if (ask_shortcut) {  // the first start: a desktop shortcut? (its name can be changed)
+            float dw = std::min(560 * scale, (float)w - pad * 2);
+            ImGui::SetNextWindowPos(ImVec2(w * .5f, h * .5f), ImGuiCond_Always, ImVec2(.5f, .5f));
+            ImGui::SetNextWindowSize(ImVec2(dw, 0));
+            ImGui::Begin("##shortcut", nullptr,
+                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_AlwaysAutoResize);
+            ImGui::TextWrapped("%s", tr("Make a shortcut to the launcher on the desktop?"));
+            ImGui::Spacing();
+            ImGui::TextUnformatted(tr("Shortcut name"));
+            ImGui::SetNextItemWidth(-1);
+            if (name_focus) ImGui::SetKeyboardFocusHere(), name_focus = false;
+            bool enter = ImGui::InputText("##name", shortcut_name, sizeof shortcut_name,
+                                          ImGuiInputTextFlags_EnterReturnsTrue);
+            if (!error.empty()) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .55f, .4f, 1));
+                ImGui::TextWrapped("%s", error.c_str());
+                ImGui::PopStyleColor();
+            }
+            ImGui::Spacing();
+            float bw2 = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * .5f;
+            bool yes = ImGui::Button(tr("Yes"), ImVec2(bw2, ImGui::GetFrameHeight() * 1.6f)) || enter;
+            ImGui::SameLine();
+            bool no = ImGui::Button(tr("No"), ImVec2(bw2, ImGui::GetFrameHeight() * 1.6f));
+            ImGui::End();
+            if (yes) {
+                std::string why;
+                if (make_shortcut(shortcut_name, why)) {
+                    shortcut_remember();
+                    ask_shortcut = false;
+                    error.clear();
+                } else {
+                    char msg[256];
+                    SDL_snprintf(msg, sizeof msg, tr("Could not make the shortcut: %s"), why.c_str());
+                    error = msg;
+                }
+            } else if (no) {
+                shortcut_remember();
+                ask_shortcut = false;
+                error.clear();
+            }
+            ImGui::Render();
+            SDL_SetRenderScale(rd, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
+            SDL_SetRenderDrawColor(rd, 18, 20, 24, 255);
+            SDL_RenderClear(rd);
+            ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), rd);
+            SDL_RenderPresent(rd);
+            continue;
+        }
 
         // the left column: the game, Start game, Quit
         ImGui::SetNextWindowPos(ImVec2(pad, pad));
