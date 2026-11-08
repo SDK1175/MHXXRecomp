@@ -415,6 +415,18 @@ void read_groups(const std::string &index, std::map<std::string, const char *> &
         else if (group == "enemy") out[line.substr(0, 16)] = "monsters";
     }
 }
+// mhxx-texextract's index.txt? (its first line: "<16 hex> <w>x<h> <kind> ...")
+bool is_texextract_index(const std::string &path) {
+    SDL_IOStream *f = SDL_IOFromFile(path.c_str(), "rb");
+    if (!f) return false;
+    char b[48] = {};
+    SDL_ReadIO(f, b, sizeof b - 1);
+    SDL_CloseIO(f);
+    for (int i = 0; i < 16; i++)
+        if (!isxdigit((unsigned char)b[i])) return false;
+    int w, h;
+    return b[16] == ' ' && sscanf(b + 17, "%dx%d", &w, &h) == 2;
+}
 struct Copy {
     std::string from, to;
 };
@@ -449,9 +461,27 @@ bool import_pack(TexJob *job) {
     };
     if (same(pack, absolute(PACK)) || same(pack, PACK)) return fail(job, "that is this folder's own pack"), false;
     std::string root = pack.size() > 14 && pack.compare(pack.size() - 14, 14, "/textures/load") == 0 ? pack.substr(0, pack.size() - 14) : "";
-    std::map<std::string, const char *> groups;  // (pictures not in a folder yet: which one, from either index)
+    std::map<std::string, const char *> groups;  // (pictures not in a folder yet: which one, from any index found)
     if (!root.empty()) read_groups(root + "/" + EXTRACTED + "/index.txt", groups);
     read_groups(std::string(EXTRACTED) + "/index.txt", groups);
+    // (and mhxx-texextract's run by hand, as the manual's tools/texpack/upscale.py way has it: a folder with its
+    // index.txt beside that game folder or up to two above it - ../textures_all2 next to the source folder)
+    std::string up = root.empty() ? pack : root;
+    for (int level = 0; level < 3 && !up.empty(); level++) {
+        int seen = 0;
+        for (const std::string &n : list(up)) {
+            std::string ix = up + "/" + n + "/index.txt";
+            if (++seen > 300) break;
+            if (is_dir(up + "/" + n) && is_texextract_index(ix)) {
+                size_t before = groups.size();
+                read_groups(ix, groups);
+                SDL_Log("[texmake] sorting by %s (%d)", ix.c_str(), (int)(groups.size() - before));
+            }
+        }
+        size_t sl = up.rfind('/');
+        up = sl == std::string::npos || sl == 0 ? "" : up.substr(0, sl);
+        if (up.size() == 2 && up[1] == ':') up += "/";  // (a drive's root: F:/)
+    }
     std::vector<Copy> files;
     collect(pack, "", 0, files, PACK, true);
     for (Copy &c : files) {
