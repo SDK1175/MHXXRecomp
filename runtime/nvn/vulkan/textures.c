@@ -647,49 +647,6 @@ bool vk_tex_replace(TexBackend *b, const uint8_t *rgba, uint32_t w, uint32_t h, 
     return true;
 }
 
-bool vk_tex_replace_blocks(TexBackend *b, VkFormat vf, uint32_t w, uint32_t h, uint32_t levels, const uint8_t *data,
-                           uint64_t size) {
-    bool rgba = vf == VK_FORMAT_R8G8B8A8_UNORM || vf == VK_FORMAT_R8G8B8A8_SRGB;
-    uint32_t bpb = rgba ? 4 : (vf == VK_FORMAT_BC1_RGBA_UNORM_BLOCK || vf == VK_FORMAT_BC1_RGBA_SRGB_BLOCK ||
-                               vf == VK_FORMAT_BC4_UNORM_BLOCK) ? 8 : 16;
-    uint32_t bs = rgba ? 1 : 4;
-    if (!format_supports(vf, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT)) return false;
-    uint64_t need = 0;
-    for (uint32_t lv = 0; lv < levels; lv++) {
-        uint32_t lw = w >> lv ? w >> lv : 1, lh = h >> lv ? h >> lv : 1;
-        need += (uint64_t)((lw + bs - 1) / bs) * ((lh + bs - 1) / bs) * bpb;
-    }
-    if (need > size) return false;
-    VkImageCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .format = vf,
-                            .extent = {w, h, 1}, .mipLevels = levels, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
-                            .tiling = VK_IMAGE_TILING_OPTIMAL,
-                            .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
-    VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-    VkImage img;
-    VmaAllocation mem;
-    if (vmaCreateImage(g_vk.vma, &ci, &ai, &img, &mem, NULL) != VK_SUCCESS) return false;
-    destroy_image(b);
-    b->image = img, b->mem = mem, b->format = vf;
-    b->width = w, b->height = h, b->depth = 1, b->layers = 1, b->levels = levels, b->samples = 1;
-    b->aspect = VK_IMAGE_ASPECT_COLOR_BIT, b->base_type = VK_IMAGE_VIEW_TYPE_2D;
-    b->astc_bw = b->astc_bh = 0, b->bcn = BCN_NONE;
-    b->replaced = true;
-    VkCommandBuffer cb = vk_upload_cmd();
-    vk_image_init_layout(cb, img, VK_IMAGE_ASPECT_COLOR_BIT);
-    VkSpan s = vk_transient_copy(data, need, 16);
-    uint64_t off = 0;
-    for (uint32_t lv = 0; lv < levels; lv++) {
-        uint32_t lw = w >> lv ? w >> lv : 1, lh = h >> lv ? h >> lv : 1;
-        VkBufferImageCopy rg = {.bufferOffset = s.off + off, .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, lv, 0, 1},
-                                .imageExtent = {lw, lh, 1}};
-        vkCmdCopyBufferToImage(cb, s.buf, img, VK_IMAGE_LAYOUT_GENERAL, 1, &rg);
-        off += (uint64_t)((lw + bs - 1) / bs) * ((lh + bs - 1) / bs) * bpb;
-    }
-    vk_full_barrier(cb);
-    return true;
-}
-
 TexBackend *vk_tex(NvnTexture *t, bool for_render) {
     TexBackend *b = tex_backend(t);
     if (b->pending_rgba) upload_pending(b);

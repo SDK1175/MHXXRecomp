@@ -162,11 +162,7 @@ uint64_t texpack_key(const uint8_t *level0, uint64_t size, uint32_t w, uint32_t 
 bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat vf, bool linear);
 // b made a w x h RGBA8 image holding rgba (rows of w*4 bytes), its mip levels made by the GPU. false: no memory for it
 // (b unchanged)
-bool vk_tex_replace(TexBackend *b, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb);
-// ... or from a compressed picture with its own mip levels (a .dds): `levels` levels of format vf (BC1..BC7, or RGBA8),
-// one after another in data, each tightly packed. false: the device can't sample vf, or no memory for it
-bool vk_tex_replace_blocks(TexBackend *b, VkFormat vf, uint32_t w, uint32_t h, uint32_t levels, const uint8_t *data,
-                           uint64_t size);  // backend image (uploads CPU contents unless for_render)
+bool vk_tex_replace(TexBackend *b, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb);  // backend image (uploads CPU contents unless for_render)
 VkFormat vk_format(uint32_t nvn_format);
 bool vk_format_alpha_one(uint32_t nvn_format);
 bool renderer_format_is_depth(uint32_t f);

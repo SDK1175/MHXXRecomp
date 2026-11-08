@@ -34,4 +34,3 @@ server/mhgurecomp-hubserver.exe
 /build-android/
 /obj-android/
 tools/texpack/realesrgan/
-tools/texpack/texconv/
