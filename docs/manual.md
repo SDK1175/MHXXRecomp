@@ -1,4 +1,4 @@
-# MHXX Recomp 플레이 매뉴얼 (0.5)
+# MHXX Recomp 플레이 매뉴얼 (0.6)
 
 몬스터헌터 더블크로스 Nintendo Switch Ver. **일본판 1.5.1**을 에뮬레이터 없이 PC에서 돌리는 프로그램입니다. 한글패치를 그대로 쓸 수 있습니다.
 
@@ -10,7 +10,7 @@
 
 | 준비물 | 설명 |
 |---|---|
-| `Windows-MHXXRecomp.0.5.zip` | 이 프로그램 |
+| `Windows-MHXXRecomp.0.6.zip` | 이 프로그램 |
 | 게임 파일 | 본인 스위치에서 뽑은 **MHXX 일본판 (NSP/XCI) + 1.5.1 업데이트 (NSP) + prod.keys**. 또는 에뮬레이터로 덤프한 `exefs`, `romfs` 폴더 |
 | 한글패치 (선택) | `MHXX_NX_1.5_kor_v2` |
 | 컴퓨터 | 64비트 윈도우 10 이상, Vulkan을 지원하는 그래픽카드 |
