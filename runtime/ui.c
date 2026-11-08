@@ -20,6 +20,28 @@ static SDL_AtomicInt requested_action, action_failed;
 void ui_capture_launch_args(int argc, char **argv) { launch_argc = argc; launch_argv = argv; }
 void ui_request_action(bool restart) { SDL_SetAtomicInt(&requested_action, restart ? 2 : 1); }
 void ui_request_import(int what) { SDL_SetAtomicInt(&requested_action, 2 + what); }
+void ui_request_exit_to_launcher(void) { SDL_SetAtomicInt(&requested_action, 20); }
+
+// Exit to launcher: mhxx-launcher (next to the game) started on its own, the game then closes
+static void start_launcher(void) {
+    const char *base = SDL_GetBasePath();
+    char exe[1024];
+    SDL_snprintf(exe, sizeof exe, "%smhxx-launcher%s", base ? base : "",
+#ifdef _WIN32
+                 ".exe"
+#else
+                 ""
+#endif
+    );
+    const char *args[] = {exe, NULL};
+    SDL_PropertiesID props = SDL_CreateProperties();
+    SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ARGS_POINTER, (void *)args);
+    SDL_SetBooleanProperty(props, SDL_PROP_PROCESS_CREATE_BACKGROUND_BOOLEAN, true);
+    SDL_Process *p = SDL_CreateProcessWithProperties(props);
+    SDL_DestroyProperties(props);
+    if (p) SDL_DestroyProcess(p);
+    else LOG("[ui] launcher not started (%s): %s\n", exe, SDL_GetError());
+}
 static SDL_AtomicInt away;
 bool ui_window_away(void) { return SDL_GetAtomicInt(&away) != 0; }
 #ifdef __ANDROID__
@@ -315,6 +337,7 @@ int ui_run(void) {
         }
         int action = SDL_SetAtomicInt(&requested_action, 0);
         if (action == 1) exit(0);
+        if (action == 20) { LOG("exit to launcher\n"); start_launcher(); exit(0); }
         if (action == 2) {
             if (restart_application()) exit(0);
             SDL_SetAtomicInt(&action_failed, 1);

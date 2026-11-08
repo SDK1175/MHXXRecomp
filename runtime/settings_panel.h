@@ -14,4 +14,8 @@ bool settings_panel_key(int scancode); // Choosing a key (keybind, chat): takes 
 bool settings_panel_mouse(int button); // Choosing a keybind: takes the mouse button pressed away from the menu's rows.
 bool settings_panel_pad_capturing(void); // Choosing a controller button ([Controller]): waiting for one.
 void settings_panel_pad(int src); // ...the one pressed (config.h PAD_SRC_*; host main thread).
-bool settings_panel_wheel(int notches); // Choosing a keybind: takes the wheel turned (> 0 up) as Wheel Up / Down.
+bool settings_panel_wheel(int notches);
+// mhxx-launcher: the panel in launcher mode, in this area of the window (each frame: it follows the window's size):
+// only the settings that take effect at the next start, and the mods
+void settings_panel_set_launcher(float x, float y, float w, float h);
+bool settings_panel_save_now(void); // Saves the menu's changes (true: saved, or nothing to save). // Choosing a keybind: takes the wheel turned (> 0 up) as Wheel Up / Down.

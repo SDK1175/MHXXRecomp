@@ -93,6 +93,7 @@ struct State {
     bool position_override = false;
     int capture_bind = -1;     // the keybind (BIND_*) a key is being chosen for; -1: the chat key
     bool capture_add = false;  // the key chosen is that keybind's second, else its only one
+    int leave_to = 0;               // View::Exit: 0 the desktop, 1 the launcher (mhxx-launcher)
     int capture_pad = 0;            // the Switch button (PAD_*) a controller button is being chosen for
     uint64_t capture_pad_since = 0;  // when that began (SDL_GetTicksNS): it gives up after PAD_CAPTURE_SECONDS
 } s;
@@ -480,6 +481,31 @@ void choices(const Row &row, std::vector<std::string> names, int selected, std::
 // the key a row is for (its restart mark and its help)
 const char *ini(const char *key) { return key; }
 bool cold(const char *key) { return key && config_restart_key(key); }
+// mhxx-launcher (tools/launcher): the panel shows only what takes effect at the next start (and the mods), in the
+// area the launcher gives it, never closes, and has no exit rows
+bool launcher_mode;
+ImRect launcher_area;
+// The game: is mhxx-launcher next to it (Exit to launcher)?
+bool launcher_present() {
+#ifdef __ANDROID__
+    return false;
+#else
+    static int have = -1;
+    if (have < 0) {
+        const char *base = SDL_GetBasePath();
+        char path[1024];
+        SDL_snprintf(path, sizeof path, "%smhxx-launcher%s", base ? base : "",
+#ifdef _WIN32
+                     ".exe"
+#else
+                     ""
+#endif
+        );
+        have = SDL_GetPathInfo(path, NULL) ? 1 : 0;
+    }
+    return have == 1;
+#endif
+}
 float lo(const char *key) { float a = 0, b = 0; config_range(key, &a, &b); return a; }
 float hi(const char *key) { float a = 0, b = 0; config_range(key, &a, &b); return b; }
 void keyed(Row &r, const char *key) {
@@ -1413,10 +1439,33 @@ std::vector<Row> main_rows() {
 #ifndef __ANDROID__  // (Android can't start the app again from itself: close it and open it again)
         action(r, "restart", tr("Restart"), []() { push(View::Restart, "dialog.cancel"); });
 #endif
-        action(r, "exit", tr("Exit game"), []() { push(View::Exit, "dialog.cancel"); });
+        if (launcher_present())
+            action(r, "exit.launcher", tr("Exit to launcher"), []() {
+                s.leave_to = 1;
+                push(View::Exit, "dialog.cancel");
+            });
+        action(r, "exit", tr("Exit to desktop"), []() {
+            s.leave_to = 0;
+            push(View::Exit, "dialog.cancel");
+        });
     }
     action(r, "save", tr("Save"), []() { s.command = Command::Save; }, dirty());
     action(r, "reset", tr("Reset this tab"), []() { push(View::Reset, "dialog.cancel"); });
+    if (launcher_mode) {  // (only the rows that take effect at the next start; on Mods all of them; their headers)
+        std::vector<Row> kept;
+        for (size_t i = 0; i < r.size(); i++) {
+            const Row &row = r[i];
+            if (row.header) {
+                bool any = false;
+                for (size_t j = i + 1; j < r.size() && !r[j].header; j++)
+                    any |= r[j].cold || (s.page == MODS_PAGE && r[j].id != "reset");
+                if (any && !row.title.empty()) kept.push_back(row);
+            } else if (row.id == "save" || row.cold || (s.page == MODS_PAGE && row.id != "reset")) {
+                kept.push_back(row);
+            }
+        }
+        r.swap(kept);
+    }
     return r;
 }
 bool save() {
@@ -1456,6 +1505,31 @@ bool save() {
     s.saved_notice = true;
     s.error.clear();
     return true;
+}
+// The tabs shown: all of them, or in the launcher those with a row that takes effect at the next start
+const std::vector<int> &shown_pages() {
+    static std::vector<int> pages;
+    static bool launcher_pages = false;
+    if (!pages.empty() && launcher_pages == launcher_mode) return pages;
+    pages.clear();
+    launcher_pages = launcher_mode;
+    int was = s.page;
+    for (int p = 0; p < PAGES; p++) {
+        if (!launcher_mode) { pages.push_back(p); continue; }
+        if (p == CHEATS_PAGE) continue;
+        s.page = p;
+        for (const Row &row : main_rows())
+            if (!row.header && row.id != "save") { pages.push_back(p); break; }
+    }
+    s.page = was;
+    if (pages.empty()) pages.push_back(0);
+    return pages;
+}
+int shown_index(int page) {
+    const auto &v = shown_pages();
+    for (int i = 0; i < (int)v.size(); i++)
+        if (v[i] == page) return i;
+    return 0;
 }
 std::vector<Row> rows_for_view(bool *open) {
     if (s.view == View::Main)
@@ -1553,6 +1627,13 @@ std::vector<Row> rows_for_view(bool *open) {
             s.position_override = true;
             pop();
         });
+    } else if (s.view == View::Exit) {  // Exit to the desktop / the launcher: Yes, No
+        action(r, "dialog.yes", tr("Yes"), []() {
+            if ((dirty() || pending_text()) && !save()) return;  // (the settings changed in the menu: kept)
+            if (s.leave_to == 1) ui_request_exit_to_launcher();
+            else ui_request_action(false);
+        });
+        action(r, "dialog.cancel", tr("No"), []() { pop(); });
     } else {
         action(r, "dialog.cancel", tr("Cancel"), []() { pop(); });
         if (s.view == View::Reset)
@@ -1566,14 +1647,6 @@ std::vector<Row> rows_for_view(bool *open) {
                 discard();
                 *open = false;
             });
-        }
-        if (s.view == View::Exit) {
-            action(r, "dialog.exit", tr((dirty() || pending_text()) ? "Save and exit" : "Exit game"), []() {
-                if ((!dirty() && !pending_text()) || save())
-                    ui_request_action(false);
-            });
-            if (dirty() || pending_text())
-                action(r, "dialog.discard", tr("Exit without saving"), []() { ui_request_action(false); });
         }
         if (s.view == View::Restart)
             action(r, "dialog.restart", tr("Save and restart"), []() {
@@ -1958,6 +2031,11 @@ bool settings_panel_mouse(int button) {
     return true;
 }
 bool settings_panel_pad_capturing() { return is_pad_capturing.load(); }
+void settings_panel_set_launcher(float x, float y, float w, float h) {
+    launcher_mode = true;
+    launcher_area = ImRect(x, y, x + w, y + h);
+}
+bool settings_panel_save_now() { return (!dirty() && !pending_text()) || save(); }
 void settings_panel_pad(int src) { captured_pad = src; }
 bool settings_panel_wheel(int notches) {
     if (!capture_wheel.load() || !notches)
@@ -2024,8 +2102,10 @@ void settings_panel(bool *open) {
         cheats_rescan();  // (files added, edited or removed since the last time count from now)
         load_cheats();
     }
-    if (request_exit.exchange(false) && s.view != View::Exit)
+    if (request_exit.exchange(false) && s.view != View::Exit) {  // (the window's X: to the desktop)
+        s.leave_to = 0;
         push(View::Exit, "dialog.cancel");
+    }
     Config before = s.draft;
     ImGuiViewport *vp = ImGui::GetMainViewport();
     float scale = s.draft.menu_scale / 100.f;
@@ -2033,7 +2113,15 @@ void settings_panel(bool *open) {
     float margin = std::min(16.f, vp->WorkSize.x * .025f);
     float width = std::min(vp->WorkSize.x - 2 * margin, base * scale * 56);
     bool sized = s.custom_size.x > 0;
-    if (sized) {
+    if (launcher_mode) {  // (the launcher's area: always)
+        s.custom_size = launcher_area.GetSize();
+        s.floating = true;
+        s.move_position = launcher_area.Min;
+        s.position_override = true;
+        sized = true;
+        width = s.custom_size.x;
+        ImGui::SetNextWindowSize(s.custom_size, ImGuiCond_Always);
+    } else if (sized) {
         ImVec2 least(std::min(base * scale * 26, vp->WorkSize.x), std::min(base * scale * 14, vp->WorkSize.y));
         s.custom_size.x = std::clamp(s.custom_size.x, least.x, vp->WorkSize.x);
         s.custom_size.y = std::clamp(s.custom_size.y, least.y, vp->WorkSize.y);
@@ -2107,10 +2195,12 @@ void settings_panel(bool *open) {
         if ((pressed(ImGuiKey_GamepadFaceUp) || (ImGui::GetIO().KeyCtrl && pressed(ImGuiKey_S))) && dirty() &&
             !s.dropdown.open)
             s.command = Command::Save;
+        const std::vector<int> &shown = shown_pages();
+        int nshown = (int)shown.size();
         if (pressed(ImGuiKey_GamepadR1))
-            first_page((s.page + 1) % PAGES);
+            first_page(shown[(shown_index(s.page) + 1) % nshown]);
         if (pressed(ImGuiKey_GamepadL1))
-            first_page((s.page + PAGES - 1) % PAGES);
+            first_page(shown[(shown_index(s.page) + nshown - 1) % nshown]);
         const char *pages[] = {"Display", "Graphics & Audio", "Controls", "Network", "Misc", "Mods", "Cheats", "Menu Options"
 #ifdef __ANDROID__
                                , "Android"
@@ -2123,10 +2213,10 @@ void settings_panel(bool *open) {
         ImGui::SetCursorScreenPos(tabs_start);
         float gutter = fw * 2.1f;
         float tabs_width = avail - gutter * 2;
-        int columns = tabs_width / fw < 50 ? 4 : PAGES;
+        int columns = tabs_width / fw < 50 ? std::min(4, nshown) : nshown;
         float tabw = (tabs_width - ImGui::GetStyle().ItemSpacing.x * (columns - 1)) / columns;
-        float tabh = fw * (columns == PAGES ? 2.7f : 2.1f);
-        int lines = (PAGES + columns - 1) / columns;
+        float tabh = fw * (columns == nshown ? 2.7f : 2.1f);
+        int lines = (nshown + columns - 1) / columns;
         float header_height = tabh * lines + ImGui::GetStyle().ItemSpacing.y * (lines - 1);
         auto *header = ImGui::GetWindowDrawList();
         {  // (over the rows scrolled under the tabs; inside the border, with the window's rounded top corners - the
@@ -2145,8 +2235,9 @@ void settings_panel(bool *open) {
         SettingsIcons::draw(
             header, ImVec2(tabs_start.x + avail - fw * 1.5f, tabs_start.y + (header_height - fw) * .5f), fw,
             s.draft.button_icons, SettingsIcons::Right, 0);
-        for (int i = 0; i < PAGES; i++) {
-            if (i % columns)
+        for (int k = 0; k < nshown; k++) {
+            int i = shown[k];
+            if (k % columns)
                 ImGui::SameLine();
             else
                 ImGui::SetCursorPosX(tabs_start.x - ImGui::GetWindowPos().x + gutter);
@@ -2206,7 +2297,7 @@ void settings_panel(bool *open) {
                             : s.view == View::PadCapture
                                 ? fmt("Press the controller button for %s (%d s, Esc: cancel)", tr(pad_titles[s.capture_pad]),
                                       (int)std::max<int64_t>(0, PAD_CAPTURE_SECONDS - (int64_t)((SDL_GetTicksNS() - s.capture_pad_since) / 1000000000ull)))
-                                : tr(s.view == View::Exit         ? "Exit game?"
+                                : tr(s.view == View::Exit         ? "Do you really want to exit?\nIf you haven't saved the game, save it before you exit."
                                      : s.view == View::Restart    ? "Restart game?"
                                      : s.view == View::Reset      ? "Reset this tab?"
                                      : s.view == View::Move       ? "Move menu"
