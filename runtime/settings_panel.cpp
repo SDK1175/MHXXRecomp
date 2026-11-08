@@ -125,7 +125,16 @@ struct Theme {
     bool game;        // Hunter: the game's window frame (draw_frame), lines between the rows, a filled header
     ImU32 header;     // (game: the header band's colour)
 };
+bool launcher_mode;  // (mhxx-launcher: settings_panel_set_launcher)
 const Theme &theme() {
+    // the launcher: MHXX's own menus - deep navy, gold trim, the chosen row amber
+    static const Theme launcher = {IM_COL32(8, 16, 40, 222),     IM_COL32(214, 172, 86, 255),  IM_COL32(255, 255, 255, 6),
+                                   IM_COL32(120, 160, 255, 28),  IM_COL32(222, 150, 40, 120),  IM_COL32(0, 0, 0, 0),
+                                   IM_COL32(0, 0, 0, 0),         IM_COL32(232, 184, 86, 255),  IM_COL32(255, 216, 124, 255),
+                                   IM_COL32(242, 238, 228, 255), IM_COL32(176, 186, 210, 255), IM_COL32(112, 122, 148, 255),
+                                   IM_COL32(255, 124, 92, 255),  IM_COL32(214, 172, 86, 70),   IM_COL32(10, 20, 48, 250),
+                                   true,                         6.f};
+    if (launcher_mode) return launcher;
     static const Theme blue = {IM_COL32(6, 10, 17, 250),     IM_COL32(110, 217, 255, 255), IM_COL32(23, 33, 48, 255),
                                IM_COL32(38, 71, 99, 255),    IM_COL32(41, 82, 117, 255),   IM_COL32(15, 23, 36, 255),
                                IM_COL32(46, 102, 143, 255),  IM_COL32(111, 216, 255, 255), IM_COL32(111, 216, 255, 255),
@@ -482,8 +491,7 @@ void choices(const Row &row, std::vector<std::string> names, int selected, std::
 const char *ini(const char *key) { return key; }
 bool cold(const char *key) { return key && config_restart_key(key); }
 // mhxx-launcher (tools/launcher): the panel shows only what takes effect at the next start (and the mods), in the
-// area the launcher gives it, never closes, and has no exit rows
-bool launcher_mode;
+// area the launcher gives it, in the launcher's colours (theme()), never closes, and has no exit rows
 ImRect launcher_area;
 // The game: is mhxx-launcher next to it (Exit to launcher)?
 bool launcher_present() {

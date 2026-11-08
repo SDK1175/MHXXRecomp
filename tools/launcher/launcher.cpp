@@ -14,6 +14,7 @@
 #include <unistd.h>
 #endif
 #include <algorithm>
+#include <cfloat>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -25,6 +26,7 @@
 #include "imgui_impl_sdlrenderer3.h"
 #include "settings_locale.h"
 #include "settings_panel.h"
+#include "title_art.h"
 
 // ---------------------------------------------------------------- what the panel asks of the game (none here)
 extern "C" {
@@ -165,6 +167,84 @@ static bool make_shortcut(const char *, std::string &error) {
 }
 #endif
 
+// ---------------------------------------------------------------- the look (MHXX's menus: deep navy, gold trim,
+// amber for what matters)
+#define NAVY_TOP IM_COL32(14, 32, 78, 255)
+#define NAVY_BOTTOM IM_COL32(4, 10, 28, 255)
+#define GOLD IM_COL32(214, 172, 86, 255)
+#define GOLD_DARK IM_COL32(120, 88, 34, 255)
+static const ImVec4 GOLD_TEXT(.95f, .82f, .52f, 1), DIM_TEXT(.62f, .68f, .8f, 1);
+
+// a double gold line round a panel, with small diamonds at its corners
+static void gold_frame(ImDrawList *d, ImVec2 a, ImVec2 b, float s) {
+    d->AddRect(a, b, GOLD_DARK, 6 * s, 0, 3 * s);
+    d->AddRect(ImVec2(a.x + 4 * s, a.y + 4 * s), ImVec2(b.x - 4 * s, b.y - 4 * s), GOLD, 4 * s, 0, 1.2f * s);
+    const ImVec2 corners[4] = {a, ImVec2(b.x, a.y), b, ImVec2(a.x, b.y)};
+    for (const ImVec2 &c : corners) {
+        float r = 6 * s;
+        d->AddQuadFilled(ImVec2(c.x, c.y - r), ImVec2(c.x + r, c.y), ImVec2(c.x, c.y + r), ImVec2(c.x - r, c.y), GOLD);
+    }
+}
+// "name ........ value" with a gold diamond before it (value red when !good)
+static void status_line(ImDrawList *d, const char *name, const char *value, bool good, float s) {
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    float lh = ImGui::GetTextLineHeight(), r = 3.5f * s, cy = p.y + lh * .5f;
+    d->AddQuadFilled(ImVec2(p.x + r, cy - r), ImVec2(p.x + 2 * r, cy), ImVec2(p.x + r, cy + r), ImVec2(p.x, cy), GOLD);
+    ImGui::SetCursorScreenPos(ImVec2(p.x + 14 * s, p.y));
+    ImGui::TextColored(ImVec4(.8f, .84f, .92f, 1), "%s", name);
+    float vw = ImGui::CalcTextSize(value).x;
+    ImGui::SameLine(ImGui::GetContentRegionMax().x - vw);
+    ImGui::TextColored(good ? GOLD_TEXT : ImVec4(1, .55f, .4f, 1), "%s", value);
+}
+// a thin gold rule with a diamond in its middle
+static void divider(ImDrawList *d, float width, float s) {
+    ImGui::Dummy(ImVec2(0, 6 * s));
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    float y = p.y + 4 * s, mid = p.x + width * .5f, r = 4 * s;
+    d->AddLine(ImVec2(p.x, y), ImVec2(mid - r * 2, y), GOLD_DARK, 1.5f * s);
+    d->AddLine(ImVec2(mid + r * 2, y), ImVec2(p.x + width, y), GOLD_DARK, 1.5f * s);
+    d->AddQuadFilled(ImVec2(mid, y - r), ImVec2(mid + r, y), ImVec2(mid, y + r), ImVec2(mid - r, y), GOLD);
+    ImGui::Dummy(ImVec2(width, 14 * s));
+}
+// MHXX-like buttons: amber with a gold edge (primary), else navy with a gold edge; brighter under the mouse
+static bool hunter_button(const char *id, const char *label, ImVec2 size, bool primary, bool enabled, float s) {
+    ImGui::PushID(id);
+    ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + size.x, a.y + size.y);
+    bool pressed = ImGui::InvisibleButton("##b", size) && enabled;
+    bool hover = enabled && ImGui::IsItemHovered(), held = enabled && ImGui::IsItemActive();
+    ImDrawList *d = ImGui::GetWindowDrawList();
+    float r = 5 * s;
+    ImU32 top, bottom, text;
+    if (!enabled) top = IM_COL32(50, 54, 64, 230), bottom = IM_COL32(32, 34, 42, 230), text = IM_COL32(130, 132, 140, 255);
+    else if (primary)
+        top = held ? IM_COL32(200, 120, 20, 255) : hover ? IM_COL32(255, 196, 80, 255) : IM_COL32(242, 172, 52, 255),
+        bottom = held ? IM_COL32(150, 80, 10, 255) : hover ? IM_COL32(214, 128, 28, 255) : IM_COL32(184, 104, 18, 255),
+        text = IM_COL32(28, 18, 6, 255);
+    else
+        top = hover ? IM_COL32(40, 70, 140, 240) : IM_COL32(24, 44, 96, 235),
+        bottom = hover ? IM_COL32(18, 34, 80, 240) : IM_COL32(10, 22, 54, 235), text = IM_COL32(240, 226, 190, 255);
+    if (hover && primary) d->AddRectFilled(ImVec2(a.x - 4 * s, a.y - 4 * s), ImVec2(b.x + 4 * s, b.y + 4 * s),
+                                           IM_COL32(255, 190, 70, 60), r + 4 * s);
+    d->AddRectFilledMultiColor(ImVec2(a.x + 1, a.y + 1), ImVec2(b.x - 1, b.y - 1), top, top, bottom, bottom);
+    d->AddRect(a, b, enabled ? GOLD : IM_COL32(90, 90, 96, 255), r, 0, 2 * s);
+    d->AddLine(ImVec2(a.x + 6 * s, a.y + 3 * s), ImVec2(b.x - 6 * s, a.y + 3 * s), IM_COL32(255, 255, 255, primary ? 90 : 40), 1 * s);
+    float fs = ImGui::GetFontSize() * (primary ? 1.35f : 1.05f);
+    ImVec2 ts = ImGui::GetFont()->CalcTextSizeA(fs, FLT_MAX, 0, label);
+    ImVec2 tp(a.x + (size.x - ts.x) * .5f, a.y + (size.y - ts.y) * .5f);
+    if (primary && enabled) d->AddText(ImGui::GetFont(), fs, ImVec2(tp.x + 1, tp.y + 1), IM_COL32(255, 230, 170, 120), label);
+    d->AddText(ImGui::GetFont(), fs, tp, text, label);
+    ImGui::PopID();
+    return pressed;
+}
+
+// the title screen, soft, covering the window (16:9, centred)
+static void draw_background(SDL_Renderer *rd, const TitleArt &art, int w, int h) {
+    if (!art.background) return;
+    float sc = std::max((float)w / 1920.f, (float)h / 1080.f);
+    SDL_FRect r = {(w - 1920 * sc) * .5f, (h - 1080 * sc) * .5f, 1920 * sc, 1080 * sc};
+    SDL_RenderTexture(rd, art.background, nullptr, &r);
+}
+
 static bool start_game(std::string &error) {
     const char *base = SDL_GetBasePath();
     std::string exe = std::string(base ? base : "") + "mhgurecomp"
@@ -217,26 +297,64 @@ int main(int argc, char **argv) {
     ImGui::GetStyle().ScaleAllSizes(scale);
     ImFontConfig cfg;
     cfg.SizePixels = 18 * scale;
-    io.Fonts->AddFontDefaultVector(&cfg);
-    if (const char *ko = korean_font()) {
-        ImFontConfig merge;
-        merge.MergeMode = true;
-        io.Fonts->AddFontFromFileTTF(ko, 18 * scale, &merge);
-    }
+    // (the system's Hangul font for everything - Malgun Gothic on Windows - else ImGui's own)
+    const char *ko = korean_font();
+    if (!ko || !io.Fonts->AddFontFromFileTTF(ko, 19 * scale)) io.Fonts->AddFontDefaultVector(&cfg);
     ImGui_ImplSDL3_InitForSDLRenderer(win, rd);
     ImGui_ImplSDLRenderer3_Init(rd);
+    TitleArt art;
+    title_art_load(rd, g_game_dir, &art);  // (from the player's own game files; none: the plain navy look)
+    {
+        ImGuiStyle &st = ImGui::GetStyle();  // (the dialogs and anything else ImGui draws: the same navy and gold)
+        st.WindowRounding = 6 * scale, st.FrameRounding = 4 * scale, st.WindowBorderSize = 1.5f;
+        st.Colors[ImGuiCol_WindowBg] = ImVec4(.04f, .08f, .19f, .94f);
+        st.Colors[ImGuiCol_Border] = ImVec4(.84f, .67f, .34f, .9f);
+        st.Colors[ImGuiCol_FrameBg] = ImVec4(.08f, .14f, .3f, 1);
+        st.Colors[ImGuiCol_Button] = ImVec4(.1f, .18f, .38f, 1);
+        st.Colors[ImGuiCol_ButtonHovered] = ImVec4(.85f, .6f, .2f, 1);
+        st.Colors[ImGuiCol_ButtonActive] = ImVec4(.7f, .45f, .12f, 1);
+        st.Colors[ImGuiCol_Text] = ImVec4(.95f, .93f, .88f, 1);
+        st.Colors[ImGuiCol_NavCursor] = ImVec4(.95f, .75f, .35f, 1);
+        st.Colors[ImGuiCol_TextSelectedBg] = ImVec4(.85f, .6f, .2f, .45f);
+    }
 
     char exefs[64];
     SDL_snprintf(exefs, sizeof exefs, "%s/exefs/main", g_game_dir);
     bool have_game = SDL_GetPathInfo(exefs, nullptr);
     std::string error;
     bool open = true, quit = false, start = false;
+    std::string mods_text, pack_text;  // (the left column's summary: counted once)
+    {
+        int n = 0, mods = 0, pngs = 0;
+        char **e = SDL_GlobDirectory("mods", "*", 0, &n);
+        for (int i = 0; e && i < n; i++)
+            if (!strchr(e[i], '/') && !strchr(e[i], '\\')) {
+                SDL_PathInfo info;
+                std::string p = std::string("mods/") + e[i];
+                if (SDL_GetPathInfo(p.c_str(), &info) && info.type == SDL_PATHTYPE_DIRECTORY) mods++;
+            }
+        SDL_free(e);
+        e = SDL_GlobDirectory("textures/load", nullptr, 0, &n);
+        for (int i = 0; e && i < n; i++) {
+            size_t l = strlen(e[i]);
+            if (l > 4 && SDL_strcasecmp(e[i] + l - 4, ".png") == 0) pngs++;
+        }
+        SDL_free(e);
+        char buf[64];
+        SDL_snprintf(buf, sizeof buf, tr("%d installed"), mods);
+        mods_text = mods ? buf : tr("None");
+        SDL_snprintf(buf, sizeof buf, tr("%d textures"), pngs);
+        pack_text = pngs ? buf : tr("None");
+    }
 #ifdef _WIN32
     bool ask_shortcut = !shortcut_asked();
 #else
     bool ask_shortcut = false;
 #endif
     char shortcut_name[128] = "MHXX Recomp";
+    const char *shot = SDL_getenv("MHXX_LAUNCHER_SHOT");
+    int frames = 0;
+    if (shot) ask_shortcut = SDL_getenv("MHXX_LAUNCHER_SHOT_ASK") != nullptr;
     bool name_focus = true;
     while (!quit) {
         SDL_Event e;
@@ -255,7 +373,7 @@ int main(int argc, char **argv) {
                                      g_config.save_location[0] ? g_config.save_location : nullptr, false);
         int w, h;
         SDL_GetWindowSize(win, &w, &h);
-        float side = 300 * scale, pad = 16 * scale;
+        float pad = 18 * scale, side = std::clamp(w * .34f, 340 * scale, 460 * scale);
         settings_panel_set_launcher(side + pad, pad, w - side - pad * 2, h - pad * 2);
         open = true;
         if (!ask_shortcut) settings_panel_before_frame(open);
@@ -264,31 +382,47 @@ int main(int argc, char **argv) {
         ImGui::NewFrame();
 
         if (ask_shortcut) {  // the first start: a desktop shortcut? (its name can be changed)
-            float dw = std::min(560 * scale, (float)w - pad * 2);
+            float dw = std::min(620 * scale, (float)w - pad * 2);
             ImGui::SetNextWindowPos(ImVec2(w * .5f, h * .5f), ImGuiCond_Always, ImVec2(.5f, .5f));
             ImGui::SetNextWindowSize(ImVec2(dw, 0));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28 * scale, 24 * scale));
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(.03f, .07f, .17f, .95f));
             ImGui::Begin("##shortcut", nullptr,
                          ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                              ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
                              ImGuiWindowFlags_AlwaysAutoResize);
-            ImGui::TextWrapped("%s", tr("Make a shortcut to the launcher on the desktop?"));
-            ImGui::Spacing();
-            ImGui::TextUnformatted(tr("Shortcut name"));
+            ImDrawList *dd = ImGui::GetWindowDrawList();
+            float cw2 = ImGui::GetContentRegionAvail().x;
+            ImGui::SetWindowFontScale(1.2f);
+            ImGui::TextColored(GOLD_TEXT, "%s", tr("Make a shortcut to the launcher on the desktop?"));
+            ImGui::SetWindowFontScale(1.0f);
+            divider(dd, cw2, scale);
+            ImGui::TextColored(DIM_TEXT, "%s", tr("Shortcut name"));
             ImGui::SetNextItemWidth(-1);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10 * scale, 8 * scale));
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(.07f, .13f, .28f, 1));
+            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(.84f, .67f, .34f, 1));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.2f * scale);
             if (name_focus) ImGui::SetKeyboardFocusHere(), name_focus = false;
             bool enter = ImGui::InputText("##name", shortcut_name, sizeof shortcut_name,
                                           ImGuiInputTextFlags_EnterReturnsTrue);
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(2);
             if (!error.empty()) {
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .55f, .4f, 1));
                 ImGui::TextWrapped("%s", error.c_str());
                 ImGui::PopStyleColor();
             }
-            ImGui::Spacing();
-            float bw2 = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * .5f;
-            bool yes = ImGui::Button(tr("Yes"), ImVec2(bw2, ImGui::GetFrameHeight() * 1.6f)) || enter;
-            ImGui::SameLine();
-            bool no = ImGui::Button(tr("No"), ImVec2(bw2, ImGui::GetFrameHeight() * 1.6f));
+            ImGui::Dummy(ImVec2(0, 10 * scale));
+            float bw2 = (cw2 - 12 * scale) * .5f, bh2 = ImGui::GetFrameHeight() * 1.7f;
+            bool yes = hunter_button("yes", tr("Yes"), ImVec2(bw2, bh2), true, true, scale) || enter;
+            ImGui::SameLine(0, 12 * scale);
+            bool no = hunter_button("no", tr("No"), ImVec2(bw2, bh2), false, true, scale);
+            ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
+            gold_frame(ImGui::GetForegroundDrawList(), wp, ImVec2(wp.x + ws.x, wp.y + ws.y), scale);
             ImGui::End();
+            ImGui::PopStyleColor();
+            ImGui::PopStyleVar();
             if (yes) {
                 std::string why;
                 if (make_shortcut(shortcut_name, why)) {
@@ -307,50 +441,100 @@ int main(int argc, char **argv) {
             }
             ImGui::Render();
             SDL_SetRenderScale(rd, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
-            SDL_SetRenderDrawColor(rd, 18, 20, 24, 255);
+            SDL_SetRenderDrawColor(rd, 4, 10, 28, 255);
             SDL_RenderClear(rd);
+            draw_background(rd, art, w, h);
             ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), rd);
+            if (shot && ++frames == 20) {
+                if (SDL_Surface *sf = SDL_RenderReadPixels(rd, nullptr)) SDL_SavePNG(sf, shot), SDL_DestroySurface(sf);
+                quit = true;
+            }
             SDL_RenderPresent(rd);
             continue;
         }
 
-        // the left column: the game, Start game, Quit
-        ImGui::SetNextWindowPos(ImVec2(pad, pad));
-        ImGui::SetNextWindowSize(ImVec2(side - pad, h - pad * 2));
+        // ---- the look: the title screen behind everything, a hunter's notice board on the left
+        ImDrawList *bg = ImGui::GetBackgroundDrawList();
+        ImVec2 W((float)w, (float)h);
+        if (!art.background) {  // (with the picture: drawn by SDL before ImGui, draw_background)
+            bg->AddRectFilledMultiColor(ImVec2(0, 0), W, NAVY_TOP, NAVY_TOP, NAVY_BOTTOM, NAVY_BOTTOM);
+        }
+        bg->AddRectFilledMultiColor(ImVec2(0, W.y * .55f), W, IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0),
+                                    IM_COL32(0, 0, 0, 150), IM_COL32(0, 0, 0, 150));
+        ImVec2 c0(pad, pad), c1(side, W.y - pad);  // the left column
+        bg->AddRectFilled(c0, c1, IM_COL32(8, 16, 38, 205), 6 * scale);
+        if (art.emblem) {  // (the title menu's stone emblem, faint, at the column's foot)
+            float ew = (c1.x - c0.x) * .9f;
+            ImVec2 e0((c0.x + c1.x - ew) * .5f, c1.y - ew - 20 * scale);
+            bg->AddImage((ImTextureID)(intptr_t)art.emblem, e0, ImVec2(e0.x + ew, e0.y + ew), ImVec2(0, 0),
+                         ImVec2(1, 1), IM_COL32(255, 255, 255, 46));
+        }
+        gold_frame(bg, c0, c1, scale);
+
+        ImGui::SetNextWindowPos(ImVec2(c0.x + 14 * scale, c0.y + 10 * scale));
+        ImGui::SetNextWindowSize(ImVec2(c1.x - c0.x - 28 * scale, c1.y - c0.y - 20 * scale));
         ImGui::Begin("##launcher", nullptr,
                      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav);
-        ImGui::SetWindowFontScale(1.4f);
-        ImGui::TextWrapped("Monster Hunter XX");
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::TextDisabled("Nintendo Switch Ver. %s", "1.5.1");
-        ImGui::TextDisabled("MHXX Recomp");
-        ImGui::Separator();
-        ImGui::Spacing();
+                         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav |
+                         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
+        ImDrawList *dl = ImGui::GetWindowDrawList();
+        float cw = ImGui::GetContentRegionAvail().x;
+        if (art.logo) {
+            float lh = cw * art.logo_h / art.logo_w;
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            dl->AddImage((ImTextureID)(intptr_t)art.logo, p, ImVec2(p.x + cw, p.y + lh));
+            ImGui::Dummy(ImVec2(cw, lh));
+        } else {
+            ImGui::SetWindowFontScale(1.6f);
+            ImGui::TextColored(GOLD_TEXT, "MONSTER HUNTER XX");
+            ImGui::SetWindowFontScale(1.0f);
+        }
+        ImGui::TextColored(GOLD_TEXT, "Nintendo Switch Ver. 1.5.1");
+        ImGui::TextColored(DIM_TEXT, "MHXX Recomp");
+        divider(dl, cw, scale);
+        status_line(dl, tr("Game files"), have_game ? tr("Found") : tr("Missing"), have_game, scale);
+        status_line(dl, tr("Mods"), mods_text.c_str(), true, scale);
+        status_line(dl, tr("Texture pack"), pack_text.c_str(), true, scale);
+        divider(dl, cw, scale);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.88f, .9f, .95f, 1));
         ImGui::TextWrapped("%s", tr("Settings applied when the game starts. Everything else is in the game's settings menu (F1)."));
-        ImGui::Spacing();
+        ImGui::PopStyleColor();
         if (!have_game) {
+            ImGui::Spacing();
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .55f, .4f, 1));
             ImGui::TextWrapped("%s", tr("Game files not found: put the game's exefs and romfs folders in the data folder."));
             ImGui::PopStyleColor();
         }
-        float bw = ImGui::GetContentRegionAvail().x;
-        ImGui::SetCursorPosY(ImGui::GetWindowHeight() - (ImGui::GetFrameHeight() * 2.6f + ImGui::GetFrameHeight() * 1.6f) -
-                             ImGui::GetStyle().WindowPadding.y * 2);
-        if (!error.empty()) ImGui::TextWrapped("%s", error.c_str());
-        ImGui::BeginDisabled(!have_game);
-        if (ImGui::Button(tr("Start game"), ImVec2(bw, ImGui::GetFrameHeight() * 2.6f))) start = true;
-        ImGui::EndDisabled();
-        if (ImGui::Button(tr("Quit"), ImVec2(bw, ImGui::GetFrameHeight() * 1.6f))) quit = true;
+        float big = ImGui::GetFrameHeight() * 2.4f, small = ImGui::GetFrameHeight() * 1.5f, gap = 10 * scale;
+        float y = ImGui::GetWindowHeight() - big - small - gap - ImGui::GetStyle().WindowPadding.y * 2;
+        if (!error.empty()) {
+            ImGui::SetCursorPosY(y - ImGui::GetTextLineHeightWithSpacing() * 2.2f);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .55f, .4f, 1));
+            ImGui::TextWrapped("%s", error.c_str());
+            ImGui::PopStyleColor();
+        }
+        ImGui::SetCursorPosY(y);
+        if (hunter_button("start", tr("Start game"), ImVec2(cw, big), true, have_game, scale)) start = true;
+        ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
+        if (hunter_button("quit", tr("Quit"), ImVec2(cw, small), false, true, scale)) quit = true;
         ImGui::End();
+        if (have_game && ImGui::IsKeyPressed(ImGuiKey_GamepadStart, false)) start = true;  // (+ on the controller)
 
         settings_panel(&open);  // (the right: the settings, launcher mode)
 
         ImGui::Render();
         SDL_SetRenderScale(rd, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
-        SDL_SetRenderDrawColor(rd, 18, 20, 24, 255);
+        SDL_SetRenderDrawColor(rd, 4, 10, 28, 255);
         SDL_RenderClear(rd);
+        draw_background(rd, art, w, h);
         ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), rd);
+        if (shot && ++frames == 20) {  // (MHXX_LAUNCHER_SHOT=<file.png>: a picture of the launcher, then quit)
+            if (SDL_Surface *sf = SDL_RenderReadPixels(rd, nullptr)) {
+                SDL_SavePNG(sf, shot);
+                SDL_DestroySurface(sf);
+            }
+            quit = true;
+        }
         SDL_RenderPresent(rd);
 
         if (start) {

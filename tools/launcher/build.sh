@@ -8,9 +8,9 @@ O=${O:-obj}/launcher
 mkdir -p "$B" "$O"
 IM=third_party/cimgui/imgui
 INC="-Iruntime -Ithird_party/cimgui -I$IM -I$IM/backends"
-CXXSRC="tools/launcher/launcher.cpp runtime/settings_panel.cpp $IM/imgui.cpp $IM/imgui_draw.cpp $IM/imgui_tables.cpp \
+CXXSRC="tools/launcher/launcher.cpp tools/launcher/title_art.cpp runtime/settings_panel.cpp $IM/imgui.cpp $IM/imgui_draw.cpp $IM/imgui_tables.cpp \
 $IM/imgui_widgets.cpp $IM/backends/imgui_impl_sdl3.cpp $IM/backends/imgui_impl_sdlrenderer3.cpp"
-CSRC="runtime/config.c runtime/config_store.c runtime/modorder.c runtime/arcmerge.c"
+CSRC="runtime/config.c runtime/config_store.c runtime/modorder.c runtime/arcmerge.c runtime/nvn/tegra.c runtime/nvn/formats.c runtime/nvn/bcn.c"
 OBJS=
 for f in $CXXSRC; do
     o="$O/$(basename "$f").o"
@@ -31,7 +31,7 @@ done
 case "$(uname -s)" in
 MINGW*|MSYS*)
     clang++ -o "$B/mhxx-launcher.exe" $OBJS -fuse-ld=lld -mwindows -lSDL3 -static-libgcc -static-libstdc++ \
-        -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic -lole32 -luuid -lshell32 ;;
-*) clang++ -o "$B/mhxx-launcher" $OBJS -lSDL3 -lm -pthread ;;
+        -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic -lole32 -luuid -lshell32 -Wl,-Bstatic -lz -Wl,-Bdynamic ;;
+*) clang++ -o "$B/mhxx-launcher" $OBJS -lSDL3 -lz -lm -pthread ;;
 esac
 echo "built: $B/mhxx-launcher"
