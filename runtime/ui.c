@@ -123,6 +123,33 @@ static void fit_desktop(int *w, int *h) {
 // Full screen as the settings say (exclusive: the monitor mode closest to Resolution; else borderless desktop), or
 // windowed. The cursor only shows in a window, or over a menu or the chat box (they show it only as they open, so it
 // stays shown when full screen comes while one is open: F11, Alt+Enter).
+// The window black until the game's first frame (Windows shows a window nothing has drawn on as white). Through GDI,
+// loaded here (the game doesn't link it); elsewhere nothing to do.
+static void paint_black(void) {
+#ifdef _WIN32
+    void *hwnd = SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
+    SDL_SharedObject *user = SDL_LoadObject("user32.dll"), *gdi = SDL_LoadObject("gdi32.dll");
+    typedef struct { long l, t, r, b; } Rect;
+    void *(__stdcall *get_dc)(void *) = user ? (void *(__stdcall *)(void *))SDL_LoadFunction(user, "GetDC") : NULL;
+    int(__stdcall *release_dc)(void *, void *) =
+        user ? (int(__stdcall *)(void *, void *))SDL_LoadFunction(user, "ReleaseDC") : NULL;
+    int(__stdcall *client_rect)(void *, Rect *) =
+        user ? (int(__stdcall *)(void *, Rect *))SDL_LoadFunction(user, "GetClientRect") : NULL;
+    int(__stdcall *fill_rect)(void *, const Rect *, void *) =
+        user ? (int(__stdcall *)(void *, const Rect *, void *))SDL_LoadFunction(user, "FillRect") : NULL;
+    void *(__stdcall *stock_object)(int) = gdi ? (void *(__stdcall *)(int))SDL_LoadFunction(gdi, "GetStockObject") : NULL;
+    if (hwnd && get_dc && release_dc && client_rect && fill_rect && stock_object) {
+        Rect r;
+        void *dc = get_dc(hwnd);
+        if (dc && client_rect(hwnd, &r)) fill_rect(dc, &r, stock_object(4 /* BLACK_BRUSH */));
+        if (dc) release_dc(hwnd, dc);
+    }
+    // (user32 and gdi32 stay loaded: SDL uses them too, unloading only drops a count)
+    if (user) SDL_UnloadObject(user);
+    if (gdi) SDL_UnloadObject(gdi);
+#endif
+}
+
 static void set_fullscreen(bool on) {
     bool was = SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN;
     if (on && !was) SDL_GetWindowSize(window, &win_w, &win_h);
@@ -302,11 +329,19 @@ void ui_init(void) {
 #ifndef MHGU_NULL_BACKEND
     flags |= SDL_WINDOW_VULKAN;
 #endif
-    if (getenv("MHGU_HIDDEN")) flags |= SDL_WINDOW_HIDDEN;
+    // (hidden until it has its full-screen mode and is painted black: else, before the game shows its first frame, the
+    // window shows white - nothing has drawn on it yet - at its windowed size and then full screen)
+    bool hidden = getenv("MHGU_HIDDEN") != NULL;
+    flags |= SDL_WINDOW_HIDDEN;
     window = SDL_CreateWindow(GAME_NAME, win_w, win_h, flags);
     if (!window) FATAL("SDL_CreateWindow: %s\n", SDL_GetError());
     set_window_icon();
     if (g_config.display_mode != DISPLAY_WINDOWED) set_fullscreen(true);
+    if (!hidden) {
+        SDL_ShowWindow(window);
+        SDL_SyncWindow(window);
+        paint_black();
+    }
 }
 
 // Alt+Enter: windowed <-> the full-screen mode of the settings (Windowed in the settings: borderless).
