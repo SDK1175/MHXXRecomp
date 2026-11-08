@@ -4,7 +4,7 @@ usage: python tools/dist.py <build dir> <out dir> <windows|linux> <version> [--b
 
 Windows: <out>/Windows-MHXXRecomp.<version>.zip; Linux: <out>/Linux-MHXXRecomp.<version>.tar.gz (the programs
 keep their executable permission). Inside, one folder of the same name holds what a player copies: the game, its code
-library, the updater, the DLLs (Windows), pipelines.list, licenses/, bonus/system (--bonus: the donor save of the free downloads) and
+library, the launcher (mhxx-launcher: built by tools/launcher/build.sh, not make - run it before make dist), the updater, the DLLs (Windows), pipelines.list, licenses/, bonus/system (--bonus: the donor save of the free downloads) and
 the empty data/, mods/ and cheats/ folders, with a note in data/ of what goes there. Nothing else of the build folder:
 not its game files, mods, settings, caches or log. The updater (updater/updater.c) installs the same archive, leaving
 data/, mods/, cheats/ and bonus/ alone. Prints the archive's size and SHA-256: GitHub shows that digest for the upload.
@@ -24,15 +24,17 @@ DATA_NOTE = ('Put your own dump of Monster Hunter XX Nintendo Switch Ver. 1.5.1 
 def files(build, platform):
     """(path in the archive, file on disk, executable) of everything shipped from the build folder."""
     if platform == 'windows':
-        programs = ['mhgurecomp.exe', 'mhgugame.dll', 'mhgurecomp-updater.exe']
+        programs = ['mhgurecomp.exe', 'mhgugame.dll', 'mhxx-launcher.exe', 'mhgurecomp-updater.exe']
         extra = sorted(n for n in os.listdir(build) if n.lower().endswith('.dll') and n not in programs)
     else:
-        programs = ['mhgurecomp', 'mhgugame.so', 'mhgurecomp-updater']
+        programs = ['mhgurecomp', 'mhgugame.so', 'mhxx-launcher', 'mhgurecomp-updater']
         extra = []
     out = []
     for n in programs + extra:
         p = os.path.join(build, n)
         if not os.path.isfile(p):
+            if n.startswith('mhxx-launcher'):
+                sys.exit(f'dist: {p} is missing (sh tools/launcher/build.sh first)')
             sys.exit(f'dist: {p} is missing (make first)')
         out.append((n, p, n in programs))
     pl = os.path.join(build, 'pipelines.list')  # (the recorded pipelines a first run builds: make's pipelist)
