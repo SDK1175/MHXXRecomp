@@ -134,8 +134,7 @@ const Theme &theme() {
                                    IM_COL32(0, 0, 0, 0),         IM_COL32(232, 184, 86, 255),  IM_COL32(255, 216, 124, 255),
                                    IM_COL32(242, 238, 228, 255), IM_COL32(176, 186, 210, 255), IM_COL32(112, 122, 148, 255),
                                    IM_COL32(255, 124, 92, 255),  IM_COL32(214, 172, 86, 70),   IM_COL32(10, 20, 48, 250),
-                                   true,                         6.f,                          false,
-                                   0,                            true};
+                                   true,                         6.f};
     if (launcher_mode) return launcher;
     // Double Cross: the launcher's look in the game, the panel less see-through (over the game, not a picture)
     static const Theme xx = {IM_COL32(8, 16, 40, 242),     IM_COL32(214, 172, 86, 255),  IM_COL32(255, 255, 255, 6),
