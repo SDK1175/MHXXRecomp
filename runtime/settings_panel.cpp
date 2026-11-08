@@ -1775,6 +1775,10 @@ void navigate(std::vector<Row> &rows, bool list = false) {
 // Keep ImGui internals at this boundary: rows retain native activation and rendering.
 void own_focus(ImGuiWindow *w, ImGuiID id, const ImRect &rect) {
     ImGuiContext &g = *ImGui::GetCurrentContext();
+    // (mhxx-launcher: a press on one of its own buttons, beside the menu, keeps its window - focusing the menu would
+    // end the press before it is a click)
+    if (launcher_mode && g.ActiveId && g.ActiveIdWindow && g.ActiveIdWindow->RootWindow != w->RootWindow)
+        return;
     // Focus first: a click outside the menu leaves no focused window, and SetNavID asserts one
     ImGui::FocusWindow(w);
     ImGui::SetNavID(id, ImGuiNavLayer_Main, 0,
