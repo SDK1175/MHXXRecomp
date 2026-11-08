@@ -8,6 +8,7 @@
 #include <SDL3/SDL.h>
 
 #ifdef _WIN32
+#include <windows.h>
 #include <direct.h>
 #define chdir _chdir
 #else
@@ -245,6 +246,31 @@ static void draw_background(SDL_Renderer *rd, const TitleArt &art, int w, int h)
     SDL_RenderTexture(rd, art.background, nullptr, &r);
 }
 
+// Is the game running? (it holds the mutex Local\MHXXRecompRunning, runtime/ui.c)
+static bool game_running() {
+#ifdef _WIN32
+    HANDLE m = OpenMutexW(SYNCHRONIZE, FALSE, L"Local\\MHXXRecompRunning");
+    if (!m) return false;
+    CloseHandle(m);
+    return true;
+#else
+    return false;
+#endif
+}
+
+// A dark veil over everything that takes the mouse (behind a dialog, or while the game runs)
+static void veil(float w, float h, const char *id) {
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(w, h));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, .55f));
+    ImGui::Begin(id, nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImGui::End();
+    ImGui::PopStyleColor();
+}
+
 static bool start_game(std::string &error) {
     const char *base = SDL_GetBasePath();
     std::string exe = std::string(base ? base : "") + "mhgurecomp"
@@ -323,6 +349,8 @@ int main(int argc, char **argv) {
     bool have_game = SDL_GetPathInfo(exefs, nullptr);
     std::string error;
     bool open = true, quit = false, start = false;
+    bool confirm_quit = SDL_getenv("MHXX_LAUNCHER_SHOT") && SDL_getenv("MHXX_LAUNCHER_SHOT_QUIT"), running = false;
+    uint64_t running_checked = 0;
     std::string mods_text, pack_text;  // (the left column's summary: counted once)
     {
         int n = 0, mods = 0, pngs = 0;
@@ -360,9 +388,11 @@ int main(int argc, char **argv) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             ImGui_ImplSDL3_ProcessEvent(&e);
-            if (e.type == SDL_EVENT_QUIT || (e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && e.window.windowID == SDL_GetWindowID(win)))
-                quit = true;
-            if (e.type == SDL_EVENT_KEY_DOWN && !ask_shortcut) settings_panel_key(e.key.scancode);
+            if (e.type == SDL_EVENT_QUIT || (e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && e.window.windowID == SDL_GetWindowID(win))) {
+                if (!ask_shortcut && !running && settings_panel_dirty()) confirm_quit = true;  // (unsaved: ask)
+                else quit = true;
+            }
+            if (e.type == SDL_EVENT_KEY_DOWN && !ask_shortcut && !confirm_quit && !running) settings_panel_key(e.key.scancode);
         }
         if (SDL_GetWindowFlags(win) & SDL_WINDOW_MINIMIZED) {
             SDL_Delay(50);
@@ -376,7 +406,11 @@ int main(int argc, char **argv) {
         float pad = 18 * scale, side = std::clamp(w * .34f, 340 * scale, 460 * scale);
         settings_panel_set_launcher(side + pad, pad, w - side - pad * 2, h - pad * 2);
         open = true;
-        if (!ask_shortcut) settings_panel_before_frame(open);
+        if (SDL_GetTicks() - running_checked > 1000 || !running_checked) {  // (once a second)
+            running_checked = SDL_GetTicks();
+            running = game_running();
+        }
+        if (!ask_shortcut && !confirm_quit && !running) settings_panel_before_frame(open);
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
@@ -493,6 +527,7 @@ int main(int argc, char **argv) {
         ImGui::TextColored(DIM_TEXT, "MHXX Recomp");
         divider(dl, cw, scale);
         status_line(dl, tr("Game files"), have_game ? tr("Found") : tr("Missing"), have_game, scale);
+        status_line(dl, tr("Game"), running ? tr("Running") : tr("Not running"), !running, scale);
         status_line(dl, tr("Mods"), mods_text.c_str(), true, scale);
         status_line(dl, tr("Texture pack"), pack_text.c_str(), true, scale);
         divider(dl, cw, scale);
@@ -514,13 +549,75 @@ int main(int argc, char **argv) {
             ImGui::PopStyleColor();
         }
         ImGui::SetCursorPosY(y);
-        if (hunter_button("start", tr("Start game"), ImVec2(cw, big), true, have_game, scale)) start = true;
+        bool can_start = have_game && !running && !confirm_quit;
+        if (hunter_button("start", tr(running ? "Game is running" : "Start game"), ImVec2(cw, big), true, can_start, scale))
+            start = true;
         ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
-        if (hunter_button("quit", tr("Quit"), ImVec2(cw, small), false, true, scale)) quit = true;
+        if (hunter_button("quit", tr("Quit"), ImVec2(cw, small), false, !confirm_quit, scale)) {
+            if (!running && settings_panel_dirty()) confirm_quit = true;
+            else quit = true;
+        }
         ImGui::End();
-        if (have_game && ImGui::IsKeyPressed(ImGuiKey_GamepadStart, false)) start = true;  // (+ on the controller)
+        if (can_start && ImGui::IsKeyPressed(ImGuiKey_GamepadStart, false)) start = true;  // (+ on the controller)
 
-        settings_panel(&open);  // (the right: the settings, launcher mode)
+        if (!running) settings_panel(&open);  // (the right: the settings, launcher mode; not while the game runs)
+
+        if (running) {  // the game is running: its settings are its own until it closes
+            veil((float)w, (float)h, "##veil_running");
+            ImGui::SetNextWindowPos(ImVec2(side + pad + (w - side - pad * 2) * .5f, h * .5f), ImGuiCond_Always, ImVec2(.5f, .5f));
+            ImGui::SetNextWindowSize(ImVec2(std::min(520 * scale, (float)w - side - pad * 3), 0));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28 * scale, 24 * scale));
+            ImGui::Begin("##running", nullptr,
+                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoNav);
+            ImGui::SetWindowFontScale(1.2f);
+            ImGui::TextColored(GOLD_TEXT, "%s", tr("The game is running"));
+            ImGui::SetWindowFontScale(1.0f);
+            divider(ImGui::GetWindowDrawList(), ImGui::GetContentRegionAvail().x, scale);
+            ImGui::TextWrapped("%s", tr("Change these settings after closing the game (or in the game's settings menu, F1). The game saves its own settings and would overwrite changes made here."));
+            ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
+            gold_frame(ImGui::GetForegroundDrawList(), wp, ImVec2(wp.x + ws.x, wp.y + ws.y), scale);
+            ImGui::End();
+            ImGui::PopStyleVar();
+        }
+        int quit_choice = -1;  // unsaved changes at Quit: 0 save and quit, 1 quit without saving, 2 cancel
+        if (confirm_quit) {
+            veil((float)w, (float)h, "##veil_quit");
+            ImGui::SetNextWindowPos(ImVec2(w * .5f, h * .5f), ImGuiCond_Always, ImVec2(.5f, .5f));
+            ImGui::SetNextWindowSize(ImVec2(std::min(640 * scale, (float)w - pad * 2), 0));
+            ImGui::SetNextWindowFocus();
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28 * scale, 24 * scale));
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(.03f, .07f, .17f, .97f));
+            ImGui::Begin("##quit", nullptr,
+                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+            float qw = ImGui::GetContentRegionAvail().x;
+            ImGui::SetWindowFontScale(1.2f);
+            ImGui::TextColored(GOLD_TEXT, "%s", tr("There are unsaved changes. Save them?"));
+            ImGui::SetWindowFontScale(1.0f);
+            divider(ImGui::GetWindowDrawList(), qw, scale);
+            float bw3 = (qw - 24 * scale) / 3, bh3 = ImGui::GetFrameHeight() * 1.7f;
+            if (hunter_button("q.save", tr("Save and quit"), ImVec2(bw3, bh3), true, true, scale)) quit_choice = 0;
+            ImGui::SameLine(0, 12 * scale);
+            if (hunter_button("q.discard", tr("Quit without saving"), ImVec2(bw3, bh3), false, true, scale)) quit_choice = 1;
+            ImGui::SameLine(0, 12 * scale);
+            if (hunter_button("q.cancel", tr("Cancel"), ImVec2(bw3, bh3), false, true, scale) ||
+                ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight))
+                quit_choice = 2;
+            ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
+            gold_frame(ImGui::GetForegroundDrawList(), wp, ImVec2(wp.x + ws.x, wp.y + ws.y), scale);
+            ImGui::End();
+            ImGui::PopStyleColor();
+            ImGui::PopStyleVar();
+        }
+        if (quit_choice == 0) {
+            if (settings_panel_save_now()) quit = true;
+            else error = tr("Could not save the settings."), confirm_quit = false;
+        } else if (quit_choice == 1) {
+            quit = true;
+        } else if (quit_choice == 2) {
+            confirm_quit = false;
+        }
 
         ImGui::Render();
         SDL_SetRenderScale(rd, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);

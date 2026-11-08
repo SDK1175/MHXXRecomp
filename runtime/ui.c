@@ -4,6 +4,7 @@
 // Display mode, size and the 3D resolution come from the settings (runtime/config.c, mhgurecomp.ini).
 #include "game/game.h"
 #include <stdlib.h>
+#include <wchar.h>
 
 #include <SDL3/SDL.h>
 
@@ -265,6 +266,12 @@ void ui_init(void) {
         SDL_GetCurrentVideoDriver());
 #endif
     config_load();
+#ifdef _WIN32
+    {  // (mhxx-launcher: while this is there the game is running, and the launcher won't change its settings)
+        extern __declspec(dllimport) void *__stdcall CreateMutexW(void *, int, const wchar_t *);
+        CreateMutexW(NULL, 0, L"Local\\MHXXRecompRunning");
+    }
+#endif
 #ifdef __ANDROID__
     if (g_config.save_dir[0]) g_save_dir = g_config.save_dir;  // ([Android] SaveFolder: MHGU_SAVE_DIR still wins, fs.c)
     android_config_loaded();
