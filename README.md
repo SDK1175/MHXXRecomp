@@ -1,6 +1,15 @@
-> **MHXX Recomp (fork):** this branch ports MHGU Recomp to *Monster Hunter XX Nintendo Switch Ver.* (Japan) 1.5.1,
-> including the Korean fan translation as a RomFS mod. **Not playable yet.** Status and plan (Korean):
-> [docs/MHXX.md](docs/MHXX.md). Everything below is the original MHGU Recomp documentation.
+> **MHXX Recomp (fork):** this branch ports [MHGU Recomp](https://github.com/morerokk/MHGURecomp) to *Monster Hunter
+> XX Nintendo Switch Ver.* (Japan) 1.5.1, including the Korean fan translation as a RomFS mod. Playable; status (Korean):
+> [docs/MHXX.md](docs/MHXX.md), player manual (Korean): [docs/manual.md](docs/manual.md), changes:
+> [docs/changelog](docs/changelog). Everything below is the original MHGU Recomp documentation; its releases, badges
+> and issue links are MHGU Recomp's - please don't report MHXX problems there.
+>
+> **몬스터헌터 더블크로스 PC 포팅 (MHGU Recomp 포크).** 게임 파일, 키, 한글패치는 들어 있지 않습니다. 본인 스위치에서
+> 뽑은 본인 소유의 게임(일본판 + 1.5.1 업데이트)이 필요하며, 이 프로젝트는 뽑는 방법을 안내하지 않고 게임 파일, 키,
+> 그 링크를 제공하지 않습니다. 한글패치는 제작자가 배포하는 곳에서 따로 받으세요. 고해상도 텍스처도 배포하지 않으며,
+> 런처가 본인 게임 파일로 본인 PC에서 만듭니다. 이 프로젝트는 캡콤, 닌텐도와 관련이 없고 승인받지 않았습니다. 몬스터헌터는
+> 캡콤의 상표입니다. 이 저장소의 코드는 원본과 같은 MIT 라이선스이며, 게임 코드와 빌드가 만드는 재컴파일된 게임 코드
+> (`mhgugame.dll`)에는 적용되지 않습니다.
 
 <p align="center"><img src="docs/images/logo.webp" alt="GU Recomp" width="481"></p>
 
