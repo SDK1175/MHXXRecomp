@@ -123,7 +123,7 @@ typedef struct {
 #define LDN_DEFAULT_SERVER ""
 enum { UPDATES_ASK, UPDATES_AUTO, UPDATES_OFF };
 enum { BATTERY_OFF, BATTERY_WITH_FPS, BATTERY_ALONE };
-enum { THEME_GOLD, THEME_BLUE, THEME_HUNTER };  // [Application] Theme
+enum { THEME_GOLD, THEME_BLUE, THEME_HUNTER, THEME_XX };  // [Application] Theme
 enum { UI_CENTER = 1, UI_21_9, UI_32_9, UI_EDGES };  // the middle 16:9, 21:9, 32:9, the picture's sides
 enum { FSR_NATIVE, FSR_QUALITY, FSR_BALANCED, FSR_PERFORMANCE, FSR_ULTRA_PERFORMANCE };  // output / render: 1, 1.5, 1.7, 2, 3
 

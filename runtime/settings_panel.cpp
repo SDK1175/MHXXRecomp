@@ -124,6 +124,7 @@ struct Theme {
     float rounding;   // of the window, the rows and the tabs
     bool game;        // Hunter: the game's window frame (draw_frame), lines between the rows, a filled header
     ImU32 header;     // (game: the header band's colour)
+    bool xx = false;  // Double Cross: MHXX's own menus - a double gold frame with diamonds on its corners (draw_frame)
 };
 bool launcher_mode;  // (mhxx-launcher: settings_panel_set_launcher)
 const Theme &theme() {
@@ -133,8 +134,18 @@ const Theme &theme() {
                                    IM_COL32(0, 0, 0, 0),         IM_COL32(232, 184, 86, 255),  IM_COL32(255, 216, 124, 255),
                                    IM_COL32(242, 238, 228, 255), IM_COL32(176, 186, 210, 255), IM_COL32(112, 122, 148, 255),
                                    IM_COL32(255, 124, 92, 255),  IM_COL32(214, 172, 86, 70),   IM_COL32(10, 20, 48, 250),
-                                   true,                         6.f};
+                                   true,                         6.f,                          false,
+                                   0,                            true};
     if (launcher_mode) return launcher;
+    // Double Cross: the launcher's look in the game, the panel less see-through (over the game, not a picture)
+    static const Theme xx = {IM_COL32(8, 16, 40, 242),     IM_COL32(214, 172, 86, 255),  IM_COL32(255, 255, 255, 6),
+                             IM_COL32(120, 160, 255, 28),  IM_COL32(222, 150, 40, 120),  IM_COL32(0, 0, 0, 0),
+                             IM_COL32(0, 0, 0, 0),         IM_COL32(232, 184, 86, 255),  IM_COL32(255, 216, 124, 255),
+                             IM_COL32(242, 238, 228, 255), IM_COL32(176, 186, 210, 255), IM_COL32(112, 122, 148, 255),
+                             IM_COL32(255, 124, 92, 255),  IM_COL32(214, 172, 86, 70),   IM_COL32(10, 20, 48, 252),
+                             true,                         6.f,                          false,
+                             0,                            true};
+    if (s.draft.menu_theme == THEME_XX) return xx;
     static const Theme blue = {IM_COL32(6, 10, 17, 250),     IM_COL32(110, 217, 255, 255), IM_COL32(23, 33, 48, 255),
                                IM_COL32(38, 71, 99, 255),    IM_COL32(41, 82, 117, 255),   IM_COL32(15, 23, 36, 255),
                                IM_COL32(46, 102, 143, 255),  IM_COL32(111, 216, 255, 255), IM_COL32(111, 216, 255, 255),
@@ -1371,7 +1382,7 @@ std::vector<Row> main_rows() {
         header(r, "look.header", tr("Appearance"));
         add_choice(r, "language", "Language", c.language, {"English", "Español", "한국어"},
                    [](int v) { c.language = v; }, ini("Language"));
-        add_choice(r, "theme", "Menu theme", c.menu_theme, {tr("Gold"), tr("Blue"), tr("Hunter")},
+        add_choice(r, "theme", "Menu theme", c.menu_theme, {tr("Gold"), tr("Blue"), tr("Hunter"), tr("Double Cross")},
                    [](int v) { c.menu_theme = v; }, ini("Theme"));
         number(r, "scale", "Interface scale (%)", &c.menu_scale, (int)lo("MenuScale"), (int)hi("MenuScale"), 10, ini("MenuScale"));
         action(r, "detach", tr(s.floating ? "Attach menu" : "Detach menu"),
@@ -1635,12 +1646,17 @@ std::vector<Row> rows_for_view(bool *open) {
             s.position_override = true;
             pop();
         });
-    } else if (s.view == View::Exit) {  // Exit to the desktop / the launcher: Yes, No
-        action(r, "dialog.yes", tr("Yes"), []() {
+    } else if (s.view == View::Exit) {  // Exit: to the launcher (when there is one), to the desktop, or not
+        auto leave = [](int to) {
             if ((dirty() || pending_text()) && !save()) return;  // (the settings changed in the menu: kept)
-            if (s.leave_to == 1) ui_request_exit_to_launcher();
+            if (to == 1) ui_request_exit_to_launcher();
             else ui_request_action(false);
-        });
+        };
+        if (launcher_present()) {
+            action(r, "dialog.launcher", tr("Exit to launcher"), [leave]() { leave(1); });
+            action(r, "dialog.yes", tr("Exit to desktop"), [leave]() { leave(0); });
+        } else
+            action(r, "dialog.yes", tr("Yes"), [leave]() { leave(0); });
         action(r, "dialog.cancel", tr("No"), []() { pop(); });
     } else {
         action(r, "dialog.cancel", tr("Cancel"), []() { pop(); });
@@ -1945,6 +1961,20 @@ void draw_dropdown(std::vector<Row> &options, float scale, float base) {
 // Hunter's window frame, over the rest: a red rule with a green one inside it along the top and the bottom, and a gold
 // square on each corner
 void draw_frame(ImGuiWindow *w, const Theme &look) {
+    if (look.xx) {  // (Double Cross: dark gold outside, bright gold inside it, a gold diamond on each corner)
+        const ImU32 gold = IM_COL32(214, 172, 86, 255), dark = IM_COL32(140, 104, 40, 255);
+        float k = std::max(1.f, ImGui::GetFontSize() / 18.f), r = 6 * k;
+        ImVec2 a = w->Pos, z(w->Pos.x + w->Size.x, w->Pos.y + w->Size.y);
+        w->DrawList->PushClipRectFullScreen();
+        w->DrawList->AddRect(a, z, dark, w->WindowRounding, 0, 3 * k);
+        w->DrawList->AddRect(ImVec2(a.x + 4 * k, a.y + 4 * k), ImVec2(z.x - 4 * k, z.y - 4 * k), gold,
+                             std::max(0.f, w->WindowRounding - 2 * k), 0, 1.2f * k);
+        for (ImVec2 c : {a, ImVec2(z.x, a.y), z, ImVec2(a.x, z.y)})
+            w->DrawList->AddQuadFilled(ImVec2(c.x, c.y - r), ImVec2(c.x + r, c.y), ImVec2(c.x, c.y + r),
+                                       ImVec2(c.x - r, c.y), gold);
+        w->DrawList->PopClipRect();
+        return;
+    }
     if (!look.game)
         return;
     const ImU32 red = IM_COL32(176, 34, 30, 255), green = IM_COL32(80, 142, 54, 255), gold = IM_COL32(222, 190, 40, 255);
@@ -2170,9 +2200,9 @@ void settings_panel(bool *open) {
     ImGui::PushStyleColor(ImGuiCol_Text, vec(look.text));
     ImGui::PushStyleColor(ImGuiCol_Border, vec(look.edge));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,
-                        look.bar ? 12.f : look.game ? 0.f : ImGui::GetStyle().WindowRounding);
+                        look.xx ? 6.f : look.bar ? 12.f : look.game ? 0.f : ImGui::GetStyle().WindowRounding);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,
-                        look.bar ? 1.5f : look.game ? 2.f : ImGui::GetStyle().WindowBorderSize);
+                        look.xx ? 0.f : look.bar ? 1.5f : look.game ? 2.f : ImGui::GetStyle().WindowBorderSize);
     ImGui::Begin("Settings##main", nullptr,
                  (sized ? 0 : ImGuiWindowFlags_AlwaysAutoResize) | ImGuiWindowFlags_NoCollapse |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove |
@@ -2309,7 +2339,9 @@ void settings_panel(bool *open) {
                             : s.view == View::PadCapture
                                 ? fmt("Press the controller button for %s (%d s, Esc: cancel)", tr(pad_titles[s.capture_pad]),
                                       (int)std::max<int64_t>(0, PAD_CAPTURE_SECONDS - (int64_t)((SDL_GetTicksNS() - s.capture_pad_since) / 1000000000ull)))
-                                : tr(s.view == View::Exit         ? "Do you really want to exit?\nIf you haven't saved the game, save it before you exit."
+                                : tr(s.view == View::Exit && launcher_present()
+                                         ? "Where do you want to go?\nIf you haven't saved the game, save it before you exit."
+                                     : s.view == View::Exit       ? "Do you really want to exit?\nIf you haven't saved the game, save it before you exit."
                                      : s.view == View::Restart    ? "Restart game?"
                                      : s.view == View::Reset      ? "Reset this tab?"
                                      : s.view == View::Move       ? "Move menu"

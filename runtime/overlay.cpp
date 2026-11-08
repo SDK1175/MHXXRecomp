@@ -520,13 +520,17 @@ static void draw_chat(const char *line, uint64_t now, float scale) {
         dl->AddRectFilled(ImVec2(p0.x, p0.y + line), ImVec2(p1.x, p0.y + line * 1.7f), IM_COL32(80, 142, 54, 255));
         dl->AddRectFilled(ImVec2(p0.x, p1.y - line * 1.7f), ImVec2(p1.x, p1.y - line), IM_COL32(80, 142, 54, 255));
         dl->AddRectFilled(ImVec2(p0.x, p1.y - line), p1, IM_COL32(176, 34, 30, 255));
+    } else if (theme == THEME_XX) {  // (Double Cross: navy, a gold frame and bar)
+        dl->AddRectFilled(p0, p1, IM_COL32(8, 16, 40, 240), 6 * scale);
+        dl->AddRect(p0, p1, IM_COL32(214, 172, 86, 255), 6 * scale, 0, 1.5f * scale);
+        dl->AddRectFilled(p0, ImVec2(p0.x + bar, p1.y), IM_COL32(232, 184, 86, 255), 6 * scale, ImDrawFlags_RoundCornersLeft);
     } else {
         bool gold = theme == THEME_GOLD;
         dl->AddRectFilled(p0, p1, gold ? IM_COL32(34, 25, 19, 240) : IM_COL32(6, 10, 17, 235), 6 * scale);
         dl->AddRectFilled(p0, ImVec2(p0.x + bar, p1.y), gold ? IM_COL32(213, 162, 79, 255) : IM_COL32(111, 216, 255, 255),
                           6 * scale, ImDrawFlags_RoundCornersLeft);
     }
-    ImU32 ink = theme == THEME_GOLD ? IM_COL32(242, 216, 170, 255) : IM_COL32(244, 247, 252, 255);
+    ImU32 ink = theme == THEME_GOLD ? IM_COL32(242, 216, 170, 255) : theme == THEME_XX ? IM_COL32(242, 238, 228, 255) : IM_COL32(244, 247, 252, 255);
     dl->AddText(font, size, ImVec2(p0.x + bar + pad, p0.y + pad), ink, text.c_str(), nullptr, wrap);
 }
 
