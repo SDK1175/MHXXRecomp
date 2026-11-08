@@ -193,6 +193,8 @@ struct Tex {
     int w, h;
     bool color;
     int scale;
+    const char *sub;  // its folder in the pack: gear or monsters ([Graphics] TexturePack picks by them)
+    std::string out() const { return std::string(PACK) + "/" + sub + "/" + key + ".png"; }
 };
 // index.txt of mhxx-texextract: "<key> <w>x<h> <kind> <arc> <name>"; the textures of the groups asked for
 std::vector<Tex> todo(TexJob *job) {
@@ -225,8 +227,11 @@ std::vector<Tex> todo(TexJob *job) {
         if (job->gear && (group == "player" || group == "weapon" || group == "otomo")) scale = 4, max_side = 256;
         if (job->monsters && group == "enemy") scale = 2, max_side = 1024;
         if (!scale || std::max(w, h) > max_side) continue;
-        if (exists(std::string(PACK) + "/" + f[0] + ".png")) continue;  // (made already)
-        v.push_back({f[0], w, h, f[2] == "color", scale});
+        Tex t = {f[0], w, h, f[2] == "color", scale, scale == 4 ? "gear" : "monsters"};
+        if (exists(t.out())) continue;  // (made already)
+        std::string old = std::string(PACK) + "/" + f[0] + ".png";  // (a pack from before the folders: put in its own)
+        if (exists(old) && SDL_RenamePath(old.c_str(), t.out().c_str())) continue;
+        v.push_back(t);
     }
     return v;
 }
@@ -329,7 +334,7 @@ bool resize_others(TexJob *job, const std::vector<Tex> &v) {
         Image src, out;
         if (load_png(std::string(EXTRACTED) + "/" + t.key + ".png", src)) {
             lanczos(src, src.w * t.scale, src.h * t.scale, out);
-            save_png(std::string(PACK) + "/" + t.key + ".png", out.px.data(), out.w, out.h, 4);
+            save_png(t.out(), out.px.data(), out.w, out.h, 4);
         }
         job->done++;
     }
@@ -363,7 +368,7 @@ bool upscale(TexJob *job, const std::vector<Tex> &v, const std::string &tooldir)
             else out = std::move(up);
             lanczos(src, dw, dh, alpha, 3);
             for (size_t p = 0; p < (size_t)dw * dh; p++) out.px[p * 4 + 3] = alpha.px[p * 4 + 3];
-            if (save_png(std::string(PACK) + "/" + t.key + ".png", out.px.data(), dw, dh, 4)) made++;
+            if (save_png(t.out(), out.px.data(), dw, dh, 4)) made++;
         }
         if (!made && c1 > c0)  // (the graphics card can't run it: no Vulkan, or too little memory)
             return fail(job, "realesrgan-ncnn-vulkan made no pictures (does the graphics card support Vulkan?)"), false;
@@ -377,8 +382,9 @@ bool upscale(TexJob *job, const std::vector<Tex> &v, const std::string &tooldir)
 
 int texmake_pack_count() {
     int n = 0;
-    for (const std::string &f : list(PACK))
-        if (f.size() > 4 && SDL_strcasecmp(f.c_str() + f.size() - 4, ".png") == 0) n++;
+    for (const char *d : {"", "/gear", "/monsters"})
+        for (const std::string &f : list(std::string(PACK) + d))
+            if (f.size() > 4 && SDL_strcasecmp(f.c_str() + f.size() - 4, ".png") == 0) n++;
     return n;
 }
 
@@ -389,7 +395,8 @@ void texmake_run(TexJob *job) {
         if (ok) job->stage = TEX_DONE;
         job->finished = true;
     };
-    SDL_CreateDirectory(PACK);
+    SDL_CreateDirectory((std::string(PACK) + "/gear").c_str());
+    SDL_CreateDirectory((std::string(PACK) + "/monsters").c_str());
     job->stage = TEX_EXTRACT;
     if (!extract(job)) return finish(false);
     std::vector<Tex> v = todo(job), color, other;

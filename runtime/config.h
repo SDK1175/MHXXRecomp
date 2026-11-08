@@ -98,6 +98,7 @@ typedef struct {
                               // name for it ("/", "Y"...); "" none
     int fxaa_mode;            // [Anti-aliasing] FXAAMode: FXAA_*, which FXAA draws while FXAA is on
     int texture_dump;         // [Graphics] TextureDump: textures saved to textures/dump/ (nvn/vulkan/texpack.c)
+    int texture_pack;         // [Graphics] TexturePack: TEXPACK_*, which of textures/load/ is used (nvn/vulkan/texpack.c)
     int anisotropy;           // [Graphics] Anisotropy: 0 the game's own, 1..4 at least 2x / 4x / 8x / 16x (nvn/vulkan/textures.c)
     int smooth_gradients;     // [Graphics] SmoothGradients: the game's RGBA8 render targets as RGBA16 (nvn/vulkan/textures.c)
     int pad_binds[PAD_BINDS];     // [Controller]: PAD_* -> PAD_SRC_* (0: the usual button)
@@ -128,6 +129,17 @@ enum { UI_CENTER = 1, UI_21_9, UI_32_9, UI_EDGES };  // the middle 16:9, 21:9, 3
 enum { FSR_NATIVE, FSR_QUALITY, FSR_BALANCED, FSR_PERFORMANCE, FSR_ULTRA_PERFORMANCE };  // output / render: 1, 1.5, 1.7, 2, 3
 
 extern Config g_config;
+// [Graphics] TexturePack: the high-resolution textures (textures/load/: gear/ armour, weapons, Palico gear; monsters/)
+enum { TEXPACK_AUTO, TEXPACK_OFF, TEXPACK_GEAR, TEXPACK_ALL };
+// The graphics card, for TEXPACK_AUTO and what the menu says of it: set by the renderer (nvn/vulkan/device.c) or the
+// launcher (Windows' DXGI). g_gpu_vram 0: not known. Integrated: it shares the computer's memory.
+extern char g_gpu_name[128];
+extern uint64_t g_gpu_vram;
+extern int g_gpu_integrated;
+// TEXPACK_OFF / GEAR / ALL for a card with this much memory
+int texpack_recommended(uint64_t vram, int integrated);
+// the setting with Auto worked out
+int texpack_effective(void);
 extern uint32_t g_render_size[2];  // read by the game code (tools/gen.py PATCHES: its docked render size)
 extern float g_render_aspect;      // the picture's shape, 16:10 or wider: the 3D cameras' aspect (tools/gen.py PATCHES)
 extern float g_fov_scale;          // boot diagnostic value; camera_fovy reads config_live_fov()

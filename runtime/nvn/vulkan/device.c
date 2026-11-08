@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "../../engine_module.h"
+#include "../../config.h"
 #include "../../overlay.h"
 #include "fsr.h"
 #include "vk.h"
@@ -173,6 +174,16 @@ static void pick_device(void) {
     free(qp);
     if (g_vk.qfam == UINT32_MAX) FATAL("no graphics+present queue\n");
     LOG("[vk] using %s, driver %#x\n", g_vk.props.deviceName, g_vk.props.driverVersion);
+    {  // (its memory: the largest heap on the card, for [Graphics] TexturePack = Auto and the menu)
+        VkPhysicalDeviceMemoryProperties mp;
+        vkGetPhysicalDeviceMemoryProperties(g_vk.phys, &mp);
+        for (uint32_t i = 0; i < mp.memoryHeapCount; i++)
+            if ((mp.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) && mp.memoryHeaps[i].size > g_gpu_vram)
+                g_gpu_vram = mp.memoryHeaps[i].size;
+        g_gpu_integrated = g_vk.props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
+        snprintf(g_gpu_name, sizeof g_gpu_name, "%s", g_vk.props.deviceName);
+        LOG("[vk] graphics memory %.1f GB%s\n", g_gpu_vram / 1073741824.0, g_gpu_integrated ? " (shared)" : "");
+    }
 }
 
 static void create_device(void) {

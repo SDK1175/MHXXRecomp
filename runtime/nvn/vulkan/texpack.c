@@ -271,6 +271,12 @@ static const char *pack_find(uint64_t key) {
 
 static void pack_scan(void) {
     pack_state = 0;
+    // [Graphics] TexturePack: Off none of it; Gear all but monsters/; All everything (Auto: by the card's memory)
+    int mode = texpack_effective();
+    LOG("[texpack] texture pack: %s%s (graphics memory %.1f GB)\n",
+        mode == TEXPACK_OFF ? "off" : mode == TEXPACK_GEAR ? "gear" : "gear and monsters",
+        g_config.texture_pack == TEXPACK_AUTO ? " (auto)" : "", g_gpu_vram / 1073741824.0);
+    if (mode == TEXPACK_OFF) return;
     int count = 0;
     char **files = SDL_GlobDirectory(LOAD_DIR, NULL, 0, &count);  // (everything, subfolders too: .png picked below)
     for (int i = 0; files && i < count; i++) {
@@ -279,6 +285,8 @@ static void pack_scan(void) {
         if (bs && (!base || bs > base)) base = bs;
         base = base ? base + 1 : files[i];
         uint64_t key;
+        if (mode != TEXPACK_ALL && !SDL_strncasecmp(files[i], "monsters", 8) && (files[i][8] == '/' || files[i][8] == '\\'))
+            continue;
         if (strlen(base) == 20 && SDL_strcasecmp(base + 16, ".png") == 0 && hex16(base, &key)) {
             char path[1024];
             snprintf(path, sizeof path, LOAD_DIR "/%s", files[i]);

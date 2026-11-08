@@ -13,6 +13,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <dxgi.h>
 #include <direct.h>
 #define chdir _chdir
 #else
@@ -476,6 +477,34 @@ static int setup_screen(Setup &st, SDL_Window *win, int w, int h, float s, bool 
     return result;
 }
 
+// The graphics card (config.h g_gpu_*: the menu's High-resolution textures says what suits it). Through DXGI: the card
+// the game will use (one of its own memory first, the largest), without starting Vulkan here.
+static void measure_gpu() {
+#ifdef _WIN32
+    HMODULE dxgi = LoadLibraryW(L"dxgi.dll");
+    if (!dxgi) return;
+    typedef HRESULT(WINAPI * Create)(REFIID, void **);
+    Create create = (Create)(void *)GetProcAddress(dxgi, "CreateDXGIFactory1");
+    IDXGIFactory1 *f = nullptr;
+    if (!create || FAILED(create(__uuidof(IDXGIFactory1), (void **)&f)) || !f) return;
+    IDXGIAdapter1 *a = nullptr;
+    int best = -1;
+    for (UINT i = 0; f->EnumAdapters1(i, &a) != DXGI_ERROR_NOT_FOUND; i++) {
+        DXGI_ADAPTER_DESC1 d;
+        HRESULT hr = a->GetDesc1(&d);
+        a->Release();
+        if (FAILED(hr) || (d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) continue;
+        bool integrated = d.DedicatedVideoMemory < 512ull * 1024 * 1024;  // (built into the processor: shared memory)
+        uint64_t mem = integrated ? d.SharedSystemMemory : d.DedicatedVideoMemory;
+        int score = integrated ? 0 : 1;
+        if (score < best || (score == best && mem <= g_gpu_vram)) continue;
+        best = score, g_gpu_vram = mem, g_gpu_integrated = integrated;
+        WideCharToMultiByte(CP_UTF8, 0, d.Description, -1, g_gpu_name, sizeof g_gpu_name, nullptr, nullptr);
+    }
+    f->Release();
+#endif
+}
+
 // ---------------------------------------------------------------- high-resolution textures (texmake.cpp)
 struct TexMaker {
     bool gear = true, monsters = true;
@@ -589,9 +618,23 @@ static int tex_screen(TexMaker &tm, int w, int h, float s, bool have_game) {
         ImGui::Dummy(ImVec2(0, 2 * s));
         check("monsters", tr("Monsters (2x: 1024 -> 2048)"), &tm.monsters, s);
         ImGui::Dummy(ImVec2(0, 4 * s));
-        char cur[128];
+        char cur[256];
         SDL_snprintf(cur, sizeof cur, tr("Textures in the pack now: %d"), tm.pack);
         ImGui::TextColored(DIM_TEXT, "%s", cur);
+        {  // (the graphics card and what suits it; which is used: Graphics and Audio > High-resolution textures)
+            static const char *kinds[] = {"", "Off", "Gear only", "Gear and monsters"};
+            int rec = texpack_recommended(g_gpu_vram, g_gpu_integrated);
+            if (g_gpu_vram)
+                SDL_snprintf(cur, sizeof cur, tr("This computer's graphics card: %s, %.1f GB of memory%s."), g_gpu_name,
+                             g_gpu_vram / 1073741824.0, g_gpu_integrated ? tr(" (shared with the computer)") : "");
+            else SDL_strlcpy(cur, tr("The graphics card's memory could not be measured."), sizeof cur);
+            ImGui::TextColored(DIM_TEXT, "%s", cur);
+            SDL_snprintf(cur, sizeof cur, tr("Recommended: %s."), tr(kinds[rec]));
+            ImGui::TextColored(GOLD_TEXT, "%s", cur);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.62f, .68f, .8f, 1));
+            ImGui::TextWrapped("%s", tr("Which of them the game uses is set in Graphics and Audio > High-resolution textures (Auto: as recommended)."));
+            ImGui::PopStyleColor();
+        }
         if (!have_game) ImGui::TextColored(ImVec4(1, .55f, .4f, 1), "%s", tr("Install the game files first."));
         if (!tm.error.empty()) {
             char msg[1024];
@@ -630,6 +673,7 @@ int main(int argc, char **argv) {
         return 1;
     }
     config_load();
+    measure_gpu();
     float scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
     if (scale <= 0) scale = 1;
     SDL_Window *win = nullptr;

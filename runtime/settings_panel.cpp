@@ -1258,6 +1258,18 @@ std::vector<Row> main_rows() {
                    [](int v) { s.draft.anisotropy = v; }, ini("Anisotropy"));
         add_bool(r, "smooth", "Smooth gradients", &c.smooth_gradients, ini("SmoothGradients"));
         add_bool(r, "texdump", "Dump textures", &c.texture_dump, ini("TextureDump"));
+        {  // the high-resolution textures: which, with the graphics card's memory (measured) and what suits it
+            static const char *kinds[] = {"", "Off", "Gear only", "Gear and monsters"};
+            int rec = texpack_recommended(g_gpu_vram, g_gpu_integrated);
+            add_choice(r, "texpack", "High-resolution textures", c.texture_pack,
+                       {std::string(tr("Auto")) + " (" + tr(kinds[rec]) + ")", tr("Off"), tr("Gear only"), tr("Gear and monsters")},
+                       [](int v) { s.draft.texture_pack = v; }, ini("TexturePack"));
+            std::string gpu = g_gpu_vram ? fmt("This computer's graphics card: %s, %.1f GB of memory%s.", g_gpu_name,
+                                               g_gpu_vram / 1073741824.0, g_gpu_integrated ? tr(" (shared with the computer)") : "")
+                                         : std::string(tr("The graphics card's memory could not be measured."));
+            r.back().help = gpu + " " + fmt("Recommended: %s.", tr(kinds[rec])) + " " +
+                            tr("Gear (armour, weapons, Palico gear: 4x) is light; monsters (2x, 2048 pictures) need much more graphics memory. With too little of it, choose Off or Gear only. The textures are made in the launcher's High-resolution textures.");
+        }
         add_bool(r, "fsr", "FSR", &c.fsr, ini("FSR"));
         if (c.fsr) {
             add_choice(

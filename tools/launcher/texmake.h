@@ -3,8 +3,9 @@
 // their own game files - nothing of the game comes with the program. The textures are taken out of the game's .arc
 // files (mhxx-texextract, beside the launcher), the colour ones upscaled by Real-ESRGAN's anime model on the graphics
 // card (realesrgan-ncnn-vulkan: downloaded from its GitHub release the first time), the normal maps and masks
-// resized smoothly, into textures/load where the game reads them. What is there already is kept, so it can be
-// stopped and started again.
+// resized smoothly, into textures/load/gear and textures/load/monsters where the game reads them ([Graphics]
+// TexturePack: which of the two). A pack from before those folders is moved into them as it goes. What is there
+// already is kept, so it can be stopped and started again.
 #include <atomic>
 #include <mutex>
 #include <string>

@@ -94,6 +94,19 @@
     .updates = UPDATES_ASK,                                                                         \
     .save_location = "",                                                                            \
 
+char g_gpu_name[128];
+uint64_t g_gpu_vram;
+int g_gpu_integrated;
+int texpack_recommended(uint64_t vram, int integrated) {
+    const uint64_t GB = 1024ull * 1024 * 1024;
+    if (!vram) return TEXPACK_GEAR;  // (not known: the light one)
+    if (integrated) return vram >= GB * 3 / 2 ? TEXPACK_GEAR : TEXPACK_OFF;
+    return vram < GB * 3 / 2 ? TEXPACK_OFF : vram < GB * 7 / 2 ? TEXPACK_GEAR : TEXPACK_ALL;
+}
+int texpack_effective(void) {
+    return g_config.texture_pack == TEXPACK_AUTO ? texpack_recommended(g_gpu_vram, g_gpu_integrated) : g_config.texture_pack;
+}
+
 Config g_config = {CONFIG_DEFAULT_VALUES};
 Config config_defaults(void) { Config c = {CONFIG_DEFAULT_VALUES}; return c; }
 uint32_t g_render_size[2] = {1920, 1080};
@@ -193,6 +206,14 @@ static const char DEFAULT_INI[] =
     "; them, keep the names). Slows loading a little while on. Takes effect at the next start\n"
     "; Default: Off\n"
     "TextureDump = Off\n"
+    "\n"
+    "; The high-resolution textures (textures/load/, made by the launcher's High-resolution textures): Off, Gear (armour,\n"
+    "; weapons, Palico gear: 4x, light) or All (gear and monsters: 2x, 2048 pictures, much more graphics memory). Auto\n"
+    "; picks by the graphics card's memory: under 1.5 GB Off, under 3.5 GB Gear, else All (a card built into the\n"
+    "; processor: Gear from 1.5 GB of shared memory). Takes effect at the next start\n"
+    "; Auto, Off, Gear, All\n"
+    "; Default: Auto\n"
+    "TexturePack = Auto\n"
     "\n"
     "; Renders the picture with 16 bits per colour instead of 8, so dark skies and soft glows show no colour bands.\n"
     "; Costs GPU time: about 1 ms a frame at 1600x1000, more at higher resolutions\n"
@@ -572,6 +593,8 @@ const ConfigSetting g_settings[] = {
     {"Graphics", "Anisotropy", SET_CHOICE, F(anisotropy), 0, 0, 0, "Game|off|original,2x|2,4x|4,8x|8,16x|16", NULL, true,
      "Invalid anisotropic filtering."},
     ON_OFF("Graphics", "TextureDump", texture_dump, true),
+    {"Graphics", "TexturePack", SET_CHOICE, F(texture_pack), 0, 0, 0, "Auto,Off|none,Gear|equipment,All|on", NULL, true,
+     "Invalid texture pack setting."},
     ON_OFF("Graphics", "SmoothGradients", smooth_gradients, false),
     ON_OFF("Performance", "ShowFPS", show_fps, false),
     {"Performance", "ShowBattery", SET_CHOICE, F(show_battery), 0, 0, 0, "Off,WithFPS,ByItself", NULL, false, ERR_MISC},
