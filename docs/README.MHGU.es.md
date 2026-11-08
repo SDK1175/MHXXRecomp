@@ -1,12 +1,14 @@
-<p align="center"><img src="docs/images/logo.webp" alt="GU Recomp" width="481"></p>
+> 원본 MHGU Recomp의 README입니다 (MHXX 포크 이전 그대로, 참고용). MHXX Recomp 안내는 [../README.md](../README.md).
 
-<p align="center"><a href="README.md">English</a> · <b>Español</b></p>
+<p align="center"><img src="images/logo.webp" alt="GU Recomp" width="481"></p>
+
+<p align="center"><a href="README.MHGU.md">English</a> · <b>Español</b></p>
 
 <p align="center">
   <a href="https://github.com/morerokk/MHGURecomp/releases/latest"><img src="https://img.shields.io/github/v/release/morerokk/MHGURecomp?style=flat-square&label=versi%C3%B3n&labelColor=1d1e22&color=c58a2e" alt="Última versión"></a>
   <a href="https://github.com/morerokk/MHGURecomp/releases"><img src="https://img.shields.io/github/downloads/morerokk/MHGURecomp/total?style=flat-square&label=descargas&labelColor=1d1e22&color=c58a2e" alt="Descargas de todas las versiones"></a>
   <a href="#requisitos"><img src="https://img.shields.io/badge/plataformas-Windows%20%C2%B7%20Linux%20%C2%B7%20Android-c58a2e?style=flat-square&labelColor=1d1e22" alt="Plataformas: Windows, Linux y Android"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/morerokk/MHGURecomp?style=flat-square&label=licencia&labelColor=1d1e22&color=c58a2e" alt="Licencia: MIT"></a>
+  <a href="../LICENSE"><img src="https://img.shields.io/github/license/morerokk/MHGURecomp?style=flat-square&label=licencia&labelColor=1d1e22&color=c58a2e" alt="Licencia: MIT"></a>
   <a href="https://github.com/morerokk/MHGURecomp/stargazers"><img src="https://img.shields.io/github/stars/morerokk/MHGURecomp?style=flat-square&label=estrellas&labelColor=1d1e22&color=c58a2e" alt="Estrellas en GitHub"></a>
 </p>
 
@@ -38,7 +40,7 @@ para el renderizado. No es un emulador.
 **Estado: totalmente jugable**, en solitario y en multijugador. Puede que aún haya errores: si encuentras uno,
 [abre un issue](https://github.com/morerokk/MHGURecomp/issues/new/choose) con tu `log.txt`.
 
-> Esta es una traducción del [README en inglés](README.md). Si algo no coincide, el inglés es el que vale.
+> Esta es una traducción del [README en inglés](README.MHGU.md). Si algo no coincide, el inglés es el que vale.
 
 ## Qué añade respecto a la versión de Switch
 
@@ -267,7 +269,7 @@ El menú de ajustes se abre con F1 en el teclado, o con `Plus`+`Minus` (`Start`+
 también está en español: Opciones del menú > Idioma.
 
 Todos los ajustes están también en `mhgurecomp.ini`, con un comentario encima de cada uno que lo explica (en inglés).
-Detalles: [docs/SETTINGS_UI.md](docs/SETTINGS_UI.md).
+Detalles: [docs/SETTINGS_UI.md](SETTINGS_UI.md).
 
 <details>
 <summary><b>Todos los ajustes, por sección de <code>mhgurecomp.ini</code></b></summary>
@@ -288,7 +290,7 @@ Detalles: [docs/SETTINGS_UI.md](docs/SETTINGS_UI.md).
   carpeta de caché necesita unos 340 MB). `pipelines.list`, junto al exe, lista las combinaciones de shaders que usan
   las zonas habituales; con el precalentamiento activado también se preparan en segundo plano, así que al entrar en
   esas zonas por primera vez ya no se ven superficies negras un momento. Solo se hizo con MSAA desactivado; el resto
-  se sigue preparando la primera vez que hace falta. Cómo grabar más: [docs/PIPELINE_LIST.md](docs/PIPELINE_LIST.md).
+  se sigue preparando la primera vez que hace falta. Cómo grabar más: [docs/PIPELINE_LIST.md](PIPELINE_LIST.md).
 - `[Controls]`: `FaceButtons` (Position / Label), `MenuConfirm` (el botón de confirmar del menú de ajustes),
   `BackgroundInput` (On / Off: el mando sigue funcionando con la ventana del juego en segundo plano, por ejemplo con
   una wiki delante; On por defecto), `ComboInputWindow` (Lenient / Strict: cuánto espera el juego a un segundo botón
@@ -396,7 +398,7 @@ Los módulos del motor (engine modules) son programas nativos que amplían el po
 No son mods ni plugins de Forge, y **se ejecutan con los mismos permisos que el juego, así que instala solo los que sean de
 confianza**. No se carga nada si no lo pides: pon la carpeta del módulo en `engine_modules\` y añade el nombre de su carpeta en
 una línea propia de `engine_modules\enabled.txt`. `log.txt` indica los que se han cargado. Detalles para quienes los programan:
-[docs/ENGINE-MODULES.md](docs/ENGINE-MODULES.md).
+[docs/ENGINE-MODULES.md](ENGINE-MODULES.md).
 
 ## Trucos
 
@@ -515,7 +517,7 @@ En Windows eso escribe `dist\Windows-MHGURecomp.0.10.4.zip`; en Linux (o en WSL,
 `bonus\system` (de `BONUS`, si no, vacío) y las carpetas vacías `data\`, `mods\` y `cheats\`; nunca nada del juego, ni
 los ajustes, cachés o mods de la carpeta de compilación. `make dist` muestra el SHA-256 de cada archivo.
 
-En Windows, cuando el SDK de Android está instalado (ver [docs/research/android.md](docs/research/android.md)),
+En Windows, cuando el SDK de Android está instalado (ver [docs/research/android.md](research/android.md)),
 `make dist` escribe también `dist\Android-MHGURecomp.0.10.4.apk`: solo arm64, con `pipelines.list`, `licenses` y la
 partida extra dentro, firmado con la clave de publicación. `ANDROID_DIST=` lo deja fuera. Android solo instala una
 actualización firmada con la misma clave que la app instalada, así que todas las versiones necesitan esa clave:
