@@ -20,6 +20,7 @@
 #endif
 #include <algorithm>
 #include <cfloat>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -32,6 +33,7 @@
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlrenderer3.h"
 #include "nxinstall.h"
+#include "texmake.h"
 #include "settings_locale.h"
 #include "settings_panel.h"
 #include "title_art.h"
@@ -474,6 +476,149 @@ static int setup_screen(Setup &st, SDL_Window *win, int w, int h, float s, bool 
     return result;
 }
 
+// ---------------------------------------------------------------- high-resolution textures (texmake.cpp)
+struct TexMaker {
+    bool gear = true, monsters = true;
+    TexJob *job = nullptr;
+    std::thread th;
+    std::string error;
+    bool made = false;
+    int pack = 0;
+    void begin() { error.clear(), made = false, pack = texmake_pack_count(); }
+    void poll() {
+        if (job && job->finished) {
+            th.join();
+            if (job->ok) made = true;
+            else {
+                std::lock_guard<std::mutex> j(job->lock);
+                if (job->error != "cancelled") error = job->error;
+            }
+            delete job;
+            job = nullptr;
+            pack = texmake_pack_count();
+        }
+    }
+    void stop() {
+        if (!job) return;
+        job->cancel = true;
+        th.join();
+        delete job;
+        job = nullptr;
+    }
+};
+static void check(const char *id, const char *label, bool *v, float s) {  // (a row with a gold box, ticked or not)
+    ImGui::PushID(id);
+    ImVec2 a = ImGui::GetCursorScreenPos();
+    float h = ImGui::GetTextLineHeight() + 12 * s, w = ImGui::GetContentRegionAvail().x;
+    if (ImGui::InvisibleButton("##c", ImVec2(w, h))) *v = !*v;
+    bool hover = ImGui::IsItemHovered();
+    ImDrawList *d = ImGui::GetWindowDrawList();
+    d->AddRectFilled(a, ImVec2(a.x + w, a.y + h), hover ? IM_COL32(120, 160, 255, 28) : IM_COL32(255, 255, 255, 8), 4 * s);
+    float bx = a.x + 10 * s, by = a.y + h * .5f, r = 8 * s;
+    d->AddRect(ImVec2(bx, by - r), ImVec2(bx + 2 * r, by + r), GOLD, 3 * s, 0, 1.5f * s);
+    if (*v) d->AddRectFilled(ImVec2(bx + 4 * s, by - r + 4 * s), ImVec2(bx + 2 * r - 4 * s, by + r - 4 * s), GOLD, 2 * s);
+    d->AddText(ImVec2(bx + 2 * r + 12 * s, by - ImGui::GetTextLineHeight() * .5f), IM_COL32(242, 238, 228, 255), label);
+    ImGui::PopID();
+}
+// The high-resolution textures screen: 0 still on it, 1 closed
+static int tex_screen(TexMaker &tm, int w, int h, float s, bool have_game) {
+    tm.poll();
+    float pad = 18 * s, dw = std::min(820 * s, (float)w - pad * 2);
+    ImGui::SetNextWindowPos(ImVec2(w * .5f, h * .5f), ImGuiCond_Always, ImVec2(.5f, .5f));
+    ImGui::SetNextWindowSize(ImVec2(dw, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(30 * s, 26 * s));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(.03f, .07f, .17f, .95f));
+    ImGui::Begin("##textures", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+    ImDrawList *d = ImGui::GetWindowDrawList();
+    float cw = ImGui::GetContentRegionAvail().x, bh = ImGui::GetFrameHeight() * 1.6f;
+    ImGui::SetWindowFontScale(1.3f);
+    ImGui::TextColored(GOLD_TEXT, "%s", tr("High-resolution textures"));
+    ImGui::SetWindowFontScale(1.0f);
+    divider(d, cw, s);
+    int result = 0;
+    if (tm.job) {
+        int stage = tm.job->stage;
+        uint64_t done = tm.job->done, total = tm.job->total;
+        static const char *names[] = {"", "Taking the textures out of the game files", "Downloading the upscaler (Real-ESRGAN)",
+                                      "Resizing the normal maps and masks", "Upscaling with AI on the graphics card", "Done"};
+        ImGui::TextColored(GOLD_TEXT, "%s", tr(names[std::clamp(stage, 0, 5)]));
+        float f = total ? std::min(1.f, (float)((double)done / total)) : 0;
+        ImGui::Dummy(ImVec2(0, 6 * s));
+        ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + cw, a.y + 26 * s);
+        d->AddRectFilled(a, b, IM_COL32(8, 14, 34, 255), 4 * s);
+        if (!total) {  // (no end known: a moving band)
+            float t = (float)fmod(SDL_GetTicks() / 1500.0, 1.0), x0 = a.x + (cw - cw * .25f) * t;
+            d->AddRectFilled(ImVec2(x0, a.y + 2), ImVec2(x0 + cw * .25f, b.y - 2), IM_COL32(220, 150, 50, 255), 3 * s);
+        } else if (f > 0)
+            d->AddRectFilledMultiColor(ImVec2(a.x + 2, a.y + 2), ImVec2(a.x + 2 + (cw - 4) * f, b.y - 2), IM_COL32(255, 200, 90, 255),
+                                       IM_COL32(255, 200, 90, 255), IM_COL32(190, 110, 20, 255), IM_COL32(190, 110, 20, 255));
+        d->AddRect(a, b, GOLD, 4 * s, 0, 1.5f * s);
+        ImGui::Dummy(ImVec2(cw, 26 * s));
+        char line[160] = "";
+        if (stage == TEX_DOWNLOAD) SDL_snprintf(line, sizeof line, "%.1f MB", done / 1048576.0);
+        else if (!total) SDL_snprintf(line, sizeof line, tr("%d textures"), (int)done);
+        else {
+            SDL_snprintf(line, sizeof line, "%d / %d", (int)done, (int)total);
+            uint64_t el = SDL_GetTicks() - tm.job->started;
+            if (done > 0 && done < total && el > 5000) {
+                int left = (int)((double)el / done * (total - done) / 60000) + 1;
+                char more[96];
+                SDL_snprintf(more, sizeof more, tr("  about %d min left"), left);
+                SDL_strlcat(line, more, sizeof line);
+            }
+        }
+        ImGui::TextColored(DIM_TEXT, "%s", line);
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        ImGui::TextWrapped("%s", tr("You can stop it: what is made is kept, and the next time it goes on from there."));
+        ImGui::Dummy(ImVec2(0, 6 * s));
+        if (hunter_button("tex.stop", tr("Stop"), ImVec2(cw, bh), false, !tm.job->cancel, s)) tm.job->cancel = true;
+    } else if (tm.made) {
+        char msg[256];
+        SDL_snprintf(msg, sizeof msg, tr("%d high-resolution textures are ready. They are used from the next start of the game."), tm.pack);
+        ImGui::TextWrapped("%s", msg);
+        ImGui::Dummy(ImVec2(0, 10 * s));
+        if (hunter_button("tex.ok", tr("OK"), ImVec2(cw, bh), true, true, s)) result = 1;
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.88f, .9f, .95f, 1));
+        ImGui::TextWrapped("%s", tr("Takes the textures out of your game files and upscales them on your graphics card with an AI model (Real-ESRGAN). The first time, the upscaler (about 40 MB) is downloaded from its GitHub page. It takes a while; you can stop it and go on later."));
+        ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0, 8 * s));
+        check("gear", tr("Armour, weapons and Palico gear (4x: 128 -> 512)"), &tm.gear, s);
+        ImGui::Dummy(ImVec2(0, 2 * s));
+        check("monsters", tr("Monsters (2x: 1024 -> 2048)"), &tm.monsters, s);
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        char cur[128];
+        SDL_snprintf(cur, sizeof cur, tr("Textures in the pack now: %d"), tm.pack);
+        ImGui::TextColored(DIM_TEXT, "%s", cur);
+        if (!have_game) ImGui::TextColored(ImVec4(1, .55f, .4f, 1), "%s", tr("Install the game files first."));
+        if (!tm.error.empty()) {
+            char msg[1024];
+            SDL_snprintf(msg, sizeof msg, tr("Could not make them: %s"), tm.error.c_str());
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .55f, .4f, 1));
+            ImGui::TextWrapped("%s", msg);
+            ImGui::PopStyleColor();
+        }
+        ImGui::Dummy(ImVec2(0, 8 * s));
+        float b1 = (cw - 12 * s) * .62f, b2 = cw - 12 * s - b1;
+        if (hunter_button("tex.make", tr("Make"), ImVec2(b1, bh), true, have_game && (tm.gear || tm.monsters), s)) {
+            tm.error.clear();
+            tm.job = new TexJob;
+            tm.job->gear = tm.gear, tm.job->monsters = tm.monsters, tm.job->game_dir = g_game_dir;
+            tm.th = std::thread(texmake_run, tm.job);
+        }
+        ImGui::SameLine(0, 12 * s);
+        if (hunter_button("tex.close", tr("Close"), ImVec2(b2, bh), false, true, s)) result = 1;
+    }
+    ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
+    gold_frame(ImGui::GetForegroundDrawList(), wp, ImVec2(wp.x + ws.x, wp.y + ws.y), s);
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+    return result;
+}
+
 int main(int argc, char **argv) {
     (void)argc, (void)argv;
     {  // (the game's folder: its settings, data and mods are beside the programs)
@@ -530,6 +675,9 @@ int main(int argc, char **argv) {
     SDL_snprintf(exefs, sizeof exefs, "%s/exefs/main", g_game_dir);
     bool have_game = SDL_GetPathInfo(exefs, nullptr);
     Setup setup;
+    TexMaker texmaker;
+    bool in_tex = SDL_getenv("MHXX_LAUNCHER_SHOT") && SDL_getenv("MHXX_LAUNCHER_SHOT_TEX");
+    if (in_tex) texmaker.begin();
     bool in_setup = !have_game || (SDL_getenv("MHXX_LAUNCHER_SHOT") && SDL_getenv("MHXX_LAUNCHER_SHOT_SETUP"));
     if (in_setup) setup.begin();
     std::string error;
@@ -575,11 +723,11 @@ int main(int argc, char **argv) {
         while (SDL_PollEvent(&e)) {
             ImGui_ImplSDL3_ProcessEvent(&e);
             if (e.type == SDL_EVENT_QUIT || (e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && e.window.windowID == SDL_GetWindowID(win))) {
-                if (in_setup) quit = true;  // (an install going on stops: what it wrote so far is removed)
+                if (in_setup || in_tex) quit = true;  // (an install going on stops: what it wrote so far is removed)
                 else if (!ask_shortcut && !running && settings_panel_dirty()) confirm_quit = true;  // (unsaved: ask)
                 else quit = true;
             }
-            if (e.type == SDL_EVENT_KEY_DOWN && !ask_shortcut && !confirm_quit && !running && !in_setup)
+            if (e.type == SDL_EVENT_KEY_DOWN && !ask_shortcut && !confirm_quit && !running && !in_setup && !in_tex)
                 settings_panel_key(e.key.scancode);
         }
         if (SDL_GetWindowFlags(win) & SDL_WINDOW_MINIMIZED) {
@@ -598,7 +746,7 @@ int main(int argc, char **argv) {
             running_checked = SDL_GetTicks();
             running = game_running();
         }
-        if (!ask_shortcut && !confirm_quit && !running && !in_setup) settings_panel_before_frame(open);
+        if (!ask_shortcut && !confirm_quit && !running && !in_setup && !in_tex) settings_panel_before_frame(open);
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
@@ -675,6 +823,24 @@ int main(int argc, char **argv) {
             continue;
         }
 
+        if (in_tex) {  // high-resolution textures
+            if (!art.background)
+                ImGui::GetBackgroundDrawList()->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)w, (float)h), NAVY_TOP,
+                                                                         NAVY_TOP, NAVY_BOTTOM, NAVY_BOTTOM);
+            if (tex_screen(texmaker, w, h, scale, have_game)) in_tex = false, count();
+            ImGui::Render();
+            SDL_SetRenderScale(rd, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
+            SDL_SetRenderDrawColor(rd, 4, 10, 28, 255);
+            SDL_RenderClear(rd);
+            draw_background(rd, art, w, h);
+            ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), rd);
+            if (shot && ++frames == 20) {
+                if (SDL_Surface *sf = SDL_RenderReadPixels(rd, nullptr)) SDL_SavePNG(sf, shot), SDL_DestroySurface(sf);
+                quit = true;
+            }
+            SDL_RenderPresent(rd);
+            continue;
+        }
         if (in_setup) {  // the game files first (none yet, or "Install game files")
             if (!art.background)
                 ImGui::GetBackgroundDrawList()->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)w, (float)h), NAVY_TOP,
@@ -771,10 +937,17 @@ int main(int argc, char **argv) {
         if (hunter_button("start", tr(running ? "Game is running" : "Start game"), ImVec2(cw, big), true, can_start, scale))
             start = true;
         ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
-        if (hunter_button("setup", tr("Install game files"), ImVec2(cw, small), false, !running && !confirm_quit, scale)) {
+        float half = (cw - gap) * .5f;  // (two side by side: the game files, the textures)
+        if (hunter_button("setup", tr("Install game files"), ImVec2(half, small), false, !running && !confirm_quit, scale)) {
             if (settings_panel_dirty()) settings_panel_save_now();  // (the settings changed here: kept)
             in_setup = true;
             setup.begin();
+        }
+        ImGui::SameLine(0, gap);
+        if (hunter_button("textures", tr("High-resolution textures"), ImVec2(half, small), false, !running && !confirm_quit, scale)) {
+            if (settings_panel_dirty()) settings_panel_save_now();
+            in_tex = true;
+            texmaker.begin();
         }
         ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
         if (hunter_button("quit", tr("Quit"), ImVec2(cw, small), false, !confirm_quit, scale)) {
@@ -869,6 +1042,7 @@ int main(int argc, char **argv) {
         }
     }
     setup.stop();
+    texmaker.stop();
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
