@@ -54,7 +54,7 @@ MHXX Recomp는 [MHGU Recomp](https://github.com/morerokk/MHGURecomp)를 포크�
 
 | 버전 | 이름 | 내용 |
 |---|---|---|
-| [0.8](docs/changelog/0.8.md) | 헌터의 채비 | 런처 자동 업데이트, 도구(세이브 백업·복원, 모드 zip 설치, PC 사양 검사, 캐시 지우기, 문제 보고), 실행 파일 이름 `MHXX Recomp.exe` |
+| [0.8](docs/changelog/0.8.md) | | 런처 자동 업데이트, 도구(세이브 백업·복원, 모드 zip 설치, PC 사양 검사, 캐시 지우기, 문제 보고), 실행 파일 이름 `MHXX Recomp.exe` |
 | [0.7](docs/changelog/0.7.md) | 하이레조 헌팅 | 런처에서 고해상도 텍스처 만들기, 그래픽카드에 맞춘 텍스처 설정, 이전 팩 가져오기 |
 | [0.6](docs/changelog/0.6.md) | | 런처의 게임 파일 설치 (NSP / XCI + 키 + 한글패치) |
 | [0.5](docs/changelog/0.5.md) | | 런처, 나가기 선택, 더블 크로스 테마, 시작 시 흰 창 수정 |
