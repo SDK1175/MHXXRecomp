@@ -907,9 +907,24 @@ static int ui_float_cmp(const void *a, const void *b) {
     float x = *(const float *)a, y = *(const float *)b;
     return (x > y) - (x < y);
 }
+// Windows placed in this pass (wider than 16:9): what's drawn inside one after it (a Guild Card page's chart and tabs in
+// the card's frame) goes where the window went. On its own a chart at x 365..970 leans right and went Right while its
+// card, at 259..999, went Left; the tabs, by which one is lit, went Left or Centre.
+#define UI_BOXES 16
+static struct { float z, x0, x1, y0, y1, cut; uint8_t h, h2; } ui_boxes[UI_BOXES];  // (z: its layer, the one it holds)
+static int ui_nboxes;
 static void ui_group_hend(int n) {
     float x0 = ui_group.xmin, x1 = ui_group.xmax, cut = INFINITY, asp = g_render_aspect;
     int h = ui_group_hside(x0, x1), h2 = h;
+    int inside = -1;  // (the latest window this group lies in)
+    for (int i = ui_nboxes - 1; i >= 0 && inside < 0; i--)
+        if (ui_boxes[i].z == ui_group.z && x0 >= ui_boxes[i].x0 - 4.0f && x1 <= ui_boxes[i].x1 + 4.0f && ui_group.ymin >= ui_boxes[i].y0 - 4.0f &&
+            ui_group.ymax <= ui_boxes[i].y1 + 4.0f)
+            inside = i;
+    if (inside >= 0) {
+        float mid = 0.5f * (x0 + x1);
+        h = h2 = mid < ui_boxes[inside].cut ? ui_boxes[inside].h : ui_boxes[inside].h2;
+    } else
     // Across the middle with nothing of it over a quarter of the canvas: two things side by side on one row (the
     // smithy's title at the top left and its page counter at the top right), each placed by its own side. Centred too
     // when both are windows of their own (each over 160 wide): MHXX's item box with the item's description beside it
@@ -940,6 +955,11 @@ static void ui_group_hend(int n) {
         }
         if (two) cut = xs[k], h = ui_group_hside(x0, xs[k - 1]), h2 = ui_group_hside(xs[k], x1);
     }
+    if (inside < 0 && x1 - x0 >= 200.0f && ui_group.ymax - ui_group.ymin >= 200.0f) {  // (a window: remembered)
+        int b = ui_nboxes < UI_BOXES ? ui_nboxes++ : UI_BOXES - 1;
+        ui_boxes[b].z = ui_group.z, ui_boxes[b].x0 = x0, ui_boxes[b].x1 = x1, ui_boxes[b].y0 = ui_group.ymin, ui_boxes[b].y1 = ui_group.ymax;
+        ui_boxes[b].cut = cut, ui_boxes[b].h = (uint8_t)h, ui_boxes[b].h2 = (uint8_t)h2;
+    }
     float s = (16.0f / 9.0f) / asp, anchor = g_ui_anchor_aspect < asp ? g_ui_anchor_aspect : asp;
     float left = 640.0f * (1.0f - anchor / asp);
     for (int i = 0; i < n; i++) {
@@ -949,7 +969,8 @@ static void ui_group_hend(int n) {
         if (ui_nrecent - ui_group.p[i].recent <= UI_RECENT) ui_recent[ui_group.p[i].recent % UI_RECENT].hanchor = (uint8_t)a;
     }
     if (g_hudtrace_active)
-        LOG("[hud] group z %.1f: %d pieces, x %.1f..%.1f -> %c%c (cut %.1f)\n", ui_group.z, n, x0, x1, "LRC"[h], "LRC"[h2], cut);
+        LOG("[hud] group z %.1f: %d pieces, x %.1f..%.1f -> %c%c (cut %.1f)%s\n", ui_group.z, n, x0, x1, "LRC"[h], "LRC"[h2], cut,
+            inside >= 0 ? " in a window" : "");
 }
 static void ui_group_end(void) {
     int n = ui_group.n;
@@ -1653,6 +1674,7 @@ static void begin_pass(void) {
     ui_meownster_pass = false;
     ui_menu_pass = false;
     ui_nrecent = 0;
+    ui_nboxes = 0;
     pass_msaa = false;
     // (MSAA: a colour target 3D models were drawn into lately (ms_expand), while they are; once they are not, it is like
     // any other target again)
