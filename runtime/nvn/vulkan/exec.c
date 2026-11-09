@@ -969,8 +969,8 @@ static void ui_group_hend(int n) {
         if (ui_nrecent - ui_group.p[i].recent <= UI_RECENT) ui_recent[ui_group.p[i].recent % UI_RECENT].hanchor = (uint8_t)a;
     }
     if (g_hudtrace_active)
-        LOG("[hud] group z %.1f: %d pieces, x %.1f..%.1f -> %c%c (cut %.1f)%s\n", ui_group.z, n, x0, x1, "LRC"[h], "LRC"[h2], cut,
-            inside >= 0 ? " in a window" : "");
+        LOG("[hud] group z %.1f: %d pieces, x %.1f..%.1f y %.1f..%.1f -> %c%c (cut %.1f)%s, %d window(s) known\n", ui_group.z, n, x0,
+            x1, ui_group.ymin, ui_group.ymax, "LRC"[h], "LRC"[h2], cut, inside >= 0 ? " in a window" : "", ui_nboxes);
 }
 static void ui_group_end(void) {
     int n = ui_group.n;
@@ -1674,6 +1674,7 @@ static void begin_pass(void) {
     ui_meownster_pass = false;
     ui_menu_pass = false;
     ui_nrecent = 0;
+    if (ui_nboxes && g_hudtrace_active) LOG("[hud] new pass: %d window(s) forgotten\n", ui_nboxes);
     ui_nboxes = 0;
     pass_msaa = false;
     // (MSAA: a colour target 3D models were drawn into lately (ms_expand), while they are; once they are not, it is like
