@@ -64,6 +64,7 @@ struct Keyboard {
     bool upper = false, select_all = false;
     std::function<bool(const std::string &, std::string &)> commit;
     bool paste_only = false;  // (Add a cheat: Paste / Clear / Add / Cancel instead of the on-screen keys)
+    std::string keys;         // the on-screen keys and what may be typed: "" all; a number's: its digits
 };
 struct State {
     Config draft = {}, saved = {};
@@ -461,8 +462,9 @@ void ask_back(bool *open) {
         *open = false;
 }
 void keyboard(const std::string &title, const std::string &initial, size_t cap,
-              std::function<bool(const std::string &, std::string &)> commit) {
-    s.keyboard = {title, initial, initial, initial.size(), cap, false, false, std::move(commit)};
+              std::function<bool(const std::string &, std::string &)> commit, const std::string &keys = "") {
+    s.keyboard = {title, initial, initial, initial.size(), cap, false, false, std::move(commit), false, keys};
+    s.keyboard.select_all = !keys.empty();  // (a number: typing replaces it)
     push(View::Keyboard, "key.0");
 }
 void insert(const std::string &text);
@@ -590,6 +592,7 @@ void add_number(std::vector<Row> &rows, const std::string &id, const std::string
     r.activate = [name, get, set, low, high, integral, check]() {
         char now[64];
         snprintf(now, sizeof now, integral ? "%.0f" : "%.2f", get());
+        std::string keys = std::string("1234567890") + (integral ? "" : ".") + (low < 0 ? "-" : "");
         keyboard(name, now, 12, [set, low, high, integral, check](const std::string &typed, std::string &error) {
             char *end = nullptr;
             std::string t = typed;
@@ -604,7 +607,7 @@ void add_number(std::vector<Row> &rows, const std::string &id, const std::string
             if (check && !check(v, error)) return false;
             set(v);
             return true;
-        });
+        }, keys);
     };
     r.adjust = [get, set, low, high, step, check](int d) {
         double v = std::clamp(get() + d * step, low, high);
@@ -1601,7 +1604,8 @@ std::vector<Row> rows_for_view(bool *open) {
         action(r, "key.accept", tr("Add"), []() { accept_keyboard(); });
         action(r, "key.cancel", tr("Cancel"), []() { pop(); });
     } else if (s.view == View::Keyboard) {
-        std::string chars = "1234567890abcdefghijklmnopqrstuvwxyz.:,-_/@";
+        bool number = !s.keyboard.keys.empty();
+        std::string chars = number ? s.keyboard.keys : "1234567890abcdefghijklmnopqrstuvwxyz.:,-_/@";
         if (s.keyboard.upper)
             for (char &c : chars)
                 c = (char)SDL_toupper(c);
@@ -1614,8 +1618,10 @@ std::vector<Row> rows_for_view(bool *open) {
             s.keyboard.buffer.clear();
             s.keyboard.cursor = 0;
         });
-        action(r, "key.space", tr("Space"), []() { insert(" "); });
-        action(r, "key.case", tr("Case"), []() { s.keyboard.upper = !s.keyboard.upper; });
+        if (!number) {
+            action(r, "key.space", tr("Space"), []() { insert(" "); });
+            action(r, "key.case", tr("Case"), []() { s.keyboard.upper = !s.keyboard.upper; });
+        }
         action(r, "key.accept", tr("Accept"), []() { accept_keyboard(); });
         action(r, "key.cancel", tr("Cancel"), []() { pop(); });
     } else if (s.view == View::Conflicts) {
@@ -2113,6 +2119,7 @@ bool settings_panel_mouse(int button) {
 }
 bool settings_panel_pad_capturing() { return is_pad_capturing.load(); }
 void settings_panel_mods_changed(void) { rescan_mods(); }
+bool settings_panel_typing(void) { return s.editing && s.view == View::Keyboard; }
 void settings_panel_set_launcher(float x, float y, float w, float h) {
     launcher_mode = true;
     launcher_area = ImRect(x, y, x + w, y + h);
@@ -2154,6 +2161,7 @@ void settings_panel_before_frame(bool open) {
         ImGui::SetKeyOwner(key, 0x6d686775, ImGuiInputFlags_LockThisFrame);
     if (s.view == View::Keyboard) {
         ImGui::SetKeyOwner(ImGuiKey_Enter, 0x6d686775, ImGuiInputFlags_LockThisFrame);
+        ImGui::SetKeyOwner(ImGuiKey_KeypadEnter, 0x6d686775, ImGuiInputFlags_LockThisFrame);
         ImGui::SetKeyOwner(ImGuiKey_Space, 0x6d686775, ImGuiInputFlags_LockThisFrame);
     }
 }
@@ -2394,12 +2402,17 @@ void settings_panel(bool *open) {
     }
     if (s.view == View::Keyboard) {
         ImGuiIO &io = ImGui::GetIO();
+        const std::string &only = s.keyboard.keys;
         for (ImWchar ch : io.InputQueueCharacters) {
+            if (!only.empty() && (ch > 127 || only.find((char)ch) == std::string::npos)) continue;  // (a number: digits)
             char utf8[5];
             int n = ImTextCharToUtf8(utf8, ch);
             utf8[n] = 0;
             insert(utf8);
         }
+        if (io.InputQueueCharacters.empty())  // (the number pad without Num Lock, or no text from the system)
+            for (int k = 0; k < 10; k++)
+                if (pressed((ImGuiKey)(ImGuiKey_Keypad0 + k), true)) insert(std::string(1, (char)('0' + k)));
         if (pressed(ImGuiKey_Backspace, true))
             erase_previous();
         if (io.KeyCtrl && pressed(ImGuiKey_V))
@@ -2425,7 +2438,7 @@ void settings_panel(bool *open) {
                    ((unsigned char)s.keyboard.buffer[s.keyboard.cursor] & 0xc0) == 0x80)
                 ++s.keyboard.cursor;
         }
-        if (pressed(ImGuiKey_Enter))
+        if (pressed(ImGuiKey_Enter) || pressed(ImGuiKey_KeypadEnter))
             accept_keyboard();
         if (s.view == View::Keyboard) {
             auto text = s.keyboard.buffer;

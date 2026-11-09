@@ -18,5 +18,6 @@ bool settings_panel_wheel(int notches);
 // mhxx-launcher: the panel in launcher mode, in this area of the window (each frame: it follows the window's size):
 // only the settings that take effect at the next start, and the mods
 void settings_panel_set_launcher(float x, float y, float w, float h);
+bool settings_panel_typing(void); // The menu waits for typed text (its keyboard): the launcher turns the system's text input on
 void settings_panel_mods_changed(void); // The launcher put a mod in mods/: the Mods tab finds it (as Rescan mods)
 bool settings_panel_save_now(void); // Saves the menu's changes (true: saved, or nothing to save). // Choosing a keybind: takes the wheel turned (> 0 up) as Wheel Up / Down.

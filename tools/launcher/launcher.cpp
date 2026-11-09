@@ -1325,6 +1325,15 @@ int main(int argc, char **argv) {
         }
         if (!ask_shortcut && !confirm_quit && !spec_warn && !running && !in_setup && !in_tex && !in_tools)
             settings_panel_before_frame(open);
+        {  // (the menu's keyboard - a number, an address: the keys typed come as text, the number pad's too)
+            static bool typing = false;
+            bool want = settings_panel_typing();
+            if (want != typing) {
+                if (want) SDL_StartTextInput(win);
+                else SDL_StopTextInput(win);
+                typing = want;
+            }
+        }
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
