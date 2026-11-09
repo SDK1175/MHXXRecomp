@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -35,6 +36,7 @@
 #include "imgui_impl_sdlrenderer3.h"
 #include "nxinstall.h"
 #include "texmake.h"
+#include "tools.h"
 #include "update.h"
 #include "settings_locale.h"
 #include "settings_panel.h"
@@ -108,18 +110,8 @@ static const char *korean_font() {
 
 // ---------------------------------------------------------------- the desktop shortcut (asked at the first start)
 // launcher.ini beside the programs remembers that it was asked (Shortcut = asked)
-#define LAUNCHER_INI "launcher.ini"
-static bool shortcut_asked() {
-    size_t n = 0;
-    char *d = (char *)SDL_LoadFile(LAUNCHER_INI, &n);
-    bool asked = d && strstr(d, "ShortcutAsked = 1");
-    SDL_free(d);
-    return asked;
-}
-static void shortcut_remember() {
-    const char *text = "; mhxx-launcher\nShortcutAsked = 1\n";
-    SDL_SaveFile(LAUNCHER_INI, text, strlen(text));
-}
+static bool shortcut_asked() { return launcher_ini_get("ShortcutAsked") == "1"; }
+static void shortcut_remember() { launcher_ini_set("ShortcutAsked", "1"); }
 
 #ifdef _WIN32
 #include <objbase.h>
@@ -574,6 +566,12 @@ static void release_notes(const std::string &md, float s) {
     }
 }
 // The update screen: 0 still on it, 1 closed (No / Close)
+// Yes to an update: the save backed up first (Tools: AutoBackup), then the update
+static void update_go(Update &u) {
+    std::string made, err;
+    if (auto_backup_on() && !backup_make("update", made, err)) SDL_Log("backup before the update: %s", err.c_str());
+    update_install(&u);
+}
 static int update_screen(Update &u, int w, int h, float s, bool running) {
     float pad = 18 * s, dw = std::min(900 * s, (float)w - pad * 2), dh = std::min(640 * s, (float)h - pad * 2);
     ImGui::SetNextWindowPos(ImVec2(w * .5f, h * .5f), ImGuiCond_Always, ImVec2(.5f, .5f));
@@ -630,7 +628,7 @@ static int update_screen(Update &u, int w, int h, float s, bool running) {
         ImGui::TextColored(DIM_TEXT, "%s", running ? tr("Close the game first: its files can't be replaced while it runs.")
                                                    : tr("Your settings, saves, mods, game files and textures are kept."));
         ImGui::Dummy(ImVec2(0, 4 * s));
-        if (hunter_button("upd.yes", tr("Yes"), ImVec2(b1, bh), true, !running, s)) update_install(&u);
+        if (hunter_button("upd.yes", tr("Yes"), ImVec2(b1, bh), true, !running, s)) update_go(u);
         ImGui::SameLine(0, 12 * s);
         if (hunter_button("upd.no", tr("No"), ImVec2(b1, bh), false, true, s)) result = 1;
     } else if (st == UPD_DOWNLOADING || st == UPD_INSTALLING) {
@@ -848,6 +846,337 @@ static int tex_screen(TexMaker &tm, SDL_Window *win, int w, int h, float s, bool
     return result;
 }
 
+// ---------------------------------------------------------------- Tools: the save's backups, mods, the PC, caches,
+// a problem report (tools.cpp)
+static std::mutex g_mods_lock;
+static std::vector<std::string> g_picked_mods;  // (the file dialog's answer: mod .zips to put in)
+static void SDLCALL mods_picked(void *, const char *const *list, int) {
+    std::lock_guard<std::mutex> g(g_mods_lock);
+    for (int i = 0; list && list[i]; i++) g_picked_mods.push_back(list[i]);
+}
+struct Tools {
+    Spec spec, vk;                    // (vk: filled by its thread, copied in when vk_ready)
+    std::atomic<bool> vk_ready{false};
+    std::thread vk_thread, work;
+    std::atomic<bool> busy{false};
+    std::mutex lock;
+    std::string msg;                  // (lock) the last thing done, or why it failed
+    bool msg_ok = true;               // (lock)
+    std::atomic<bool> changed{false}; // (mods put in: counted again)
+    int tab = 0;
+    std::vector<Backup> backups;
+    std::vector<std::string> mods;
+    uint64_t cache = 0;
+    std::string confirm;              // "restore", "delete", "cache": asked before doing it
+    std::string confirm_file;
+    std::string report;               // the last report made
+    bool auto_backup = true;
+    void begin_check() {
+        spec_check(spec);
+        vk_thread = std::thread([this]() {
+            spec_vulkan(vk);
+            vk_ready = true;
+        });
+    }
+    bool poll_vulkan() {  // (true once, when it is in)
+        if (!vk_ready || spec.vulkan_done) return false;
+        spec.vulkan_done = true, spec.vulkan = vk.vulkan, spec.vulkan_gpu = vk.vulkan_gpu;
+        spec.vk_major = vk.vk_major, spec.vk_minor = vk.vk_minor;
+        return true;
+    }
+    void refresh() {
+        backups = backup_list();
+        mods.clear();
+        for (const std::string &m : [] {
+                 std::vector<std::string> v;
+                 int n = 0;
+                 char **e = SDL_GlobDirectory("mods", "*", 0, &n);
+                 for (int i = 0; e && i < n; i++)
+                     if (!strchr(e[i], '/') && !strchr(e[i], '\\')) v.push_back(e[i]);
+                 SDL_free(e);
+                 return v;
+             }()) {
+            SDL_PathInfo info;
+            if (SDL_GetPathInfo(("mods/" + m).c_str(), &info) && info.type == SDL_PATHTYPE_DIRECTORY) mods.push_back(m);
+        }
+        std::sort(mods.begin(), mods.end());
+        cache = cache_size();
+    }
+    void begin() {
+        auto_backup = auto_backup_on();
+        confirm.clear();
+        set("", true);
+        refresh();
+    }
+    void set(const std::string &m, bool ok) {
+        std::lock_guard<std::mutex> g(lock);
+        msg = m, msg_ok = ok;
+    }
+    void run(std::function<void()> f) {  // (on a thread: the screen stays alive)
+        if (busy) return;
+        if (work.joinable()) work.join();
+        busy = true;
+        work = std::thread([this, f]() {
+            f();
+            busy = false;
+        });
+    }
+    void stop() {
+        if (work.joinable()) work.join();
+        if (vk_thread.joinable()) vk_thread.join();
+    }
+};
+static const char *backup_kind(const std::string &k) {
+    return tr(k == "manual" ? "Manual" : k == "start" ? "Before the game" : k == "update" ? "Before an update"
+                                       : k == "restore" ? "Before a restore" : "Automatic");
+}
+// The Tools screen: 0 still on it, 1 closed
+static int tools_screen(Tools &t, SDL_Window *win, int w, int h, float s, bool running, const std::string &version) {
+    {
+        std::vector<std::string> zips;
+        {
+            std::lock_guard<std::mutex> g(g_mods_lock);
+            zips.swap(g_picked_mods);
+        }
+        if (!zips.empty() && !t.busy && !running)
+            t.run([&t, zips]() {
+                std::string done, err;
+                for (const std::string &z : zips) {
+                    std::string name;
+                    t.set(std::string(tr("Installing")) + " " + z.substr(z.find_last_of("/\\") + 1) + " …", true);
+                    if (!install_mod_zip(z, "mods", name, err)) {
+                        t.set(std::string(tr("Could not install the mod: ")) + err, false);
+                        t.changed = true;
+                        return;
+                    }
+                    done += (done.empty() ? "" : ", ") + name;
+                }
+                t.set(std::string(tr("Installed in mods: ")) + done, true);
+                t.changed = true;
+            });
+    }
+    if (t.changed.exchange(false)) t.refresh(), settings_panel_mods_changed();
+    float pad = 18 * s, dw = std::min(900 * s, (float)w - pad * 2);
+    ImGui::SetNextWindowPos(ImVec2(w * .5f, h * .5f), ImGuiCond_Always, ImVec2(.5f, .5f));
+    ImGui::SetNextWindowSize(ImVec2(dw, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(30 * s, 26 * s));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(.03f, .07f, .17f, .95f));
+    ImGui::Begin("##tools", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+    ImDrawList *d = ImGui::GetWindowDrawList();
+    float cw = ImGui::GetContentRegionAvail().x, bh = ImGui::GetFrameHeight() * 1.5f, gap = 8 * s;
+    bool busy = t.busy, can = !busy && !running;
+    ImGui::SetWindowFontScale(1.3f);
+    ImGui::TextColored(GOLD_TEXT, "%s", tr("Tools"));
+    ImGui::SetWindowFontScale(1.0f);
+    divider(d, cw, s);
+    static const char *tabs[] = {"Save backup", "Install a mod", "PC check", "Cache", "Problem report"};
+    float tw = (cw - gap * 4) / 5;
+    for (int i = 0; i < 5; i++) {
+        if (i) ImGui::SameLine(0, gap);
+        char id[16];
+        SDL_snprintf(id, sizeof id, "tab%d", i);
+        if (hunter_button(id, tr(tabs[i]), ImVec2(tw, bh * .85f), t.tab == i, true, s) && t.tab != i)
+            t.tab = i, t.confirm.clear(), t.set("", true), t.refresh();
+    }
+    ImGui::Dummy(ImVec2(0, 6 * s));
+    float body = 340 * s;
+    ImGui::BeginChild("##body", ImVec2(cw, body), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
+    ImDrawList *bd = ImGui::GetWindowDrawList();
+    float bw = ImGui::GetContentRegionAvail().x;
+    auto wrap = [](const char *text) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.85f, .87f, .93f, 1));
+        ImGui::TextWrapped("%s", text);
+        ImGui::PopStyleColor();
+    };
+    auto ask = [&](const char *q, const char *yes) {  // (a question in place: 1 yes, 2 no)
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .8f, .45f, 1));
+        ImGui::TextWrapped("%s", q);
+        ImGui::PopStyleColor();
+        int r = 0;
+        float b2 = (bw - gap) * .5f;
+        if (hunter_button("ask.yes", yes, ImVec2(b2, bh), true, can, s)) r = 1;
+        ImGui::SameLine(0, gap);
+        if (hunter_button("ask.no", tr("Cancel"), ImVec2(b2, bh), false, true, s)) r = 2;
+        return r;
+    };
+    if (t.tab == 0) {  // ---- the save's backups
+        std::string where = save_dir();
+        ImGui::TextColored(DIM_TEXT, "%s %s", tr("Save folder:"), where.c_str());
+        bool ab = t.auto_backup;
+        check("auto", tr("Back up the save before the game starts and before an update (the last 10 kept)"), &ab, s);
+        if (ab != t.auto_backup) t.auto_backup = ab, launcher_ini_set("AutoBackup", ab ? "1" : "0");
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        float b3 = (bw - gap) * .5f;
+        if (hunter_button("bk.now", tr("Back up now"), ImVec2(b3, bh), true, can, s)) {
+            std::string made, err;
+            if (!backup_make("manual", made, err)) t.set(std::string(tr("Could not back up: ")) + err, false);
+            else if (made.empty()) t.set(tr("There is no save to back up yet."), false);
+            else t.set(std::string(tr("Backed up: ")) + made, true);
+            t.refresh();
+        }
+        ImGui::SameLine(0, gap);
+        if (hunter_button("bk.open", tr("Open the backups folder"), ImVec2(b3, bh), false, true, s)) {
+            SDL_CreateDirectory("backups");
+            open_folder("backups");
+        }
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        if (t.confirm == "restore" || t.confirm == "delete") {
+            char q[300];
+            const char *when = t.confirm_file.c_str();
+            for (const Backup &b : t.backups)
+                if (b.file == t.confirm_file) when = b.when.c_str();
+            SDL_snprintf(q, sizeof q,
+                         tr(t.confirm == "restore" ? "Put the save back as it was at %s? The save as it is now is backed up first."
+                                                   : "Delete the backup of %s?"),
+                         when);
+            int r = ask(q, tr(t.confirm == "restore" ? "Restore" : "Delete"));
+            if (r == 1 && t.confirm == "restore") {
+                std::string err;
+                if (running) t.set(tr("Close the game first."), false);
+                else if (backup_restore(t.confirm_file, err)) t.set(std::string(tr("Restored the save of ")) + when, true);
+                else t.set(std::string(tr("Could not restore: ")) + err, false);
+                t.confirm.clear(), t.refresh();
+            } else if (r == 1) {
+                backup_delete(t.confirm_file);
+                t.confirm.clear(), t.refresh();
+            } else if (r == 2) t.confirm.clear();
+        } else if (t.backups.empty()) {
+            wrap(tr("No backups yet."));
+        } else {
+            ImGui::BeginChild("##list", ImVec2(bw, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
+            float lw = ImGui::GetContentRegionAvail().x, sb = 90 * s, rh = ImGui::GetFrameHeight() * 1.2f;
+            for (const Backup &b : t.backups) {
+                ImGui::PushID(b.file.c_str());
+                ImVec2 p = ImGui::GetCursorScreenPos();
+                ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + lw, p.y + rh), IM_COL32(255, 255, 255, 10), 4 * s);
+                ImGui::SetCursorScreenPos(ImVec2(p.x + 10 * s, p.y + (rh - ImGui::GetTextLineHeight()) * .5f));
+                ImGui::TextColored(GOLD_TEXT, "%s", b.when.c_str());
+                ImGui::SameLine(0, 18 * s);
+                ImGui::TextColored(DIM_TEXT, "%s  ·  %s", backup_kind(b.kind), size_text(b.size).c_str());
+                ImGui::SetCursorScreenPos(ImVec2(p.x + lw - sb * 2 - gap, p.y));
+                if (hunter_button("r", tr("Restore"), ImVec2(sb, rh), false, can, s)) t.confirm = "restore", t.confirm_file = b.file;
+                ImGui::SameLine(0, gap);
+                if (hunter_button("d", tr("Delete"), ImVec2(sb, rh), false, can, s)) t.confirm = "delete", t.confirm_file = b.file;
+                ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + rh + 4 * s));
+                ImGui::Dummy(ImVec2(0, 0));
+                ImGui::PopID();
+            }
+            ImGui::EndChild();
+        }
+    } else if (t.tab == 1) {  // ---- a mod's .zip
+        wrap(tr("Pick a mod's .zip: it is unpacked into a folder of its own in mods (a mod of the same name is replaced). Then turn it on and set its order in Mods on the right."));
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        float b2 = (bw - gap) * .5f;
+        if (hunter_button("mod.pick", tr("Pick a .zip"), ImVec2(b2, bh), true, can, s)) {
+            static const SDL_DialogFileFilter zf[] = {{"ZIP", "zip"}};
+            SDL_ShowOpenFileDialog(mods_picked, nullptr, win, zf, 1, nullptr, true);
+        }
+        ImGui::SameLine(0, gap);
+        if (hunter_button("mod.open", tr("Open the mods folder"), ImVec2(b2, bh), false, true, s)) {
+            SDL_CreateDirectory("mods");
+            open_folder("mods");
+        }
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        char head[64];
+        SDL_snprintf(head, sizeof head, tr("%d installed"), (int)t.mods.size());
+        status_line(bd, tr("Mods"), t.mods.empty() ? tr("None") : head, true, s);
+        ImGui::BeginChild("##mods", ImVec2(bw, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
+        for (const std::string &m : t.mods) ImGui::TextColored(DIM_TEXT, "    %s", m.c_str());
+        ImGui::EndChild();
+    } else if (t.tab == 2) {  // ---- the PC
+        const Spec &p = t.spec;
+        char v[160];
+        status_line(bd, tr("System"), p.os.c_str(), true, s);
+        SDL_snprintf(v, sizeof v, "%s (%d)", p.cpu.empty() ? "?" : p.cpu.c_str(), p.threads);
+        status_line(bd, tr("Processor"), v, true, s);
+        status_line(bd, "AVX2", tr(p.avx2 ? "Supported" : "Not supported"), p.avx2, s);
+        SDL_snprintf(v, sizeof v, "%.1f GB", p.ram_mb / 1024.0);
+        status_line(bd, tr("Memory"), v, !p.ram_mb || p.ram_mb >= 6000, s);
+        SDL_snprintf(v, sizeof v, "%s (%s)", g_gpu_name[0] ? g_gpu_name : "?", size_text(g_gpu_vram).c_str());
+        status_line(bd, tr("Graphics card"), v, true, s);
+        bool vk_ok = p.vulkan && (p.vk_major > 1 || p.vk_minor >= 2);
+        if (!p.vulkan_done) SDL_snprintf(v, sizeof v, "%s", tr("Checking…"));
+        else if (!p.vulkan) SDL_snprintf(v, sizeof v, "%s", tr("None"));
+        else SDL_snprintf(v, sizeof v, "%d.%d", p.vk_major, p.vk_minor);
+        status_line(bd, "Vulkan", v, !p.vulkan_done || vk_ok, s);
+        status_line(bd, tr("Free space (this drive)"), size_text(p.disk_free).c_str(), !p.disk_free || p.disk_free >= 2ull << 30, s);
+        ImGui::Dummy(ImVec2(0, 6 * s));
+        auto hard = spec_problems(p, true), soft = spec_problems(p, false);
+        if (hard.empty() && soft.empty() && p.vulkan_done) {
+            ImGui::TextColored(ImVec4(.55f, .9f, .55f, 1), "%s", tr("This PC meets what the game needs."));
+        }
+        for (const std::string &x : hard) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .5f, .4f, 1));
+            ImGui::TextWrapped("- %s", tr(x.c_str()));
+            ImGui::PopStyleColor();
+        }
+        for (const std::string &x : soft) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .8f, .45f, 1));
+            ImGui::TextWrapped("- %s", tr(x.c_str()));
+            ImGui::PopStyleColor();
+        }
+    } else if (t.tab == 3) {  // ---- the caches
+        status_line(bd, tr("Shader cache"), size_text(t.cache).c_str(), true, s);
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        wrap(tr("The game keeps the graphics it has prepared (shaders) here so they load fast next time. If the picture looks broken or the game stops at the start after an update or a driver change, clear it: the game makes it again (the first minutes may stutter)."));
+        ImGui::Dummy(ImVec2(0, 6 * s));
+        if (t.confirm == "cache") {
+            int r = ask(tr("Clear the shader cache?"), tr("Clear it"));
+            if (r == 1)
+                t.run([&t]() {
+                    uint64_t freed = 0;
+                    std::string err;
+                    if (cache_clear(freed, err)) t.set(std::string(tr("Cleared: ")) + size_text(freed), true);
+                    else t.set(std::string(tr("Could not clear all of it: ")) + err, false);
+                    t.changed = true;
+                });
+            if (r) t.confirm.clear();
+        } else if (hunter_button("cache.clear", tr("Clear the cache"), ImVec2(bw, bh), true, can && t.cache > 0, s)) {
+            t.confirm = "cache";
+        }
+    } else {  // ---- a problem report
+        wrap(tr("Makes one .zip with what is needed to find a problem: the logs, the settings and this PC's details. The multiplayer address and key and your Windows user name are left out. Attach it to an issue on GitHub."));
+        ImGui::Dummy(ImVec2(0, 6 * s));
+        float b2 = (bw - gap) * .5f;
+        if (hunter_button("rep.make", tr("Make a problem report"), ImVec2(bw, bh), true, !busy, s)) {
+            std::string made, err;
+            if (report_make(t.spec, version, made, err)) t.report = made, t.set(std::string(tr("Made: ")) + made, true);
+            else t.set(std::string(tr("Could not make the report: ")) + err, false);
+        }
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        if (hunter_button("rep.open", tr("Open the reports folder"), ImVec2(b2, bh), false, !t.report.empty(), s)) open_folder("reports");
+        ImGui::SameLine(0, gap);
+        if (hunter_button("rep.issue", tr("Open GitHub Issues"), ImVec2(b2, bh), false, true, s))
+            SDL_OpenURL("https://github.com/SDK1175/MHXXRecomp/issues");
+    }
+    ImGui::EndChild();
+    {
+        std::string m;
+        bool ok;
+        {
+            std::lock_guard<std::mutex> g(t.lock);
+            m = t.msg, ok = t.msg_ok;
+        }
+        if (running) m = tr("The game is running: close it to restore a save, install a mod or clear the cache."), ok = false;
+        ImGui::PushStyleColor(ImGuiCol_Text, ok ? ImVec4(.55f, .9f, .55f, 1) : ImVec4(1, .55f, .4f, 1));
+        ImGui::TextWrapped("%s", m.empty() ? " " : m.c_str());
+        ImGui::PopStyleColor();
+    }
+    divider(d, cw, s);
+    int result = 0;
+    if (hunter_button("tools.close", tr("Close"), ImVec2(cw, bh), false, !busy, s) ||
+        (!busy && t.confirm.empty() && ImGui::IsKeyPressed(ImGuiKey_Escape)))
+        result = 1;
+    ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
+    gold_frame(ImGui::GetForegroundDrawList(), wp, ImVec2(wp.x + ws.x, wp.y + ws.y), s);
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+    return result;
+}
+
 int main(int argc, char **argv) {
     (void)argc, (void)argv;
     {  // (the game's folder: its settings, data and mods are beside the programs)
@@ -860,6 +1189,9 @@ int main(int argc, char **argv) {
     }
     config_load();
     measure_gpu();
+    Tools tools;  // (the PC's check now, Vulkan on a thread: a warning at the start when the game can't run here)
+    tools.begin_check();
+    bool spec_warn = false, spec_never = false;
     Update upd;  // (the check runs while the launcher shows: update.cpp)
     update_begin(&upd, g_config.updates);
     bool upd_shown = false, upd_dismissed = false;
@@ -914,6 +1246,11 @@ int main(int argc, char **argv) {
     if (in_tex) texmaker.begin();
     bool in_setup = !have_game || (SDL_getenv("MHXX_LAUNCHER_SHOT") && SDL_getenv("MHXX_LAUNCHER_SHOT_SETUP"));
     if (in_setup) setup.begin();
+    bool in_tools = SDL_getenv("MHXX_LAUNCHER_SHOT") && SDL_getenv("MHXX_LAUNCHER_SHOT_TOOLS");
+    if (in_tools) {
+        tools.begin();
+        if (const char *tab = SDL_getenv("MHXX_LAUNCHER_SHOT_TOOLS")) tools.tab = SDL_atoi(tab);
+    }
     std::string error;
     bool open = true, quit = false, start = false;
     bool confirm_quit = SDL_getenv("MHXX_LAUNCHER_SHOT") && SDL_getenv("MHXX_LAUNCHER_SHOT_QUIT"), running = false;
@@ -959,11 +1296,11 @@ int main(int argc, char **argv) {
             if (e.type == SDL_EVENT_QUIT || (e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && e.window.windowID == SDL_GetWindowID(win))) {
                 if (upd.state == UPD_INSTALLING) continue;  // (putting the files in place: not stopped halfway)
                 if (upd.state == UPD_DOWNLOADING) upd.cancel = true;
-                if (in_setup || in_tex) quit = true;  // (an install going on stops: what it wrote so far is removed)
+                if (in_setup || in_tex || in_tools) quit = true;  // (an install going on stops: what it wrote so far is removed)
                 else if (!ask_shortcut && !running && settings_panel_dirty()) confirm_quit = true;  // (unsaved: ask)
                 else quit = true;
             }
-            if (e.type == SDL_EVENT_KEY_DOWN && !ask_shortcut && !confirm_quit && !running && !in_setup && !in_tex)
+            if (e.type == SDL_EVENT_KEY_DOWN && !ask_shortcut && !confirm_quit && !running && !in_setup && !in_tex && !in_tools)
                 settings_panel_key(e.key.scancode);
         }
         if (SDL_GetWindowFlags(win) & SDL_WINDOW_MINIMIZED) {
@@ -982,7 +1319,8 @@ int main(int argc, char **argv) {
             running_checked = SDL_GetTicks();
             running = game_running();
         }
-        if (!ask_shortcut && !confirm_quit && !running && !in_setup && !in_tex) settings_panel_before_frame(open);
+        if (!ask_shortcut && !confirm_quit && !spec_warn && !running && !in_setup && !in_tex && !in_tools)
+            settings_panel_before_frame(open);
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
@@ -1059,11 +1397,13 @@ int main(int argc, char **argv) {
             continue;
         }
 
+        if (tools.poll_vulkan() && !spec_problems(tools.spec, true).empty() && launcher_ini_get("SpecWarned") != "1")
+            spec_warn = !shot || SDL_getenv("MHXX_LAUNCHER_SHOT_SPEC");
         // the update: offered when there is one (not over the first start's questions or an install going on)
         int ust = upd.state;
-        if (ust == UPD_AVAILABLE && g_config.updates == UPDATES_AUTO && !running && !upd_shown) update_install(&upd), ust = upd.state;
+        if (ust == UPD_AVAILABLE && g_config.updates == UPDATES_AUTO && !running && !upd_shown) update_go(upd), ust = upd.state;
         bool upd_busy = ust == UPD_DOWNLOADING || ust == UPD_INSTALLING || ust == UPD_DONE;
-        if (!ask_shortcut && !in_setup && !in_tex &&
+        if (!ask_shortcut && !in_setup && !in_tex && !in_tools &&
             (upd_busy || (ust == UPD_FAILED && upd_shown && !upd_dismissed) || (ust == UPD_AVAILABLE && !upd_dismissed))) {
             upd_shown = true;
             if (!art.background)
@@ -1081,6 +1421,25 @@ int main(int argc, char **argv) {
             draw_background(rd, art, w, h);
             ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), rd);
             if (shot && ++frames == 20) {
+                if (SDL_Surface *sf = SDL_RenderReadPixels(rd, nullptr)) SDL_SavePNG(sf, shot), SDL_DestroySurface(sf);
+                quit = true;
+            }
+            SDL_RenderPresent(rd);
+            continue;
+        }
+        if (in_tools) {  // tools: backups, mods, the PC, caches, a problem report
+            if (!art.background)
+                ImGui::GetBackgroundDrawList()->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)w, (float)h), NAVY_TOP,
+                                                                         NAVY_TOP, NAVY_BOTTOM, NAVY_BOTTOM);
+            tools.poll_vulkan();
+            if (tools_screen(tools, win, w, h, scale, running, upd.version)) in_tools = false, count();
+            ImGui::Render();
+            SDL_SetRenderScale(rd, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
+            SDL_SetRenderDrawColor(rd, 4, 10, 28, 255);
+            SDL_RenderClear(rd);
+            draw_background(rd, art, w, h);
+            ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), rd);
+            if (shot && ++frames == 40) {
                 if (SDL_Surface *sf = SDL_RenderReadPixels(rd, nullptr)) SDL_SavePNG(sf, shot), SDL_DestroySurface(sf);
                 quit = true;
             }
@@ -1236,14 +1595,20 @@ int main(int argc, char **argv) {
             texmaker.begin();
         }
         ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
-        if (hunter_button("quit", tr("Quit"), ImVec2(cw, small), false, !confirm_quit, scale)) {
+        if (hunter_button("tools", tr("Tools"), ImVec2(half, small), false, !confirm_quit, scale)) {
+            if (settings_panel_dirty()) settings_panel_save_now();
+            in_tools = true;
+            tools.begin();
+        }
+        ImGui::SameLine(0, gap);
+        if (hunter_button("quit", tr("Quit"), ImVec2(half, small), false, !confirm_quit, scale)) {
             if (!running && settings_panel_dirty()) confirm_quit = true;
             else quit = true;
         }
         ImGui::End();
         if (can_start && ImGui::IsKeyPressed(ImGuiKey_GamepadStart, false)) start = true;  // (+ on the controller)
 
-        if (!running) settings_panel(&open);  // (the right: the settings, launcher mode; not while the game runs)
+        if (!running && !spec_warn) settings_panel(&open);  // (the right: the settings, launcher mode; not while the game runs)
 
         if (running) {  // the game is running: its settings are its own until it closes
             veil((float)w, (float)h, "##veil_running");
@@ -1261,6 +1626,41 @@ int main(int argc, char **argv) {
             ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
             gold_frame(ImGui::GetForegroundDrawList(), wp, ImVec2(wp.x + ws.x, wp.y + ws.y), scale);
             ImGui::End();
+            ImGui::PopStyleVar();
+        }
+        if (spec_warn && !confirm_quit) {  // the PC can't run the game: said once (Tools > PC check has it all)
+            veil((float)w, (float)h, "##veil_spec");
+            ImGui::SetNextWindowPos(ImVec2(w * .5f, h * .5f), ImGuiCond_Always, ImVec2(.5f, .5f));
+            ImGui::SetNextWindowSize(ImVec2(std::min(680 * scale, (float)w - pad * 2), 0));
+            ImGui::SetNextWindowFocus();
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28 * scale, 24 * scale));
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(.03f, .07f, .17f, .97f));
+            ImGui::Begin("##spec", nullptr,
+                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+            float qw = ImGui::GetContentRegionAvail().x;
+            ImGui::SetWindowFontScale(1.2f);
+            ImGui::TextColored(GOLD_TEXT, "%s", tr("This PC may not run the game"));
+            ImGui::SetWindowFontScale(1.0f);
+            divider(ImGui::GetWindowDrawList(), qw, scale);
+            for (const std::string &x : spec_problems(tools.spec, true)) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .6f, .45f, 1));
+                ImGui::TextWrapped("- %s", tr(x.c_str()));
+                ImGui::PopStyleColor();
+            }
+            ImGui::Spacing();
+            ImGui::TextColored(DIM_TEXT, "%s", tr("Details: Tools > PC check."));
+            ImGui::Spacing();
+            check("spec.never", tr("Don't show this again"), &spec_never, scale);
+            ImGui::Spacing();
+            if (hunter_button("spec.ok", tr("OK"), ImVec2(qw, ImGui::GetFrameHeight() * 1.6f), true, true, scale)) {
+                spec_warn = false;
+                if (spec_never) launcher_ini_set("SpecWarned", "1");
+            }
+            ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
+            gold_frame(ImGui::GetForegroundDrawList(), wp, ImVec2(wp.x + ws.x, wp.y + ws.y), scale);
+            ImGui::End();
+            ImGui::PopStyleColor();
             ImGui::PopStyleVar();
         }
         int quit_choice = -1;  // unsaved changes at Quit: 0 save and quit, 1 quit without saving, 2 cancel
@@ -1319,6 +1719,8 @@ int main(int argc, char **argv) {
 
         if (start) {
             start = false;
+            std::string made, berr;  // (the save kept as it is before the game: Tools > Save backup)
+            if (auto_backup_on() && !backup_make("start", made, berr)) SDL_Log("backup before the game: %s", berr.c_str());
             if (!settings_panel_save_now()) error = tr("Could not save the settings.");
             else if (!start_game(error)) {
                 char msg[512];
@@ -1329,6 +1731,7 @@ int main(int argc, char **argv) {
     }
     setup.stop();
     texmaker.stop();
+    tools.stop();
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();

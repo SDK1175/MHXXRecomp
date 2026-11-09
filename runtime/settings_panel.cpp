@@ -216,6 +216,26 @@ void load_mods() {
     }
     mods.scan.reset();
 }
+int mod_index(const std::string &name);
+void rescan_mods() {
+    std::vector<ModEntry> now(MODS_MAX);
+    int n = mods_installed(now.data(), MODS_MAX);
+    // new folders join the end (on), gone ones leave; the order and the switches of the rest stay
+    std::vector<ModEntry> next;
+    for (const auto &m : mods.draft)
+        for (int i = 0; i < n; ++i)
+            if (!strcmp(now[i].name, m.name)) {
+                next.push_back(m);
+                break;
+            }
+    mods.draft = next;
+    for (int i = 0; i < n; ++i)
+        if (mod_index(now[i].name) < 0) {
+            now[i].on = true;  // (as at start: a mod added later loads)
+            mods.draft.push_back(now[i]);
+        }
+    mods.scan.reset();
+}
 void start_scan() {
     auto result = std::make_shared<ScanResult>();
     for (const auto &m : mods.draft)
@@ -1127,25 +1147,7 @@ void mods_rows(std::vector<Row> &r) {
             s.saved_notice = false;
         },
         !same_mods(order, mods.draft));
-    action(r, "mods.rescan", tr("Rescan mods"), []() {
-        std::vector<ModEntry> now(MODS_MAX);
-        int n = mods_installed(now.data(), MODS_MAX);
-        // new folders join the end (on), gone ones leave; the order and the switches of the rest stay
-        std::vector<ModEntry> next;
-        for (const auto &m : mods.draft)
-            for (int i = 0; i < n; ++i)
-                if (!strcmp(now[i].name, m.name)) {
-                    next.push_back(m);
-                    break;
-                }
-        mods.draft = next;
-        for (int i = 0; i < n; ++i)
-            if (mod_index(now[i].name) < 0) {
-                now[i].on = true;  // (as at start: a mod added later loads)
-                mods.draft.push_back(now[i]);
-            }
-        mods.scan.reset();
-    });
+    action(r, "mods.rescan", tr("Rescan mods"), []() { rescan_mods(); });
 }
 std::vector<Row> main_rows() {
     std::vector<Row> r;
@@ -2085,6 +2087,7 @@ bool settings_panel_mouse(int button) {
     return true;
 }
 bool settings_panel_pad_capturing() { return is_pad_capturing.load(); }
+void settings_panel_mods_changed(void) { rescan_mods(); }
 void settings_panel_set_launcher(float x, float y, float w, float h) {
     launcher_mode = true;
     launcher_area = ImRect(x, y, x + w, y + h);

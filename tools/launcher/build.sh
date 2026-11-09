@@ -9,7 +9,7 @@ O=${O:-obj}/launcher
 mkdir -p "$B" "$O"
 IM=third_party/cimgui/imgui
 INC="-Iruntime -Ithird_party/cimgui -I$IM -I$IM/backends"
-CXXSRC="tools/launcher/launcher.cpp tools/launcher/title_art.cpp tools/launcher/nxinstall.cpp tools/launcher/texmake.cpp tools/launcher/update.cpp runtime/settings_panel.cpp $IM/imgui.cpp $IM/imgui_draw.cpp $IM/imgui_tables.cpp \
+CXXSRC="tools/launcher/launcher.cpp tools/launcher/title_art.cpp tools/launcher/nxinstall.cpp tools/launcher/texmake.cpp tools/launcher/update.cpp tools/launcher/tools.cpp runtime/settings_panel.cpp $IM/imgui.cpp $IM/imgui_draw.cpp $IM/imgui_tables.cpp \
 $IM/imgui_widgets.cpp $IM/backends/imgui_impl_sdl3.cpp $IM/backends/imgui_impl_sdlrenderer3.cpp"
 CSRC="runtime/config.c runtime/config_store.c runtime/modorder.c runtime/arcmerge.c runtime/nvn/tegra.c runtime/nvn/formats.c runtime/nvn/bcn.c updater/http.c updater/archive.c updater/json.c updater/sha256.c"
 OBJS=

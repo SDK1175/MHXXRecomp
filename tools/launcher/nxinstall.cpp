@@ -825,6 +825,18 @@ void fail(InstallJob *job, const std::string &why) {
 
 }  // namespace
 
+bool install_mod_zip(const std::string &zip, const std::string &mods, std::string &name, std::string &err) {
+    InstallJob job;
+    uint64_t total = 0;
+    if (!unzip(&job, zip, mods, err, true, total)) return false;
+    name = zip.substr(zip.find_last_of("/\\") + 1);
+    if (name.size() > 4) name.resize(name.size() - 4);
+    SDL_CreateDirectory(mods.c_str());
+    if (unzip(&job, zip, mods, err, false, total)) return true;
+    remove_tree(mods + "/" + name);  // (half of it: gone)
+    return false;
+}
+
 std::string install_find_keys() {
     const char *appdata = SDL_getenv("APPDATA");
     std::vector<std::string> c;

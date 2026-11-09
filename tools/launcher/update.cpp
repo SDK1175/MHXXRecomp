@@ -47,8 +47,8 @@ static const char *const OBSOLETE[] = {"mhgurecomp-updater"};
 
 // what an update never writes (first path component, any case): the player's
 static const char *const KEEP[] = {"data", "mods", "engine_modules", "cheats", "bonus", "cache", "shots", "save",
-                                   "update", "textures", "realesrgan", "mhgurecomp.ini", "launcher.ini", "log.txt",
-                                   "install.log", "imgui.ini"};
+                                   "update", "textures", "realesrgan", "backups", "reports", "mhgurecomp.ini", "launcher.ini",
+                                   "log.txt", "install.log", "imgui.ini"};
 
 static std::string root;  // the game folder (the launcher's), with the separator at its end
 static SDL_IOStream *g_log;

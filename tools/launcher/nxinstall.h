@@ -32,3 +32,6 @@ enum InstallStage {
 void install_run(InstallJob *job);
 // The prod.keys an emulator on this computer keeps (Eden, yuzu and its forks, Ryujinx), or "" when none.
 std::string install_find_keys();
+// A mod's .zip into mods/ (the Tools screen): one folder named as the zip (a mod already there by that name is
+// replaced). name: that folder's name. false: err says why (in English).
+bool install_mod_zip(const std::string &zip, const std::string &mods, std::string &name, std::string &err);
