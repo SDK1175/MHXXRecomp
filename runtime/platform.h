@@ -42,6 +42,12 @@ void plat_init(void);
 bool plat_exe_path(char *buf, size_t size);
 unsigned long plat_process_id(void);
 bool plat_wait_process(unsigned long pid); // Restart child waits for old host to release saves and logs.
+// Leaving the game: exit(code), but if its teardown (atexit: draining the GPU, the driver's own) hasn't ended the process
+// within 5 s, plat_hard_exit. A game closed from its window or menu stayed in the background, hung in that teardown
+// (and a restart waits for it: plat_wait_process).
+_Noreturn void plat_exit(int code);
+// The process ends now: logs flushed, no atexit, no DLL detach (Windows: TerminateProcess - ExitProcess can hang there)
+_Noreturn void plat_hard_exit(int code);
 // Started without a game folder: work in the executable's folder; log to log.txt there when there is no terminal
 // (plat_fatal_notice then tells the player about a fatal error).
 void plat_standalone(void);

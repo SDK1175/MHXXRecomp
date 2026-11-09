@@ -16,6 +16,7 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <limits.h>
+#include <pthread.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdatomic.h>
@@ -194,6 +195,21 @@ void plat_init(void) {
 #endif
 }
 
+_Noreturn void plat_hard_exit(int code) {
+    fflush(stdout);
+    fflush(stderr);
+    _exit(code);
+}
+static void *exit_watchdog(void *code) {
+    sleep(5);
+    fprintf(stderr, "[exit] teardown still running after 5 s: ending the process\n");
+    plat_hard_exit((int)(intptr_t)code);
+}
+_Noreturn void plat_exit(int code) {
+    pthread_t t;
+    if (!pthread_create(&t, NULL, exit_watchdog, (void *)(intptr_t)code)) pthread_detach(t);
+    exit(code);
+}
 unsigned long plat_process_id(void) { return (unsigned long)getpid(); }
 bool plat_wait_process(unsigned long pid) {
     struct timespec pause = {0, 10000000};

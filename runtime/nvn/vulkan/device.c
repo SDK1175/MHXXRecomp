@@ -19,6 +19,7 @@
 #include "../../engine_module.h"
 #include "../../config.h"
 #include "../../overlay.h"
+#include "../../platform.h"
 #include "fsr.h"
 #include "vk.h"
 
@@ -743,9 +744,7 @@ static void exit_handler(void) {
         pipeline_cache_save();
     }
     engine_modules_shutdown();  // (its own atexit handler was registered before this one, so it would never run)
-    fflush(stdout);
-    fflush(stderr);
-    _exit(0);
+    plat_hard_exit(0);  // (not _exit: on Windows that is ExitProcess, whose DLL detach can hang)
 }
 
 void backend_init(void) {

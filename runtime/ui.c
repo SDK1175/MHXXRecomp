@@ -368,7 +368,7 @@ int ui_run(void) {
                     bool again = asked_ns && now - asked_ns < 3000000000ull;
                     if ((!config_confirm_exit() && !overlay_settings_dirty()) || !overlay_enabled() || again) {
                         LOG("window closed\n");
-                        exit(0);
+                        plat_exit(0);
                     }
                     asked_ns = now;
                     overlay_request_close();
@@ -378,10 +378,10 @@ int ui_run(void) {
             } while (SDL_PollEvent(&e));
         }
         int action = SDL_SetAtomicInt(&requested_action, 0);
-        if (action == 1) exit(0);
-        if (action == 20) { LOG("exit to launcher\n"); start_launcher(); exit(0); }
+        if (action == 1) plat_exit(0);
+        if (action == 20) { LOG("exit to launcher\n"); start_launcher(); plat_exit(0); }
         if (action == 2) {
-            if (restart_application()) exit(0);
+            if (restart_application()) plat_exit(0);
             SDL_SetAtomicInt(&action_failed, 1);
         }
 #ifdef __ANDROID__
@@ -389,7 +389,7 @@ int ui_run(void) {
         if (action >= 3 && action <= 9) {
             SDL_SetAtomicInt(&away, 1);  // (the picker takes the window's surface away: the renderer draws nothing)
             // (after 1 and 2 the app closes, the game has the old files open; the others leave it running)
-            if (android_import(action - 2, true) && action <= 4) { LOG("[ui] imported: closing\n"); exit(0); }
+            if (android_import(action - 2, true) && action <= 4) { LOG("[ui] imported: closing\n"); plat_exit(0); }
             SDL_SetAtomicInt(&away, 0);
         }
 #else

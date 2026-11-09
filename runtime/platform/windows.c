@@ -136,6 +136,23 @@ bool plat_wait_process(unsigned long pid) {
     return result == WAIT_OBJECT_0;
 }
 
+_Noreturn void plat_hard_exit(int code) {
+    fflush(stdout);
+    fflush(stderr);
+    TerminateProcess(GetCurrentProcess(), (UINT)code);
+    _exit(code);
+}
+static DWORD WINAPI exit_watchdog(LPVOID code) {
+    Sleep(5000);
+    fprintf(stderr, "[exit] teardown still running after 5 s: ending the process\n");
+    plat_hard_exit((int)(intptr_t)code);
+}
+_Noreturn void plat_exit(int code) {
+    HANDLE t = CreateThread(NULL, 0, exit_watchdog, (LPVOID)(intptr_t)code, 0, NULL);
+    if (t) CloseHandle(t);
+    exit(code);
+}
+
 bool plat_exe_path(char *buf, size_t size) {
     DWORD n = GetModuleFileNameA(NULL, buf, (DWORD)size);
     return n > 0 && n < size;

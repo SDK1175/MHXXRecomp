@@ -8,6 +8,7 @@
 
 #include "hle.h"
 #include "kernel.h"
+#include "platform.h"
 
 // ------------------------------------------------------------------ results
 #define R_OK_ 0
@@ -589,7 +590,7 @@ static void svc_impl(Cpu *c, uint32_t imm, uint32_t pc) {
         r[0] = R_OK_;
         r[1] = 0;
         break;
-    case 0x07: kernel_log_guest_stack("ExitProcess (the game quit)", c); exit(0);
+    case 0x07: kernel_log_guest_stack("ExitProcess (the game quit)", c); plat_exit(0);
     case 0x08: {  // CreateThread(prio r0, entry r1, arg r2, stack_top r3, core r4) -> r1 handle
         KThread *t = thread_new(r[1], r[2], r[3], (int)r[0], (int)r[4]);
         t->handle = kernel_new_handle(&t->obj);
