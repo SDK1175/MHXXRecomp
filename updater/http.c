@@ -33,6 +33,7 @@ static void win_error(HttpResult *r, const char *what) {
 
 bool http_get(const char *url, const char *accept, const char *if_none_match, int connect_timeout, HttpSink sink,
               void *ctx, HttpResult *r) {
+    if (!accept) accept = "*/*";  // (none given: anything)
     memset(r, 0, sizeof *r);
     r->rate_remaining = -1;
     bool ok = false;
@@ -160,6 +161,7 @@ static size_t on_data(char *data, size_t one, size_t n, void *arg) {
 
 bool http_get(const char *url, const char *accept, const char *if_none_match, int connect_timeout, HttpSink sink,
               void *ctx, HttpResult *r) {
+    if (!accept) accept = "*/*";  // (none given: anything)
     memset(r, 0, sizeof *r);
     r->rate_remaining = -1;
     if (!load_curl(r->error, sizeof r->error)) return false;

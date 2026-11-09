@@ -310,7 +310,7 @@ std::string tool(TexJob *job) {
     Download d = {SDL_IOFromFile(zip.c_str(), "wb"), job};
     if (!d.f) return fail(job, "can't write " + zip), "";
     HttpResult r = {};
-    bool ok = http_get(TOOL_URL, nullptr, nullptr, 30, download_sink, &d, &r);
+    bool ok = http_get(TOOL_URL, "application/octet-stream", nullptr, 30, download_sink, &d, &r);
     SDL_CloseIO(d.f);
     if (!ok || r.status != 200) {
         SDL_RemovePath(zip.c_str());
