@@ -923,10 +923,32 @@ struct Tools {
         });
     }
     void stop() {
-        if (work.joinable()) work.join();
-        if (vk_thread.joinable()) vk_thread.join();
+        if (work.joinable()) work.join();  // (a backup / restore / mod install: finished, never cut halfway)
+        // (the Vulkan check: a driver or an overlay's layer can hang in vkCreateInstance; the window closing doesn't
+        // wait for it - the process ends without it, launcher_end)
+        if (vk_thread.joinable()) {
+            if (vk_ready) vk_thread.join();
+            else vk_thread.detach();
+        }
     }
 };
+// The launcher's last moment: the process ends here, whatever is still running. Threads not waited for (the update
+// check's, a hung Vulkan check, a file dialog's) kept the process alive after its window had gone: the launcher left
+// in the background (and its .exe locked: "Permission denied" when building, an update that couldn't replace it).
+[[noreturn]] static void launcher_end(int code) {
+    fflush(nullptr);
+#ifdef _WIN32
+    TerminateProcess(GetCurrentProcess(), (UINT)code);  // (not ExitProcess: no DLL detach to wait in)
+#endif
+    _exit(code);
+}
+// Closing: if anything still takes longer than this, the process ends anyway (the window is already hidden)
+static void launcher_end_watchdog(int seconds) {
+    std::thread([seconds]() {
+        SDL_Delay((Uint32)seconds * 1000);
+        launcher_end(0);
+    }).detach();
+}
 static const char *backup_kind(const std::string &k) {
     return tr(k == "manual" ? "Manual" : k == "start" ? "Before the game" : k == "update" ? "Before an update"
                                        : k == "restore" ? "Before a restore" : "Automatic");
@@ -1742,14 +1764,16 @@ int main(int argc, char **argv) {
             } else quit = true;
         }
     }
+    SDL_HideWindow(win);  // (gone at once: what's left to stop happens out of sight)
     setup.stop();
     texmaker.stop();
     tools.stop();
+    launcher_end_watchdog(10);  // (the stops above: a job asked to stop, a backup finishing; past here: nothing to wait for)
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
     SDL_DestroyRenderer(rd);
     SDL_DestroyWindow(win);
     SDL_Quit();
-    return 0;
+    launcher_end(0);
 }
