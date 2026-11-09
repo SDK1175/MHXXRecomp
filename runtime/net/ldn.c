@@ -22,6 +22,8 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/select.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
@@ -1256,7 +1258,42 @@ static int scan_addresses(struct sockaddr_in *out, int max) {
     return n;
 }
 
-// Collects the networks of hosts that answer: by address (TCP) and by LAN broadcast (UDP).
+// The broadcast address of each IPv4 network this computer is on (up, not loopback), host order. 255.255.255.255 alone
+// leaves by one network only (Windows: the one with the default route): a virtual LAN's (Radmin VPN 26.x.x.x/8,
+// Hamachi 25.x.x.x/8, ZeroTier, Tailscale) never heard the search, and its players had to type the host's address.
+static int lan_broadcasts(uint32_t *out, int max) {
+    int n = 0;
+#ifdef _WIN32
+    hsock s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s == BADSOCK) return 0;
+    INTERFACE_INFO list[32];
+    DWORD got = 0;
+    if (WSAIoctl(s, SIO_GET_INTERFACE_LIST, NULL, 0, list, sizeof list, &got, NULL, NULL) == 0)
+        for (DWORD i = 0; i < got / sizeof list[0] && n < max; i++) {
+            if (!(list[i].iiFlags & IFF_UP) || (list[i].iiFlags & IFF_LOOPBACK)) continue;
+            uint32_t ip = ntohl(list[i].iiAddress.AddressIn.sin_addr.s_addr);
+            uint32_t mask = ntohl(list[i].iiNetmask.AddressIn.sin_addr.s_addr);
+            if (!ip || !mask) continue;
+            out[n++] = ip | ~mask;
+        }
+    hclose(s);
+#else
+    struct ifaddrs *all;
+    if (getifaddrs(&all) != 0) return 0;
+    for (struct ifaddrs *a = all; a && n < max; a = a->ifa_next) {
+        if (!a->ifa_addr || a->ifa_addr->sa_family != AF_INET || !a->ifa_netmask) continue;
+        if (!(a->ifa_flags & IFF_UP) || (a->ifa_flags & IFF_LOOPBACK)) continue;
+        uint32_t ip = ntohl(((struct sockaddr_in *)a->ifa_addr)->sin_addr.s_addr);
+        uint32_t mask = ntohl(((struct sockaddr_in *)a->ifa_netmask)->sin_addr.s_addr);
+        if (!ip || !mask) continue;
+        out[n++] = ip | ~mask;
+    }
+    freeifaddrs(all);
+#endif
+    return n;
+}
+
+// Collects the networks of hosts that answer: by address (TCP) and by LAN broadcast (UDP) on every network.
 static int discover(uint8_t (*infos)[NETINFO_SIZE], struct sockaddr_in *addrs, int max) {
     hnet_init();
     int n = 0;
@@ -1289,6 +1326,15 @@ static int discover(uint8_t (*infos)[NETINFO_SIZE], struct sockaddr_in *addrs, i
     to.sin_port = htons((uint16_t)config_live_ldn_port());
     to.sin_addr.s_addr = htonl(INADDR_BROADCAST);
     sendto(u, (const char *)probe, sizeof probe, 0, (struct sockaddr *)&to, sizeof to);
+    uint32_t nets[16];
+    int nn = lan_broadcasts(nets, 16);
+    static bool told;
+    for (int i = 0; i < nn; i++) {
+        to.sin_addr.s_addr = htonl(nets[i]);
+        sendto(u, (const char *)probe, sizeof probe, 0, (struct sockaddr *)&to, sizeof to);
+        if (!told) LOG("[ldn] LAN search on %u.%u.%u.%u\n", nets[i] >> 24, nets[i] >> 16 & 255, nets[i] >> 8 & 255, nets[i] & 255);
+    }
+    told = true;
     to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     sendto(u, (const char *)probe, sizeof probe, 0, (struct sockaddr *)&to, sizeof to);
     uint64_t end = plat_now_ns() + 400000000ull;
