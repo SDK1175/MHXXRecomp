@@ -911,6 +911,9 @@ static int ui_float_cmp(const void *a, const void *b) {
 // the card's frame) goes where the window went. On its own a chart at x 365..970 leans right and went Right while its
 // card, at 259..999, went Left; the tabs, by which one is lit, went Left or Centre.
 #define UI_BOXES 16
+// (a window's extent is known by its pieces' centres: its corners' are this far in from its edge at most - the Guild
+// Card's at y 603.6, its weapon icons' at about 600 and the card's edge near 640)
+#define UI_BOX_EDGE 40.0f
 static struct { float z, x0, x1, y0, y1, cut; uint8_t h, h2; } ui_boxes[UI_BOXES];  // (z: its layer, the one it holds)
 static int ui_nboxes;
 static void ui_group_hend(int n) {
@@ -918,8 +921,8 @@ static void ui_group_hend(int n) {
     int h = ui_group_hside(x0, x1), h2 = h;
     int inside = -1;  // (the latest window this group lies in)
     for (int i = ui_nboxes - 1; i >= 0 && inside < 0; i--)
-        if (ui_boxes[i].z == ui_group.z && x0 >= ui_boxes[i].x0 - 4.0f && x1 <= ui_boxes[i].x1 + 4.0f && ui_group.ymin >= ui_boxes[i].y0 - 4.0f &&
-            ui_group.ymax <= ui_boxes[i].y1 + 4.0f)
+        if (ui_boxes[i].z == ui_group.z && x0 >= ui_boxes[i].x0 - UI_BOX_EDGE && x1 <= ui_boxes[i].x1 + UI_BOX_EDGE &&
+            ui_group.ymin >= ui_boxes[i].y0 - UI_BOX_EDGE && ui_group.ymax <= ui_boxes[i].y1 + UI_BOX_EDGE)
             inside = i;
     if (inside >= 0) {
         float mid = 0.5f * (x0 + x1);
