@@ -910,16 +910,22 @@ static int ui_float_cmp(const void *a, const void *b) {
 static void ui_group_hend(int n) {
     float x0 = ui_group.xmin, x1 = ui_group.xmax, cut = INFINITY, asp = g_render_aspect;
     int h = ui_group_hside(x0, x1), h2 = h;
-    // Across the middle, not centred, with nothing of it over a quarter of the canvas: two things side by side on one
-    // row (the smithy's title at the top left and its page counter at the top right), each placed by its own side
-    if (h != 2 && x0 < 640.0f && x1 > 640.0f) {
+    // Across the middle with nothing of it over a quarter of the canvas: two things side by side on one row (the
+    // smithy's title at the top left and its page counter at the top right), each placed by its own side. Centred too
+    // when both are windows of their own (each over 160 wide): MHXX's item box with the item's description beside it
+    // spans x 25..1255, as if one dialog in the middle - it stayed in the middle while the description showed and
+    // jumped to the edge when it went (the cursor on an empty slot, an item picked up). A dialog drawn as its corners
+    // only (one column of pieces each side) stays one.
+    if (x0 < 640.0f && x1 > 640.0f) {
         static float xs[UI_GROUP_MAX];
         for (int i = 0; i < n; i++) xs[i] = ui_group.p[i].pos_x;
         qsort(xs, (size_t)n, sizeof xs[0], ui_float_cmp);
         int k = 0;
         for (int i = 1; i < n; i++)
             if (xs[i] - xs[i - 1] > (k ? xs[k] - xs[k - 1] : 0.0f)) k = i;
-        if (k && xs[k] - xs[k - 1] > 320.0f) cut = xs[k], h = ui_group_hside(x0, xs[k - 1]), h2 = ui_group_hside(xs[k], x1);
+        bool two = k && xs[k] - xs[k - 1] > 320.0f &&
+                   (h != 2 || (xs[k - 1] - xs[0] > 160.0f && xs[n - 1] - xs[k] > 160.0f));
+        if (two) cut = xs[k], h = ui_group_hside(x0, xs[k - 1]), h2 = ui_group_hside(xs[k], x1);
     }
     float s = (16.0f / 9.0f) / asp, anchor = g_ui_anchor_aspect < asp ? g_ui_anchor_aspect : asp;
     float left = 640.0f * (1.0f - anchor / asp);
