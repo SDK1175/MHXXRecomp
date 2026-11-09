@@ -1,0 +1,4 @@
+// The launcher's icon on Windows (tools/launcher/build.sh: windres, linked into mhxx-launcher.exe): an original pixel
+// crest - two crossed blades on a navy shield (make_icon.py draws it, 32 px art scaled; nothing of the game's). The
+// game keeps its own (extras/icon/mhgurecomp.ico, the greatsword). SDL takes the window's icon from the exe's first one.
+1 ICON "mhxx-launcher.ico"

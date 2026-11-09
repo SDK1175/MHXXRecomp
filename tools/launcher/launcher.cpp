@@ -35,6 +35,7 @@
 #include "imgui_impl_sdlrenderer3.h"
 #include "nxinstall.h"
 #include "texmake.h"
+#include "update.h"
 #include "settings_locale.h"
 #include "settings_panel.h"
 #include "title_art.h"
@@ -125,7 +126,8 @@ static void shortcut_remember() {
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <knownfolders.h>
-// A shortcut to this launcher named name.lnk on the user's desktop (its icon: the game's). false: error says why.
+// A shortcut to this launcher named name.lnk on the user's desktop (its icon: the launcher's own crest). false: error
+// says why.
 static bool make_shortcut(const char *name_utf8, std::string &error) {
     std::string name;
     for (const char *c = name_utf8; *c; c++)
@@ -137,7 +139,7 @@ static bool make_shortcut(const char *name_utf8, std::string &error) {
     GetModuleFileNameW(NULL, exe, 1024);
     wcscpy(dir, exe);
     if (wchar_t *slash = wcsrchr(dir, L'\\')) *slash = 0;
-    swprintf(icon, 1024, L"%ls\\mhgurecomp.exe", dir);
+    wcscpy(icon, exe);
     PWSTR desktop = NULL;
     if (FAILED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, NULL, &desktop))) {
         error = "desktop folder not found";
@@ -283,11 +285,7 @@ static void veil(float w, float h, const char *id) {
 
 static bool start_game(std::string &error) {
     const char *base = SDL_GetBasePath();
-    std::string exe = std::string(base ? base : "") + "mhgurecomp"
-#ifdef _WIN32
-                      + ".exe"
-#endif
-        ;
+    std::string exe = std::string(base ? base : "") + update_game_exe();  // (MHXX Recomp.exe)
     const char *args[] = {exe.c_str(), nullptr};
     SDL_PropertiesID props = SDL_CreateProperties();
     SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ARGS_POINTER, (void *)args);
@@ -505,6 +503,169 @@ static void measure_gpu() {
 #endif
 }
 
+// ---------------------------------------------------------------- the update (update.cpp)
+// A release's notes (GitHub Markdown): headings, lists, quotes and tables' rows as plain lines; ** ` and [text](url)
+// left out
+static std::string md_inline(std::string t) {
+    std::string o;
+    for (size_t i = 0; i < t.size(); i++) {
+        if (t.compare(i, 2, "**") == 0 || t.compare(i, 2, "__") == 0) { i++; continue; }
+        if (t[i] == '`') continue;
+        if (t[i] == '[') {  // [text](url) -> text
+            size_t close = t.find("](", i);
+            size_t end = close == std::string::npos ? close : t.find(')', close);
+            if (end != std::string::npos) { o += t.substr(i + 1, close - i - 1); i = end; continue; }
+        }
+        if (t.compare(i, 4, "<br>") == 0) { o += ' '; i += 3; continue; }
+        o += t[i];
+    }
+    return o;
+}
+static void release_notes(const std::string &md, float s) {
+    size_t pos = 0;
+    bool header_row = false;
+    while (pos <= md.size()) {
+        size_t e = md.find('\n', pos);
+        if (e == std::string::npos) e = md.size();
+        std::string line = md.substr(pos, e - pos);
+        pos = e + 1;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        size_t lead = line.find_first_not_of(" \t");
+        if (lead == std::string::npos) { ImGui::Dummy(ImVec2(0, 4 * s)); header_row = false; continue; }
+        std::string t = line.substr(lead);
+        if (t[0] == '#') {
+            size_t n = t.find_first_not_of('#');
+            ImGui::Dummy(ImVec2(0, 4 * s));
+            ImGui::SetWindowFontScale(n == 1 ? 1.25f : n == 2 ? 1.12f : 1.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, GOLD_TEXT);
+            ImGui::TextWrapped("%s", md_inline(t.substr(std::min(t.size(), n + 1))).c_str());
+            ImGui::PopStyleColor();
+            ImGui::SetWindowFontScale(1.0f);
+        } else if (t[0] == '|') {  // a table's row: its cells with dots between (the separator row left out)
+            if (t.find_first_not_of("|-: ") == std::string::npos) { header_row = false; continue; }
+            std::string out;
+            size_t a = 1;
+            while (a < t.size()) {
+                size_t b = t.find('|', a);
+                if (b == std::string::npos) b = t.size();
+                std::string cell = t.substr(a, b - a);
+                size_t c0 = cell.find_first_not_of(' '), c1 = cell.find_last_not_of(' ');
+                if (c0 != std::string::npos) out += (out.empty() ? "" : "  ·  ") + md_inline(cell.substr(c0, c1 - c0 + 1));
+                a = b + 1;
+            }
+            bool first = !header_row;
+            header_row = true;
+            if (first) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.75f, .8f, .9f, 1));
+            ImGui::TextWrapped("%s %s", first ? " " : "·", out.c_str());
+            if (first) ImGui::PopStyleColor();
+        } else if (t[0] == '>') {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.68f, .74f, .86f, 1));
+            ImGui::TextWrapped("  %s", md_inline(t.substr(t.find_first_not_of("> ") == std::string::npos ? t.size() : t.find_first_not_of("> "))).c_str());
+            ImGui::PopStyleColor();
+        } else if ((t[0] == '-' || t[0] == '*') && t.size() > 1 && t[1] == ' ') {
+            float indent = (float)lead * 6 * s;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+            ImGui::TextWrapped("•  %s", md_inline(t.substr(2)).c_str());
+        } else if (t.compare(0, 3, "```") == 0 || t.compare(0, 3, "---") == 0) {
+            continue;
+        } else {
+            ImGui::TextWrapped("%s", md_inline(t).c_str());
+        }
+    }
+}
+// The update screen: 0 still on it, 1 closed (No / Close)
+static int update_screen(Update &u, int w, int h, float s, bool running) {
+    float pad = 18 * s, dw = std::min(900 * s, (float)w - pad * 2), dh = std::min(640 * s, (float)h - pad * 2);
+    ImGui::SetNextWindowPos(ImVec2(w * .5f, h * .5f), ImGuiCond_Always, ImVec2(.5f, .5f));
+    ImGui::SetNextWindowSize(ImVec2(dw, dh));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(30 * s, 24 * s));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(.03f, .07f, .17f, .96f));
+    ImGui::Begin("##update", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar);
+    ImDrawList *d = ImGui::GetWindowDrawList();
+    float cw = ImGui::GetContentRegionAvail().x, bh = ImGui::GetFrameHeight() * 1.6f;
+    std::string latest, title, notes, error;
+    {
+        std::lock_guard<std::mutex> g(u.lock);
+        latest = u.latest, title = u.title, notes = u.notes, error = u.error;
+    }
+    int st = u.state, result = 0;
+    ImGui::SetWindowFontScale(1.3f);
+    ImGui::TextColored(GOLD_TEXT, "%s", tr("A new update"));
+    ImGui::SetWindowFontScale(1.0f);
+    char line[256];
+    SDL_snprintf(line, sizeof line, tr("Version %s (this one: %s)"), latest.c_str(), u.version.empty() ? "-" : u.version.c_str());
+    ImGui::TextColored(ImVec4(.88f, .9f, .95f, 1), "%s", line);
+    if (!title.empty()) {
+        ImGui::SameLine();
+        ImGui::TextColored(DIM_TEXT, "  %s", title.c_str());
+    }
+    divider(d, cw, s);
+    // the patch notes, in a tab of their own
+    ImVec2 tp = ImGui::GetCursorScreenPos();
+    const char *tab = tr("Patch notes");
+    ImVec2 ts = ImGui::CalcTextSize(tab);
+    d->AddRectFilled(tp, ImVec2(tp.x + ts.x + 28 * s, tp.y + ts.y + 12 * s), IM_COL32(26, 52, 112, 255), 5 * s,
+                     ImDrawFlags_RoundCornersTop);
+    d->AddLine(ImVec2(tp.x, tp.y + ts.y + 12 * s), ImVec2(tp.x + ts.x + 28 * s, tp.y + ts.y + 12 * s), GOLD, 2 * s);
+    d->AddText(ImVec2(tp.x + 14 * s, tp.y + 6 * s), IM_COL32(255, 216, 124, 255), tab);
+    ImGui::Dummy(ImVec2(cw, ts.y + 12 * s));
+    float below = bh + ImGui::GetTextLineHeightWithSpacing() * 3 + 40 * s;
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(.02f, .05f, .13f, 1));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16 * s, 12 * s));
+    ImGui::BeginChild("##notes", ImVec2(cw, std::max(120 * s, ImGui::GetContentRegionAvail().y - below)),
+                      ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding);
+    if (notes.empty()) ImGui::TextColored(DIM_TEXT, "%s", tr("This release has no notes."));
+    else release_notes(notes, s);
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0, 6 * s));
+    float b1 = (cw - 12 * s) * .5f;
+    if (st == UPD_AVAILABLE) {
+        ImGui::SetWindowFontScale(1.1f);
+        ImGui::TextColored(GOLD_TEXT, "%s", tr("Do you want to download the new update?"));
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::TextColored(DIM_TEXT, "%s", running ? tr("Close the game first: its files can't be replaced while it runs.")
+                                                   : tr("Your settings, saves, mods, game files and textures are kept."));
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        if (hunter_button("upd.yes", tr("Yes"), ImVec2(b1, bh), true, !running, s)) update_install(&u);
+        ImGui::SameLine(0, 12 * s);
+        if (hunter_button("upd.no", tr("No"), ImVec2(b1, bh), false, true, s)) result = 1;
+    } else if (st == UPD_DOWNLOADING || st == UPD_INSTALLING) {
+        int64_t got = u.got, total = u.total;
+        float f = total ? std::min(1.f, (float)((double)got / total)) : 0;
+        ImGui::TextColored(GOLD_TEXT, "%s", tr(st == UPD_DOWNLOADING ? "Downloading the update" : "Installing the update"));
+        ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + cw, a.y + 24 * s);
+        d->AddRectFilled(a, b, IM_COL32(8, 14, 34, 255), 4 * s);
+        if (f > 0)
+            d->AddRectFilledMultiColor(ImVec2(a.x + 2, a.y + 2), ImVec2(a.x + 2 + (cw - 4) * f, b.y - 2), IM_COL32(255, 200, 90, 255),
+                                       IM_COL32(255, 200, 90, 255), IM_COL32(190, 110, 20, 255), IM_COL32(190, 110, 20, 255));
+        d->AddRect(a, b, GOLD, 4 * s, 0, 1.5f * s);
+        ImGui::Dummy(ImVec2(cw, 24 * s));
+        SDL_snprintf(line, sizeof line, "%.1f / %.1f MB", got / 1048576.0, total / 1048576.0);
+        ImGui::TextColored(DIM_TEXT, "%s", line);
+        if (st == UPD_DOWNLOADING && hunter_button("upd.cancel", tr("Cancel"), ImVec2(b1, bh * .8f), false, !u.cancel, s))
+            u.cancel = true;
+    } else if (st == UPD_DONE) {
+        ImGui::TextColored(GOLD_TEXT, "%s", tr("Updated. The launcher starts again..."));
+    } else if (st == UPD_FAILED) {
+        SDL_snprintf(line, sizeof line, tr("The update was not installed: %s"), error.c_str());
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .55f, .4f, 1));
+        ImGui::TextWrapped("%s", line);
+        ImGui::PopStyleColor();
+        ImGui::TextColored(DIM_TEXT, "%s", tr("Nothing was changed. The details are in update/update.log."));
+        if (hunter_button("upd.close", tr("Close"), ImVec2(b1, bh), false, true, s)) result = 1;
+    }
+    ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
+    gold_frame(ImGui::GetForegroundDrawList(), wp, ImVec2(wp.x + ws.x, wp.y + ws.y), s);
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+    return result;
+}
+
 // ---------------------------------------------------------------- high-resolution textures (texmake.cpp)
 static std::string g_picked_pack;  // (the folder dialog's answer: a pack to copy in)
 static void SDLCALL pack_picked(void *, const char *const *list, int) {
@@ -699,6 +860,10 @@ int main(int argc, char **argv) {
     }
     config_load();
     measure_gpu();
+    Update upd;  // (the check runs while the launcher shows: update.cpp)
+    update_begin(&upd, g_config.updates);
+    bool upd_shown = false, upd_dismissed = false;
+    uint64_t upd_done_at = 0;
     float scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
     if (scale <= 0) scale = 1;
     SDL_Window *win = nullptr;
@@ -792,6 +957,8 @@ int main(int argc, char **argv) {
         while (SDL_PollEvent(&e)) {
             ImGui_ImplSDL3_ProcessEvent(&e);
             if (e.type == SDL_EVENT_QUIT || (e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && e.window.windowID == SDL_GetWindowID(win))) {
+                if (upd.state == UPD_INSTALLING) continue;  // (putting the files in place: not stopped halfway)
+                if (upd.state == UPD_DOWNLOADING) upd.cancel = true;
                 if (in_setup || in_tex) quit = true;  // (an install going on stops: what it wrote so far is removed)
                 else if (!ask_shortcut && !running && settings_panel_dirty()) confirm_quit = true;  // (unsaved: ask)
                 else quit = true;
@@ -892,6 +1059,34 @@ int main(int argc, char **argv) {
             continue;
         }
 
+        // the update: offered when there is one (not over the first start's questions or an install going on)
+        int ust = upd.state;
+        if (ust == UPD_AVAILABLE && g_config.updates == UPDATES_AUTO && !running && !upd_shown) update_install(&upd), ust = upd.state;
+        bool upd_busy = ust == UPD_DOWNLOADING || ust == UPD_INSTALLING || ust == UPD_DONE;
+        if (!ask_shortcut && !in_setup && !in_tex &&
+            (upd_busy || (ust == UPD_FAILED && upd_shown && !upd_dismissed) || (ust == UPD_AVAILABLE && !upd_dismissed))) {
+            upd_shown = true;
+            if (!art.background)
+                ImGui::GetBackgroundDrawList()->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)w, (float)h), NAVY_TOP,
+                                                                         NAVY_TOP, NAVY_BOTTOM, NAVY_BOTTOM);
+            if (update_screen(upd, w, h, scale, running)) upd_dismissed = true;
+            if (ust == UPD_DONE) {
+                if (!upd_done_at) upd_done_at = SDL_GetTicks();
+                else if (SDL_GetTicks() - upd_done_at > 1500) quit = update_restart() || true;
+            }
+            ImGui::Render();
+            SDL_SetRenderScale(rd, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
+            SDL_SetRenderDrawColor(rd, 4, 10, 28, 255);
+            SDL_RenderClear(rd);
+            draw_background(rd, art, w, h);
+            ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), rd);
+            if (shot && ++frames == 20) {
+                if (SDL_Surface *sf = SDL_RenderReadPixels(rd, nullptr)) SDL_SavePNG(sf, shot), SDL_DestroySurface(sf);
+                quit = true;
+            }
+            SDL_RenderPresent(rd);
+            continue;
+        }
         if (in_tex) {  // high-resolution textures
             if (!art.background)
                 ImGui::GetBackgroundDrawList()->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)w, (float)h), NAVY_TOP,
@@ -983,6 +1178,28 @@ int main(int argc, char **argv) {
         status_line(dl, tr("Game"), running ? tr("Running") : tr("Not running"), !running, scale);
         status_line(dl, tr("Mods"), mods_text.c_str(), true, scale);
         status_line(dl, tr("Texture pack"), pack_text.c_str(), true, scale);
+        {  // this version, and a newer one (shown again from here after No)
+            int us = upd.state;
+            std::string latest;
+            {
+                std::lock_guard<std::mutex> g(upd.lock);
+                latest = upd.latest;
+            }
+            char v[96];
+            if (us == UPD_AVAILABLE) SDL_snprintf(v, sizeof v, tr("%s available"), latest.c_str());
+            else SDL_snprintf(v, sizeof v, "%s%s", upd.version.empty() ? tr("Development build") : upd.version.c_str(),
+                              us == UPD_CHECKING ? "  …" : "");
+            ImVec2 at = ImGui::GetCursorScreenPos();
+            status_line(dl, tr("Version"), v, us != UPD_AVAILABLE || true, scale);
+            if (us == UPD_AVAILABLE) {  // (the line opens the update again)
+                ImVec2 end = ImGui::GetCursorScreenPos();
+                ImGui::SetCursorScreenPos(at);
+                if (ImGui::InvisibleButton("##upd", ImVec2(ImGui::GetContentRegionAvail().x, end.y - at.y)))
+                    upd_dismissed = false;
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("Show the update"));
+                ImGui::SetCursorScreenPos(end);
+            }
+        }
         divider(dl, cw, scale);
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.88f, .9f, .95f, 1));
         ImGui::TextWrapped("%s", tr("Settings applied when the game starts. Everything else is in the game's settings menu (F1)."));

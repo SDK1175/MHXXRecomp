@@ -193,8 +193,8 @@ extern const unsigned char mhgu_icon_png[], mhgu_icon_png_end[];
 // A Linux executable can't carry an icon for the file manager, so the desktop finds the game through a launcher:
 // $XDG_DATA_HOME/applications/mhgurecomp.desktop (~/.local/share/applications) and the icon beside it in
 // icons/hicolor/128x128/apps/mhgurecomp.png, and a copy as "MHGU Recomp.desktop" in the game's folder. Written at each
-// start when missing or out of date (the folder moved), so the app menu starts this copy: mhgurecomp-updater when it is
-// beside the game (it starts the game, and with Updates = Off only that), else the game. A launcher without the
+// start when missing or out of date (the folder moved), so the app menu starts this copy: mhxx-launcher when it is
+// beside the game (it checks for updates and starts the game), else the game. A launcher without the
 // X-MHGURecomp line is the player's own and left alone. The windows' app id is the launcher's name (SDL: the
 // executable's name; the updater sets it), so the taskbar shows the icon too.
 static bool write_if_changed(const char *path, const void *data, size_t size) {
@@ -232,7 +232,7 @@ static void install_launcher(void) {
     else return;
     char *slash = strrchr(exe, '/');
     char run[PATH_MAX + 32];
-    snprintf(run, sizeof run, "%.*s/mhgurecomp-updater", (int)(slash - exe), exe);
+    snprintf(run, sizeof run, "%.*s/mhxx-launcher", (int)(slash - exe), exe);
     if (access(run, X_OK) != 0) snprintf(run, sizeof run, "%s", exe);
 
     snprintf(path, sizeof path, "%s/applications/mhxxrecomp.desktop", data);

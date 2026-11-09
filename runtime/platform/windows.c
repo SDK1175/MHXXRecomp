@@ -231,7 +231,7 @@ void plat_error_box(const char *msg) { MessageBoxA(NULL, msg, "MHGU Recomp", MB_
 
 void plat_fatal_notice(void) {
     if (g_own_log)
-        plat_error_box("The game stopped because of an error. The details are in log.txt, next to mhgurecomp.exe.");
+        plat_error_box("The game stopped because of an error. The details are in log.txt, next to MHXX Recomp.exe.");
 }
 
 // ---- diagnostics

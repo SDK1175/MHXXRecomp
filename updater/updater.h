@@ -1,6 +1,6 @@
-// MHGU Recomp updater (updater/updater.c): installs the latest GitHub release over the game folder it sits in, then
-// starts the game. The pieces: HTTPS (http.c), SHA-256 (sha256.c), .zip / .tar.gz reading (archive.c), the
-// release's JSON (json.c).
+// The pieces of the update (MHXX Recomp: the launcher's, tools/launcher/update.cpp - MHGU Recomp's separate updater
+// program is gone): HTTPS (http.c), SHA-256 (sha256.c; the game hashes the matchmaking key with it too), .zip /
+// .tar.gz reading (archive.c), the release's JSON (json.c).
 #pragma once
 #include <stdbool.h>
 #include <stddef.h>
@@ -44,6 +44,8 @@ typedef struct {
 } Asset;
 typedef struct {
     char tag[64];
+    char title[160];     // the release's name ("" when it has none)
+    char body[24576];    // its notes (Markdown; cut to this size)
     bool draft, prerelease;
     int nassets;
     Asset assets[16];

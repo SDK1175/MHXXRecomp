@@ -33,7 +33,7 @@ const char *g_game_dir = "game";  // folder holding exefs/ and romfs/ (the playe
 #define DATA_FOLDER "Android/data/io.github.mhxxrecomp.app/files/data on this device"
 #define DATA_SUB(s) "data/" s
 #else
-#define DATA_FOLDER "the data folder next to mhgurecomp.exe"
+#define DATA_FOLDER "the data folder next to MHXX Recomp.exe"
 #define DATA_SUB(s) "data\\" s
 #endif
 

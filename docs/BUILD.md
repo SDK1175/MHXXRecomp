@@ -27,9 +27,8 @@
 
 ```bash
 make gen GAME=/f/path/to/game      # 게임 코드를 C로 옮김 (generated/)
-make -j8 GAME=/f/path/to/game      # build/에 게임 (mhgurecomp.exe, mhgugame.dll, DLL, data/ 하드 링크)
-sh tools/texextract/build.sh       # build/mhxx-texextract.exe (런처의 고해상도 텍스처가 씀)
-sh tools/launcher/build.sh         # build/mhxx-launcher.exe (런처는 Makefile이 아니라 이 스크립트로 빌드)
+make -j8 GAME=/f/path/to/game      # build/에 게임("MHXX Recomp.exe", mhgugame.dll), 런처(mhxx-launcher.exe),
+                                   # 텍스처 뽑기(mhxx-texextract.exe), DLL, data/ 하드 링크
 ```
 
 처음 전체 빌드는 시간이 걸리고, 그 뒤로는 바뀐 것만 다시 컴파일합니다. 게임 동영상용 FFmpeg는 첫 빌드 때 소스를 받아 필요한
@@ -41,12 +40,13 @@ sh tools/launcher/build.sh         # build/mhxx-launcher.exe (런처는 Makefile
 make dist VERSION=0.7 ANDROID_DIST=
 ```
 
-`dist\Windows-MHXXRecomp.0.7.zip`: 게임, 게임 코드, 런처, 텍스처 뽑기, 업데이터, DLL, `licenses\`, 빈 `data\` `mods\`
-`cheats\` `bonus\`. 게임 파일, 한글패치, 텍스처, 설정, 세이브는 들어가지 않습니다(`tools/dist.py`). 런처나 텍스처 뽑기를
-빌드하지 않았으면 그 스크립트를 먼저 실행하라고 멈춥니다.
+`dist\Windows-MHXXRecomp.0.7.zip`: 게임, 게임 코드, 런처, 텍스처 뽑기, DLL, `version.txt`, `licenses\`, 빈 `data\` `mods\`
+`cheats\` `bonus\`. 게임 파일, 한글패치, 텍스처, 설정, 세이브는 들어가지 않습니다(`tools/dist.py`).
 
-업데이터가 이 저장소의 릴리스를 받게 하려면 `UPDATE_REPO=SDK1175/MHXXRecomp`를 붙입니다(비우면 업데이트하지 않고 게임만 실행).
-릴리스는 태그를 버전과 같게(`0.7`), 정식 릴리스로 올립니다.
+런처가 업데이트를 맡습니다(예전 업데이터 프로그램은 없어짐). zip의 `version.txt`(= `VERSION`)와 이 저장소
+(`SDK1175/MHXXRecomp`, `tools/launcher/update.cpp`)의 최신 릴리스를 비교합니다. 릴리스는 태그를 버전과 같게(`0.8`), 정식
+릴리스로, zip을 첨부해 올립니다. 릴리스 설명이 런처의 패치 노트로 보입니다. `version.txt`가 없는 빌드(직접 빌드한 것)는
+개발 빌드로 보고 업데이트를 확인하지 않습니다.
 
 ## 참고
 

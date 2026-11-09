@@ -1,9 +1,11 @@
-# MHGU Recomp build
-# Windows: MSYS2 UCRT64 (clang, lld, make; see README.md). Linux: clang (planned).
+# MHXX Recomp build (from MHGU Recomp's)
+# Windows: MSYS2 UCRT64 (clang, lld, make; see docs/BUILD.md). Linux: clang (planned).
 #
 #   make gen GAME=<folder with exefs/ and romfs/>   recompile the game code from your own dump into generated/
-#   make -j4                                        build build/mhgurecomp(.exe) and the game code library, with its
-#                                                   DLLs and the game files (build/data): start build/mhgurecomp.exe
+#   make -j4                                        build "build/MHXX Recomp.exe" (Linux: build/mhgurecomp) and the
+#                                                   game code library, the launcher (build/mhxx-launcher.exe) and the
+#                                                   texture extractor, with the DLLs and the game files (build/data):
+#                                                   start build/mhxx-launcher.exe
 # build/ holds only the game folder (what a player copies); the compiler's files go to obj/.
 #   make PLATFORM=android ABI=arm64-v8a|x86_64      the Android APK instead (android/android.mk): build-android/
 UNAME := $(shell uname -s)
@@ -111,7 +113,8 @@ LIB_INC    := $(if $(SDL_DEPS),-I$(SDL3_DIR)/include -DMHGU_SDL_BUNDLED) $(if $(
 LIB_STAMPS := $(if $(SDL_DEPS),$(SDL3_DIR)/.built) $(if $(SHADERC_DEPS),$(SHADERC_DIR)/.built)
 
 ifeq ($(PLATFORM),windows)
-EXE      := $(B)/mhgurecomp.exe
+# (its name has a space: escaped here for make, quoted in the recipes that use $@)
+EXE      := $(B)/MHXX\ Recomp.exe
 OSFLAGS  := -D_FILE_OFFSET_BITS=64 -DWIN32_LEAN_AND_MEAN -DNOMINMAX -D_CRT_RAND_S -D_POSIX_THREAD_SAFE_FUNCTIONS
 GENFLAGS += -D_FILE_OFFSET_BITS=64
 # (the GCC runtime - libstdc++, libgcc, winpthreads - linked in: three DLLs fewer to ship, and their licenses ask no
@@ -121,14 +124,10 @@ LDFLAGS  := -fuse-ld=lld -Wl,--stack,16777216 $(SDL_LIBS) $(AV_LIBS) -lvulkan-1 
             -Wl,--export-all-symbols -Wl,--out-implib,$(O)/mhgurecomp.dll.a
 GAMELIB  := $(B)/mhgugame.dll
 GAMELIB_LDFLAGS := -shared -fuse-ld=lld -static-libgcc $(O)/mhgurecomp.dll.a
-UPDATER  := $(B)/mhgurecomp-updater.exe
-# (a window program; zlib linked in, WinHTTP is Windows')
-UPD_LDFLAGS := -fuse-ld=lld -mwindows $(SDL_LIBS) -lwinhttp -Wl,-Bstatic -lz -Wl,-Bdynamic -static-libgcc
-# the executables' icons (extras/icon/mhgurecomp.rc, mhgurecomp-updater.rc); llvm-windres comes with MSYS2's llvm-tools,
-# which not every setup has: binutils' windres makes them too
+# the game's icon (extras/icon/mhgurecomp.rc; the launcher's: tools/launcher/icon); llvm-windres comes with MSYS2's
+# llvm-tools, which not every setup has: binutils' windres makes it too
 WINDRES  ?= $(if $(shell command -v llvm-windres 2>/dev/null),llvm-windres,windres)
 ICON_RES := $(O)/icon.res.o
-UPD_ICON_RES := $(O)/updater-icon.res.o
 else ifeq ($(PLATFORM),android)
 include android/android.mk
 else
@@ -150,10 +149,6 @@ GLIBC_WRAP_FLAGS := $(foreach f,$(GLIBC_WRAP),-Wl,--wrap=$(f))
 LDFLAGS  += $(GLIBC_WRAP_FLAGS)
 GAMELIB  := $(B)/mhgugame.so
 GAMELIB_LDFLAGS := -shared -fuse-ld=lld
-UPDATER  := $(B)/mhgurecomp-updater
-# (libcurl: opened at run time, updater/http.c; -lm for runtime/platform/linux_glibc.c: SDL_LIBS has it only with
-# the bundled SDL3)
-UPD_LDFLAGS := -fuse-ld=lld $(SDL_LIBS) -lz -ldl -lm $(GLIBC_WRAP_FLAGS)
 endif
 
 # GAMELIB_ID: what the game code library is compiled against. A library with another id is refused at startup.
@@ -165,7 +160,7 @@ GAMELIB_ID := $(shell (cat $(GAMELIB_SRCS); echo '$(GENFLAGS)') | sha256sum | cu
 SHADER_SRCS := runtime/nvn/maxwell/translate.c runtime/nvn/maxwell/shader.h
 SHADER_ID := $(shell cat $(SHADER_SRCS) | tr -d '\r' | sha256sum | cut -c1-16)
 # VERSION: this build's release (git describe: 0.10.3 on a release's tag, 0.10.3-4-gabc1234 after it), in the log and
-# the updater's (updater/updater.c: only a build of exactly a release updates itself). make dist VERSION=0.10.4 for a
+# the release's version.txt (tools/dist.py; the launcher's update compares it with GitHub's). make dist VERSION=0.10.4 for a
 # release built before its tag is made.
 VERSION ?= $(shell git describe --tags 2>/dev/null || echo unknown)
 
@@ -214,8 +209,8 @@ else
 RT_CXX   := $(O)/rt/nvn/vulkan/vma.o $(FSR_OBJ)
 endif
 
-all: $(EXE) $(if $(GEN_SRC),$(GAMELIB)) $(UPDATER) $(if $(filter windows,$(PLATFORM)),bundle) \
-     $(if $(ANDROID),apk,data licenses pipelist)
+all: $(EXE) $(if $(GEN_SRC),$(GAMELIB)) $(if $(filter windows,$(PLATFORM)),bundle) \
+     $(if $(ANDROID),apk,data licenses pipelist launcher texextract)
 
 # Host-only INI/settings regression test: no game dump or generated code required.
 .PHONY: test-settings
@@ -322,33 +317,20 @@ $(O)/fsr/%.cpp.o: $(FSR)/%.cpp
 	$(CXX) -std=c++17 $(FSRFLAGS) -include $(FSR)/src/$(if $(filter windows,$(PLATFORM)),ffx_mingw_portability.hpp,ffx_1_1_4_portability.hpp) -c $< -o $@
 
 $(EXE): $(RT_OBJ) $(AV_DEPS)
-	@mkdir -p $(dir $@)
-	$(CXX) -o $@ $^ $(LDFLAGS)
+	@mkdir -p $(B)
+	$(CXX) -o "$@" $^ $(LDFLAGS)
 	$(GLIBC_CHECK)
 
-# The updater (updater/updater.c): started in place of the game, it installs the latest release and starts the game.
-# UPDATE_REPO=owner/name: the GitHub repository whose releases it installs (empty: it only starts the game).
-UPDATE_REPO ?=
-UPD_OBJ  := $(patsubst updater/%.c,$(O)/updater/%.o,$(wildcard updater/*.c))
-# (the glibc wrappers and the newer SDL, as the game's)
-UPD_OBJ  += $(if $(filter windows,$(PLATFORM)),,$(O)/rt/platform/linux_glibc.o $(if $(SDL_DEPS),$(O)/rt/platform/linux_sdl.o))
+# The update's pieces (updater/: HTTPS, SHA-256, archives, the release's JSON) are the launcher's
+# (tools/launcher/update.cpp; MHGU Recomp's separate updater program is gone); the game uses updater/sha256.c.
 $(O)/updater/%.o: updater/%.c updater/updater.h $(O)/version.id
 	@mkdir -p $(dir $@)
-	$(CC) -O2 -g -Wall $(OSFLAGS) $(LIB_INC) -DMHGU_VERSION='"$(VERSION)"' -DUPDATE_REPO='"$(UPDATE_REPO)"' -c $< -o $@
-# (SDL3 / shaderc: their headers before anything is compiled, their archives in LDFLAGS / UPD_LDFLAGS)
-$(RT_OBJ) $(UPD_OBJ): $(LIB_STAMPS)
+	$(CC) -O2 -g -Wall $(OSFLAGS) $(LIB_INC) -DMHGU_VERSION='"$(VERSION)"' -c $< -o $@
+# (SDL3 / shaderc: their headers before anything is compiled, their archives in LDFLAGS)
+$(RT_OBJ): $(LIB_STAMPS)
 $(ICON_RES): extras/icon/mhgurecomp.rc extras/icon/mhgurecomp.ico
 	@mkdir -p $(dir $@)
 	$(WINDRES) -I extras/icon -O coff -o $@ $<
-$(UPD_ICON_RES): extras/icon/mhgurecomp-updater.rc extras/icon/mhgurecomp-updater.ico
-	@mkdir -p $(dir $@)
-	$(WINDRES) -I extras/icon -O coff -o $@ $<
-$(O)/updater/updater.o: extras/icon/mhgurecomp-updater-128.png
-UPD_OBJ  += $(UPD_ICON_RES)
-$(UPDATER): $(UPD_OBJ)
-	@mkdir -p $(dir $@)
-	$(CC) -o $@ $^ $(UPD_LDFLAGS)
-	$(GLIBC_CHECK)
 
 # (Linux: a program starts with glibc GLIBC_MAX and libstdc++ GLIBCXX_MAX or later, see LDFLAGS; this checks the one
 # just linked. GLIBCXX_MAX: GCC 13's, the oldest of those distributions.)
@@ -485,8 +467,8 @@ PY := $(firstword $(wildcard tools/venv/Scripts/python.exe) $(wildcard tools/ven
 # (--with: MSYS2 packages linked into the executable or into a bundled DLL, whose licenses go along too: the static
 # GCC runtime, VulkanMemoryAllocator, and glslang / SPIRV-Tools inside shaderc's DLL)
 LICENSE_PKGS := libstdc++ libgcc libwinpthread vulkan-memory-allocator glslang spirv-tools zlib
-bundle: $(EXE) $(if $(GEN_SRC),$(GAMELIB)) $(UPDATER)
-	@$(PY) tools/bundle_dlls.py "$$(cygpath -m "$$(dirname "$$(command -v $(CC))")")" $(B) $^ \
+bundle: $(EXE) $(if $(GEN_SRC),$(GAMELIB))
+	@$(PY) tools/bundle_dlls.py "$$(cygpath -m "$$(dirname "$$(command -v $(CC))")")" $(B) $(EXE) $(if $(GEN_SRC),$(GAMELIB)) \
 	    --licenses $(B)/licenses --with $(LICENSE_PKGS)
 
 data: $(B)/data/.complete
@@ -514,7 +496,7 @@ test-lift:
 runtime-objs: $(RT_OBJ)
 
 clean:  # (keeps $(B)/data, and the settings, caches and saves wherever the game ran)
-	rm -rf $(O) $(B)/*.dll $(B)/*.so $(EXE) $(UPDATER) $(B)/vkprobe.exe
+	rm -rf $(O) $(B)/*.dll $(B)/*.so $(EXE) $(B)/mhxx-launcher$(if $(filter windows,$(PLATFORM)),.exe) $(TEXEXTRACT) $(B)/vkprobe.exe
 
 # make dist VERSION=0.10.4: the release archive of the build folder, for GitHub (tools/dist.py): in $(DIST)/,
 # Windows-MHGURecomp.<version>.zip or Linux-MHGURecomp.<version>.tar.gz (permissions kept), holding the programs,
@@ -545,6 +527,12 @@ texextract: $(TEXEXTRACT)
 $(TEXEXTRACT): $(TEXEXTRACT_SRC) runtime/nvn/tegra.h runtime/nvn/bcn.h runtime/nvn/astc.h
 	@mkdir -p $(dir $@)
 	$(CC) -O2 -o $@ $(TEXEXTRACT_SRC) $(if $(filter windows,$(PLATFORM)),-fuse-ld=lld -static-libgcc -Wl$(comma)-Bstatic -lz -Wl$(comma)-Bdynamic,-lz)
+
+# mhxx-launcher: the launcher (tools/launcher: settings before the game, game file setup, high-resolution textures,
+# the update), built by its own script (incremental; its objects in $(O)/launcher)
+.PHONY: launcher
+launcher: $(LIB_STAMPS)
+	B=$(B) O=$(O) sh tools/launcher/build.sh
 
 .PHONY: all gen test-lift runtime-objs clean bundle data licenses pipelist dist FORCE
 

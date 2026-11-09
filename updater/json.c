@@ -1,4 +1,4 @@
-// The parts of a GitHub release's JSON the updater uses (updater.h Release); everything else is skipped.
+// The parts of a GitHub release's JSON the update uses (updater.h Release); everything else is skipped.
 #include <stdlib.h>
 #include <string.h>
 
@@ -124,6 +124,8 @@ bool json_release(const char *text, size_t size, Release *r) {
         if (!str(&j, key, sizeof key) || !eat(&j, ':')) return false;
         bool ok;
         if (!strcmp(key, "tag_name")) ok = str(&j, r->tag, sizeof r->tag);
+        else if (!strcmp(key, "name")) ok = (ws(&j), j.p < j.end && *j.p == '"') ? str(&j, r->title, sizeof r->title) : skip(&j);
+        else if (!strcmp(key, "body")) ok = (ws(&j), j.p < j.end && *j.p == '"') ? str(&j, r->body, sizeof r->body) : skip(&j);
         else if (!strcmp(key, "draft")) ok = boolean(&j, &r->draft);
         else if (!strcmp(key, "prerelease")) ok = boolean(&j, &r->prerelease);
         else if (!strcmp(key, "assets")) {

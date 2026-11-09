@@ -3,12 +3,13 @@
 usage: python tools/dist.py <build dir> <out dir> <windows|linux> <version> [--bonus <file>]
 
 Windows: <out>/Windows-MHXXRecomp.<version>.zip; Linux: <out>/Linux-MHXXRecomp.<version>.tar.gz (the programs
-keep their executable permission). Inside, one folder of the same name holds what a player copies: the game, its code
-library, the launcher (mhxx-launcher: built by tools/launcher/build.sh, not make - run it before make dist) and the
-texture extractor its "High-resolution textures" runs (mhxx-texextract: tools/texextract/build.sh), the updater, the DLLs (Windows), pipelines.list, licenses/, bonus/system (--bonus: the donor save of the free downloads) and
-the empty data/, mods/ and cheats/ folders, with a note in data/ of what goes there. Nothing else of the build folder:
-not its game files, mods, settings, caches or log. The updater (updater/updater.c) installs the same archive, leaving
-data/, mods/, cheats/ and bonus/ alone. Prints the archive's size and SHA-256: GitHub shows that digest for the upload.
+keep their executable permission). Inside, one folder of the same name holds what a player copies: the game (MHXX
+Recomp.exe), its code library, the launcher (mhxx-launcher, which updates the game too) and the texture extractor its
+"High-resolution textures" runs (mhxx-texextract), the DLLs (Windows), version.txt (the version: the launcher's update
+compares it with GitHub's latest release), pipelines.list, licenses/, bonus/system (--bonus: the donor save of the free
+downloads) and the empty data/, mods/ and cheats/ folders, with a note in data/ of what goes there. Nothing else of
+the build folder: not its game files, mods, textures, settings, caches or log. The launcher's update installs the same
+archive, leaving data/, mods/, textures/, cheats/ and bonus/ alone. Prints the archive's size and SHA-256: GitHub shows that digest for the upload.
 """
 import hashlib
 import io
@@ -25,19 +26,15 @@ DATA_NOTE = ('Put your own dump of Monster Hunter XX Nintendo Switch Ver. 1.5.1 
 def files(build, platform):
     """(path in the archive, file on disk, executable) of everything shipped from the build folder."""
     if platform == 'windows':
-        programs = ['mhgurecomp.exe', 'mhgugame.dll', 'mhxx-launcher.exe', 'mhxx-texextract.exe', 'mhgurecomp-updater.exe']
+        programs = ['MHXX Recomp.exe', 'mhgugame.dll', 'mhxx-launcher.exe', 'mhxx-texextract.exe']
         extra = sorted(n for n in os.listdir(build) if n.lower().endswith('.dll') and n not in programs)
     else:
-        programs = ['mhgurecomp', 'mhgugame.so', 'mhxx-launcher', 'mhxx-texextract', 'mhgurecomp-updater']
+        programs = ['mhgurecomp', 'mhgugame.so', 'mhxx-launcher', 'mhxx-texextract']
         extra = []
     out = []
     for n in programs + extra:
         p = os.path.join(build, n)
         if not os.path.isfile(p):
-            if n.startswith('mhxx-launcher'):
-                sys.exit(f'dist: {p} is missing (sh tools/launcher/build.sh first)')
-            if n.startswith('mhxx-texextract'):
-                sys.exit(f'dist: {p} is missing (sh tools/texextract/build.sh first)')
             sys.exit(f'dist: {p} is missing (make first)')
         out.append((n, p, n in programs))
     pl = os.path.join(build, 'pipelines.list')  # (the recorded pipelines a first run builds: make's pipelist)
@@ -53,14 +50,6 @@ def files(build, platform):
     return out
 
 
-def check_version(build, platform, version):
-    """The updater must be this version's: it compares its own with GitHub's latest release."""
-    p = os.path.join(build, 'mhgurecomp-updater' + ('.exe' if platform == 'windows' else ''))
-    with open(p, 'rb') as f:
-        if b'MHXXRecomp-updater/' + version.encode() + b'\0' not in f.read():
-            sys.exit(f'dist: {p} was not built as version {version} (make dist VERSION={version} rebuilds it)')
-
-
 def main():
     args = sys.argv[1:]
     bonus = None
@@ -71,7 +60,6 @@ def main():
     if len(args) != 4 or args[2] not in ('windows', 'linux'):
         sys.exit(__doc__)
     build, out_dir, platform, version = args
-    check_version(build, platform, version)
     # (Linux-: up to 0.11.4 ArchLinux-, when it needed Arch's SDL3 and shaderc; every updater takes both)
     top = ('Windows' if platform == 'windows' else 'Linux') + '-MHXXRecomp'
     name = f'{top}.{version}' + ('.zip' if platform == 'windows' else '.tar.gz')
@@ -100,6 +88,7 @@ def main():
             for d in dirs:
                 z.writestr(zipfile.ZipInfo((top + '/' + d).rstrip('/') + '/', time.localtime(now)[:6]), b'')
             z.writestr(zipfile.ZipInfo(f'{top}/{note}', time.localtime(now)[:6]), DATA_NOTE, zipfile.ZIP_DEFLATED)
+            z.writestr(zipfile.ZipInfo(f'{top}/version.txt', time.localtime(now)[:6]), version + '\n', zipfile.ZIP_DEFLATED)
             for rel, p, _ in entries:
                 z.write(p, f'{top}/{rel}')
     else:
@@ -113,6 +102,7 @@ def main():
             for d in dirs:
                 t.addfile(info(d, 0, 0o755, now, tarfile.DIRTYPE))
             t.addfile(info(note, len(DATA_NOTE), 0o644, now), io.BytesIO(DATA_NOTE.encode()))
+            t.addfile(info('version.txt', len(version) + 1, 0o644, now), io.BytesIO((version + '\n').encode()))
             for rel, p, program in entries:
                 with open(p, 'rb') as f:
                     t.addfile(info(rel, os.path.getsize(p), 0o755 if program else 0o644, os.path.getmtime(p)), f)
