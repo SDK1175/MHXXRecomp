@@ -1,5 +1,9 @@
 # MHXX Recomp — 진행 상황
 
+> **설치와 다운로드는 [README](../README.md)와 [최신 릴리즈](https://github.com/SDK1175/MHXXRecomp/releases/latest)를 보세요.** 이 문서는 개발 기록입니다(아래 내용은 작업 당시 상태라 지금과 다를 수 있습니다).
+>
+> **To install and download, see the [README](../README.md) and the [latest release](https://github.com/SDK1175/MHXXRecomp/releases/latest).** This page is the development log.
+
 MHGU Recomp(`morerokk/MHGURecomp` @ `ebe50a3`)를 포크해 **몬스터헌터 더블크로스 Nintendo Switch Ver. (일본판) 1.5.1**로 옮기는 작업.
 
 > **기본 플레이 가능 (2026-11-06).** 리컴파일(점프 테이블 미검출 0개) → 부팅 → 한글패치(romfs 모드) → 세이브 불러오기 → 베르나 마을 진입까지 확인. 포트 전용 기능은 주소 미이식으로 전부 꺼져 있어 원작 그대로 30fps.
