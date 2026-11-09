@@ -9,7 +9,7 @@ O=${O:-obj}/launcher
 mkdir -p "$B" "$O"
 IM=third_party/cimgui/imgui
 INC="-Iruntime -Ithird_party/cimgui -I$IM -I$IM/backends"
-CXXSRC="tools/launcher/launcher.cpp tools/launcher/title_art.cpp tools/launcher/nxinstall.cpp tools/launcher/texmake.cpp tools/launcher/update.cpp tools/launcher/tools.cpp runtime/settings_panel.cpp $IM/imgui.cpp $IM/imgui_draw.cpp $IM/imgui_tables.cpp \
+CXXSRC="tools/launcher/launcher.cpp tools/launcher/title_art.cpp tools/launcher/nxinstall.cpp tools/launcher/texmake.cpp tools/launcher/update.cpp tools/launcher/tools.cpp tools/launcher/modinstall.cpp runtime/settings_panel.cpp $IM/imgui.cpp $IM/imgui_draw.cpp $IM/imgui_tables.cpp \
 $IM/imgui_widgets.cpp $IM/backends/imgui_impl_sdl3.cpp $IM/backends/imgui_impl_sdlrenderer3.cpp"
 CSRC="runtime/config.c runtime/config_store.c runtime/log.c runtime/modorder.c runtime/arcmerge.c runtime/nvn/tegra.c runtime/nvn/formats.c runtime/nvn/bcn.c updater/http.c updater/archive.c updater/json.c updater/sha256.c"
 OBJS=
@@ -26,6 +26,16 @@ for f in $CSRC; do
     if [ ! -f "$o" ] || [ "$f" -nt "$o" ] || [ runtime/config.h -nt "$o" ] || [ runtime/rt.h -nt "$o" ]; then
         echo "  $f"
         clang -c -O2 $INC "$f" -o "$o"
+    fi
+    OBJS="$OBJS $o"
+done
+# (the LZMA SDK's 7z reading, third_party/lzma: mods packed as .7z)
+LZ=third_party/lzma
+for n in 7zAlloc 7zArcIn 7zBuf 7zBuf2 7zCrc 7zCrcOpt 7zDec 7zStream Bcj2 Bra Bra86 BraIA64 CpuArch Delta Lzma2Dec LzmaDec Ppmd7 Ppmd7Dec; do
+    o="$O/lzma_$n.o"
+    if [ ! -f "$o" ] || [ "$LZ/$n.c" -nt "$o" ]; then
+        echo "  $LZ/$n.c"
+        clang -c -O2 -DZ7_PPMD_SUPPORT -DZ7_EXTRACT_ONLY "$LZ/$n.c" -o "$o"
     fi
     OBJS="$OBJS $o"
 done

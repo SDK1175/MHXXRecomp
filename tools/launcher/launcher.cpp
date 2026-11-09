@@ -37,6 +37,7 @@
 #include "nxinstall.h"
 #include "texmake.h"
 #include "tools.h"
+#include "modinstall.h"
 #include "update.h"
 #include "settings_locale.h"
 #include "settings_panel.h"
@@ -849,7 +850,7 @@ static int tex_screen(TexMaker &tm, SDL_Window *win, int w, int h, float s, bool
 // ---------------------------------------------------------------- Tools: the save's backups, mods, the PC, caches,
 // a problem report (tools.cpp)
 static std::mutex g_mods_lock;
-static std::vector<std::string> g_picked_mods;  // (the file dialog's answer: mod .zips to put in)
+static std::vector<std::string> g_picked_mods;  // (the dialogs' answers: mods to put in, .zip / .7z / folders)
 static void SDLCALL mods_picked(void *, const char *const *list, int) {
     std::lock_guard<std::mutex> g(g_mods_lock);
     for (int i = 0; list && list[i]; i++) g_picked_mods.push_back(list[i]);
@@ -944,7 +945,7 @@ static int tools_screen(Tools &t, SDL_Window *win, int w, int h, float s, bool r
                 for (const std::string &z : zips) {
                     std::string name;
                     t.set(std::string(tr("Installing")) + " " + z.substr(z.find_last_of("/\\") + 1) + " …", true);
-                    if (!install_mod_zip(z, "mods", name, err)) {
+                    if (!install_mod(z, "mods", name, err)) {
                         t.set(std::string(tr("Could not install the mod: ")) + err, false);
                         t.changed = true;
                         return;
@@ -1066,15 +1067,18 @@ static int tools_screen(Tools &t, SDL_Window *win, int w, int h, float s, bool r
             ImGui::EndChild();
         }
     } else if (t.tab == 1) {  // ---- a mod's .zip
-        wrap(tr("Pick a mod's .zip: it is unpacked into a folder of its own in mods (a mod of the same name is replaced). Then turn it on and set its order in Mods on the right."));
+        wrap(tr("Pick a mod's .zip or .7z, or its folder: it goes into a folder of its own in mods (a mod of the same name is replaced). A .rar: unpack it first, then pick its folder. Then turn it on and set its order in Mods on the right."));
         ImGui::Dummy(ImVec2(0, 4 * s));
-        float b2 = (bw - gap) * .5f;
-        if (hunter_button("mod.pick", tr("Pick a .zip"), ImVec2(b2, bh), true, can, s)) {
-            static const SDL_DialogFileFilter zf[] = {{"ZIP", "zip"}};
+        float b3 = (bw - gap * 2) / 3;
+        if (hunter_button("mod.pick", tr("Pick a .zip / .7z"), ImVec2(b3, bh), true, can, s)) {
+            static const SDL_DialogFileFilter zf[] = {{"ZIP / 7z / RAR", "zip;7z;rar"}};
             SDL_ShowOpenFileDialog(mods_picked, nullptr, win, zf, 1, nullptr, true);
         }
         ImGui::SameLine(0, gap);
-        if (hunter_button("mod.open", tr("Open the mods folder"), ImVec2(b2, bh), false, true, s)) {
+        if (hunter_button("mod.dir", tr("Pick a folder"), ImVec2(b3, bh), true, can, s))
+            SDL_ShowOpenFolderDialog(mods_picked, nullptr, win, nullptr, true);
+        ImGui::SameLine(0, gap);
+        if (hunter_button("mod.open", tr("Open the mods folder"), ImVec2(b3, bh), false, true, s)) {
             SDL_CreateDirectory("mods");
             open_folder("mods");
         }
