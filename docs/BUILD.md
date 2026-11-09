@@ -37,10 +37,10 @@ make -j8 GAME=/f/path/to/game      # build/에 게임("MHXX Recomp.exe", mhgugam
 ## 3. 배포용 zip
 
 ```bash
-make dist VERSION=0.7 ANDROID_DIST=
+make dist VERSION=0.8 ANDROID_DIST=
 ```
 
-`dist\Windows-MHXXRecomp.0.7.zip`: 게임, 게임 코드, 런처, 텍스처 뽑기, DLL, `version.txt`, `licenses\`, 빈 `data\` `mods\`
+`dist\Windows-MHXXRecomp.0.8.zip`: 게임, 게임 코드, 런처, 텍스처 뽑기, DLL, `version.txt`, `licenses\`, 빈 `data\` `mods\`
 `cheats\` `bonus\`. 게임 파일, 한글패치, 텍스처, 설정, 세이브는 들어가지 않습니다(`tools/dist.py`).
 
 런처가 업데이트를 맡습니다(예전 업데이터 프로그램은 없어짐). zip의 `version.txt`(= `VERSION`)와 이 저장소

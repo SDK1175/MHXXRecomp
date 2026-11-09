@@ -21,7 +21,7 @@ MHXX Recomp는 [MHGU Recomp](https://github.com/morerokk/MHGURecomp)를 포크�
 
 | | |
 |---|---|
-| **런처** | 게임 파일 설치, 시작 전 설정(해상도, 창 모드, 모드), 바탕화면 바로가기, **자동 업데이트**(새 버전이 나오면 패치 노트와 함께 알려 주고 설치). 배경과 로고는 본인 게임 파일의 타이틀 화면에서 읽어 옵니다 |
+| **런처** | 게임 파일 설치, 시작 전 설정(해상도, 창 모드, 모드), 바탕화면 바로가기, **자동 업데이트**(새 버전이 나오면 패치 노트와 함께 알려 주고 설치), **도구**(세이브 백업·복원, 모드 zip 설치, PC 사양 검사, 캐시 지우기, 문제 보고). 배경과 로고는 본인 게임 파일의 타이틀 화면에서 읽어 옵니다 |
 | **게임 파일 설치** | 게임 원본(NSP / XCI), 1.5.1 업데이트(NSP), 본인 기기의 prod.keys, 한글패치(zip)를 고르면 런처가 복호화하고 업데이트를 합쳐 알아서 설치합니다 |
 | **한글패치** | `MHXX_NX_1.5_kor_v2`를 모드로 그대로 사용. 설정 메뉴도 한국어 |
 | **고해상도 렌더링** | 원하는 해상도와 화면비(울트라와이드 포함), 시야각, AMD FSR 3.1 업스케일, 이방성 필터링 16x |
@@ -54,6 +54,7 @@ MHXX Recomp는 [MHGU Recomp](https://github.com/morerokk/MHGURecomp)를 포크�
 
 | 버전 | 이름 | 내용 |
 |---|---|---|
+| [0.8](docs/changelog/0.8.md) | 헌터의 채비 | 런처 자동 업데이트, 도구(세이브 백업·복원, 모드 zip 설치, PC 사양 검사, 캐시 지우기, 문제 보고), 실행 파일 이름 `MHXX Recomp.exe` |
 | [0.7](docs/changelog/0.7.md) | 하이레조 헌팅 | 런처에서 고해상도 텍스처 만들기, 그래픽카드에 맞춘 텍스처 설정, 이전 팩 가져오기 |
 | [0.6](docs/changelog/0.6.md) | | 런처의 게임 파일 설치 (NSP / XCI + 키 + 한글패치) |
 | [0.5](docs/changelog/0.5.md) | | 런처, 나가기 선택, 더블 크로스 테마, 시작 시 흰 창 수정 |
@@ -63,8 +64,8 @@ MHXX Recomp는 [MHGU Recomp](https://github.com/morerokk/MHGURecomp)를 포크�
 
 ## 문제가 생기면
 
-이 저장소의 [Issues](https://github.com/SDK1175/MHXXRecomp/issues)에 게임 폴더의 `log.txt`(설치 문제는 `install.log`)를
-첨부해 올려 주세요. **원본 MHGU Recomp 저장소에는 MHXX 문제를 올리지 말아 주세요.**
+이 저장소의 [Issues](https://github.com/SDK1175/MHXXRecomp/issues)에 런처 **도구 → 문제 보고**로 만든 zip(로그와 PC
+사양이 들어 있음)을 첨부해 올려 주세요. **원본 MHGU Recomp 저장소에는 MHXX 문제를 올리지 말아 주세요.**
 
 ## 크레딧
 
