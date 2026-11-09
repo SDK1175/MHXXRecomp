@@ -90,7 +90,49 @@ static uint64_t fnv_file(uint64_t h, const char *path) {
     return fnv(fnv(h, path, strlen(path)), v, sizeof v);
 }
 
+// arc_partial's answers kept between starts (cache/arcpartial.txt: "<key> <0|1>" a line, the key from both files'
+// paths, sizes and times): the answer only changes with the files, and opening two archives for each a mod replaces
+// took most of the start with a big mod (the Korean patch: 2,700 files)
+#define PART_CACHE "cache/arcpartial.txt"
+static struct { uint64_t key; bool partial; } *g_part;
+static int g_npart, g_cpart;
+static bool g_part_loaded;
+static FILE *g_part_out;
+static void part_load(void) {
+    g_part_loaded = true;
+    FILE *f = fopen(PART_CACHE, "r");
+    if (!f) return;
+    unsigned long long k;
+    int v;
+    while (fscanf(f, "%llx %d", &k, &v) == 2) {
+        if (g_npart == g_cpart && !(g_part = realloc(g_part, sizeof *g_part * (size_t)(g_cpart = g_cpart ? g_cpart * 2 : 1024)))) {
+            g_npart = g_cpart = 0;
+            break;
+        }
+        g_part[g_npart].key = k, g_part[g_npart++].partial = v != 0;
+    }
+    fclose(f);
+}
+static int g_part_hits, g_part_reads;
+void arc_partial_stats(int *hits, int *reads) { *hits = g_part_hits, *reads = g_part_reads; }
+
+static bool arc_partial_read(const char *orig, const char *mod);
 bool arc_partial(const char *orig, const char *mod) {
+    if (!g_part_loaded) part_load();
+    uint64_t key = fnv_file(fnv_file(fnv(14695981039346656037ull, "p1", 2), orig), mod);
+    for (int i = 0; i < g_npart; i++)
+        if (g_part[i].key == key) return g_part_hits++, g_part[i].partial;
+    g_part_reads++;
+    bool partial = arc_partial_read(orig, mod);
+    if (!g_part_out) {
+        mkdir("cache", 0755);
+        g_part_out = fopen(PART_CACHE, "a");
+    }
+    if (g_part_out) fprintf(g_part_out, "%016llx %d\n", (unsigned long long)key, partial), fflush(g_part_out);
+    return partial;
+}
+
+static bool arc_partial_read(const char *orig, const char *mod) {
     Arc o = {0}, m = {0};
     int shared = 0, lacks = 0;
     if (arc_open(&o, orig, true) && arc_open(&m, mod, true) && o.version == m.version)

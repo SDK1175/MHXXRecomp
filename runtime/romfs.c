@@ -27,6 +27,7 @@ typedef struct {
     uint32_t off;
     Dir *parent;
     char *rpath;        // path inside the RomFS
+    int index;          // in its folder's files (sorted)
 } File;
 struct Dir {
     char *name;
@@ -35,6 +36,7 @@ struct Dir {
     File **files;
     int ndirs, nfiles, cdirs, cfiles;
     uint32_t off;
+    int index;  // in its parent's dirs (sorted)
 };
 
 static int by_name_dir(const void *a, const void *b) { return strcmp((*(Dir *const *)a)->name, (*(Dir *const *)b)->name); }
@@ -134,7 +136,8 @@ static int merge(Dir *dst, Dir *src) {
 static void sort_tree(Dir *d) {
     if (d->ndirs) qsort(d->dirs, d->ndirs, sizeof *d->dirs, by_name_dir);
     if (d->nfiles) qsort(d->files, d->nfiles, sizeof *d->files, by_name_file);
-    for (int i = 0; i < d->ndirs; i++) sort_tree(d->dirs[i]);
+    for (int i = 0; i < d->nfiles; i++) d->files[i]->index = i;
+    for (int i = 0; i < d->ndirs; i++) d->dirs[i]->index = i, sort_tree(d->dirs[i]);
 }
 
 typedef struct { Dir **dirs; File **files; int nd, nf, cd, cf; } Lists;
@@ -188,8 +191,10 @@ static char *rel_path(File *f) {
 }
 
 bool romfs_open(const char *base_dir, const char *const *overlays, int noverlays) {
+    uint64_t t0 = plat_now_ns();
     Dir *root = scan(base_dir, "", 0);
     if (!root) { LOG("[romfs] cannot read %s\n", base_dir); return false; }
+    LOG("[romfs] game files listed in %.2f s\n", (plat_now_ns() - t0) / 1e9);
     // The game looks its files up by their exact names, and some dump tools (yuzu's) spell the top folder NativeNX:
     // the image calls it nativeNX whatever its spelling on disk (issue #147; main.c's game_files_problem catches
     // wrong capitals further in)
@@ -200,11 +205,18 @@ bool romfs_open(const char *base_dir, const char *const *overlays, int noverlays
             root->dirs[i]->name = strdup("nativeNX");
         }
     for (int i = 0; i < noverlays; i++) {
+        uint64_t t1 = plat_now_ns();
         Dir *o = scan(overlays[i], "", 0);
         if (!o) continue;
+        uint64_t t2 = plat_now_ns();
+        int h0, r0, h1, r1;
+        arc_partial_stats(&h0, &r0);
         int n = merge(root, o);
-        LOG("[romfs] mod %s: %d files\n", overlays[i], n);
+        arc_partial_stats(&h1, &r1);
+        LOG("[romfs] mod %s: %d files (listed in %.2f s, put over the game's in %.2f s; archives compared %d, "
+            "from the cache %d)\n", overlays[i], n, (t2 - t1) / 1e9, (plat_now_ns() - t2) / 1e9, r1 - r0, h1 - h0);
     }
+    uint64_t t3 = plat_now_ns();
     sort_tree(root);
     Lists l = {0};
     l.dirs = malloc(sizeof *l.dirs * (l.cd = 64));
@@ -235,9 +247,7 @@ bool romfs_open(const char *base_dir, const char *const *overlays, int noverlays
         Dir *d = l.dirs[i];
         uint8_t *e = dtab + d->off;
         uint32_t parent = d->parent ? d->parent->off : 0, nl = (uint32_t)strlen(d->name), sib = EMPTY;
-        if (d->parent)
-            for (int k = 0; k + 1 < d->parent->ndirs; k++)
-                if (d->parent->dirs[k] == d) sib = d->parent->dirs[k + 1]->off;
+        if (d->parent && d->index + 1 < d->parent->ndirs) sib = d->parent->dirs[d->index + 1]->off;
         uint32_t h = name_hash(parent, d->name) % nbd;
         put32(e, parent);
         put32(e + 4, sib);
@@ -252,8 +262,7 @@ bool romfs_open(const char *base_dir, const char *const *overlays, int noverlays
         File *f = l.files[i];
         uint8_t *e = ftab + f->off;
         uint32_t nl = (uint32_t)strlen(f->name), sib = EMPTY;
-        for (int k = 0; k + 1 < f->parent->nfiles; k++)
-            if (f->parent->files[k] == f) sib = f->parent->files[k + 1]->off;
+        if (f->index + 1 < f->parent->nfiles) sib = f->parent->files[f->index + 1]->off;
         uint32_t h = name_hash(f->parent->off, f->name) % nbf;
         put32(e, f->parent->off);
         put32(e + 4, sib);
@@ -270,7 +279,8 @@ bool romfs_open(const char *base_dir, const char *const *overlays, int noverlays
     g_files = l.files;  // (flatten order is data order)
     g_nfiles = l.nf;
     free(l.dirs);
-    LOG("[romfs] %d files, %d folders, image %.1f GB\n", l.nf, l.nd, g_size / 1e9);
+    LOG("[romfs] %d files, %d folders, image %.1f GB (tables in %.2f s)\n", l.nf, l.nd, g_size / 1e9,
+        (plat_now_ns() - t3) / 1e9);
     return true;
 }
 

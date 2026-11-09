@@ -11,6 +11,8 @@ bool arc_merge(const char *orig, const char *prev, const char *mod, char *out, s
 // `mod` holds only some of `orig`'s entries, so it goes over `orig` rather than replacing it. One with none of them is
 // another archive altogether (or an emptied one): that still replaces. Reads the entry tables only.
 bool arc_partial(const char *orig, const char *mod);
+// (arc_partial: answers from the cache, archives read; for the log)
+void arc_partial_stats(int *hits, int *reads);
 
 // How many entries `a` and `b` (two mods' copies of the archive `orig`) both changed, differently: those can't be
 // both kept. `name` gets the first one. -1 when a file isn't an archive of the same format.
