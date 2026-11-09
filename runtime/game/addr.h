@@ -65,11 +65,11 @@
 // ---- runtime/hle/emtrace.c
 #define A_EMTRACE_FN_FRAME                   0x0u  // GU 1.4.0: 0xda5824  engine frame start: sleeps to the target, sets the step (+0x68)
 #define A_EMTRACE_FN_SET_ACTION              0x0u  // GU 1.4.0: 0x276154  (monster, group, index, mode): starts a monster action
-#define A_EMTRACE_FN_HATE_RATE               0x0u  // GU 1.4.0: 0x2bb828
+#define A_EMTRACE_FN_HATE_RATE               0x2ba564u  // MHXX 1.5.1 (called 4 times from 0x2bacd4). GU 1.4.0: 0x2bb828
 #define EMTRACE_PORTED (A_EMTRACE_FN_FRAME && A_EMTRACE_FN_SET_ACTION && A_EMTRACE_FN_HATE_RATE && A_G_SENEMY && A_G_SPLAYER && A_G_SYSTEM)
 
 // ---- runtime/hle/hatestep.c
-#define A_HATESTEP_FN_HATE                   0x0u  // GU 1.4.0: 0x2bbf98  (monster): the update of its attention scores
+#define A_HATESTEP_FN_HATE                   0x2bacd4u  // MHXX 1.5.1 (called once, from the monster update 0x2a4240; +0x1428 the status block, scores +0x254 + 4 * i += (int)(rate * step +0x1c), rate from 0x2ba564 = this - 0x770 as in GU). GU 1.4.0: 0x2bbf98  (monster): the update of its attention scores
 #define HATESTEP_PORTED (A_HATESTEP_FN_HATE)
 
 // ---- runtime/hle/hpscale.c
@@ -100,8 +100,8 @@
 #define KOTRACE_PORTED (A_KOTRACE_FN_KO_HIT && A_KOTRACE_FN_KO_APPLY && A_KOTRACE_FN_KO_START && A_KOTRACE_FN_KO_RAISE && A_KOTRACE_FN_DECAY && A_G_SYSTEM)
 
 // ---- runtime/hle/mashrate.c
-#define A_MASHRATE_FN_MASH                   0x0u  // GU 1.4.0: 0x47f590  (player) -> 1: mashed this update
-#define A_MASHRATE_MASH_BITS                 0x0u  // GU 1.4.0: 0xff05f0  (the stick's directions, the buttons 0x47f590 counts)
+#define A_MASHRATE_FN_MASH                   0x47c56cu  // MHXX 1.5.1 (13 callers, as GU; the same offsets: +0x13cc bit 0 local, +0x13f8 & 0x5f0 new buttons, +0x1406 a new stick direction). GU 1.4.0: 0x47f590  (player) -> 1: mashed this update
+#define A_MASHRATE_MASH_BITS                 0xff05f0u  // MHXX 1.5.1: as GU (0x47c56c tests the same 0x5f0 buttons; the stick in +0x13fc / +0x1400 bits 16-23, 0x47bd1c). GU 1.4.0: 0xff05f0  (the stick's directions, the buttons 0x47f590 counts)
 #define MASHRATE_PORTED (A_MASHRATE_FN_MASH && A_MASHRATE_MASH_BITS)
 
 // ---- runtime/hle/mousecam.c

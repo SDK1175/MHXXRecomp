@@ -28,11 +28,14 @@
 
 static struct { uint32_t pl, state; uint64_t update; float t; bool got; } g_slot[SLOTS];
 
+// MHXX_MASH_LOG=1: each mash counted (the log's times show how fast a stun is mashed out of, at 30 fps and above)
+static int g_log;
 static void mash(Cpu *c) {
     uint32_t pl = c->r[0];
     float step = LDF(pl + PL_STEP);
     if (!(step > 0.0f && step < 2.0f)) {
         fnhook_call_original(c, FN_MASH);
+        if (g_log && (c->r[0] & 1)) LOG("[mash] counted (step %.2f, the game's own)\n", step);
         return;
     }
     int s = 0;
@@ -48,6 +51,7 @@ static void mash(Cpu *c) {
         if (g_slot[s].t >= 2.0f) {  // a 30 fps update starts: a look at the controller
             uint32_t state = LD32(pl + PL_STATE);
             g_slot[s].got = (LD8(pl + PL_LOCAL) & 1) && (state & ~g_slot[s].state & MASH_BITS);
+            if (g_log && g_slot[s].got) LOG("[mash] counted (step %.2f)\n", step);
             g_slot[s].state = state;
             g_slot[s].t = fmodf(g_slot[s].t, 2.0f);
         }
@@ -57,6 +61,8 @@ static void mash(Cpu *c) {
 
 void mashrate_init(void) {
     PORT_OFF(MASHRATE, "stun mashing at high frame rates");
+    const char *l = getenv("MHXX_MASH_LOG");
+    g_log = l && *l == '1';
     const char *e = getenv("MHGU_NO_MASHRATE");
     if (e && *e == '1') return;
     fnhook_set(FN_MASH, hle_register("mashrate:mash", mash));
