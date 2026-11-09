@@ -7,7 +7,9 @@
 #include "cpu.h"
 #include "platform.h"
 
-#define LOG(...) fprintf(stderr, __VA_ARGS__)
+// The log (stderr: log.txt): each line starts with the seconds since the start, "[  12.345] " (where the start is slow)
+void rt_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+#define LOG(...) rt_log(__VA_ARGS__)
 #define FATAL(...) (fprintf(stderr, "FATAL: " __VA_ARGS__), rt_fatal_trace())
 
 // ---- guest address space (32-bit; host address = GUEST_BASE + guest address)
