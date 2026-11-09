@@ -925,6 +925,19 @@ static void ui_group_hend(int n) {
             if (xs[i] - xs[i - 1] > (k ? xs[k] - xs[k - 1] : 0.0f)) k = i;
         bool two = k && xs[k] - xs[k - 1] > 320.0f &&
                    (h != 2 || (xs[k - 1] - xs[0] > 160.0f && xs[n - 1] - xs[k] > 160.0f));
+        // Nor a window's frame whose one side is only its edge: a column of pieces (40 wide at most) as tall as a window
+        // (over 200). MHXX's Guild Card: corners and stretched edges at x 261..299 and 997..999, its top and bottom
+        // stretched from x 635 - the right edge left the card for the screen's edge.
+        if (two) {
+            float lx0 = INFINITY, lx1 = -INFINITY, ly0 = INFINITY, ly1 = -INFINITY;
+            float rx0 = INFINITY, rx1 = -INFINITY, ry0 = INFINITY, ry1 = -INFINITY;
+            for (int i = 0; i < n; i++) {
+                float x = ui_group.p[i].pos_x, y = ui_group.p[i].pos_y;
+                if (x < xs[k]) lx0 = fminf(lx0, x), lx1 = fmaxf(lx1, x), ly0 = fminf(ly0, y), ly1 = fmaxf(ly1, y);
+                else rx0 = fminf(rx0, x), rx1 = fmaxf(rx1, x), ry0 = fminf(ry0, y), ry1 = fmaxf(ry1, y);
+            }
+            if ((lx1 - lx0 <= 40.0f && ly1 - ly0 > 200.0f) || (rx1 - rx0 <= 40.0f && ry1 - ry0 > 200.0f)) two = false;
+        }
         if (two) cut = xs[k], h = ui_group_hside(x0, xs[k - 1]), h2 = ui_group_hside(xs[k], x1);
     }
     float s = (16.0f / 9.0f) / asp, anchor = g_ui_anchor_aspect < asp ? g_ui_anchor_aspect : asp;
@@ -3249,8 +3262,11 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                         vanchor = V_CENTER;
                     } else if (pos_z < 95.0f) {
                         // 94.0: Central notifications & banners ("Time limit: 50 min.")
-                        // 60.0: the Guild Card's name plate (top right, under its page counter): by which third it is in
-                        anchor = ANCHOR_CENTER;
+                        // 60.0: the Guild Card's name plate (top right, under its page counter): by which third it is in.
+                        // Its plate in MHXX (x 1051, y 40) is the page counter's backdrop (layer 100, x 1114..1200, Right):
+                        // centred, it stayed behind as a black box and the white counter landed on the light card. A
+                        // piece in the right quarter goes Right with it, one in the left quarter Left.
+                        anchor = pos_x > 960.0f ? ANCHOR_RIGHT : pos_x < 320.0f ? ANCHOR_LEFT : ANCHOR_CENTER;
                         vanchor = pos_y < 240.0f ? V_TOP : pos_y > 480.0f ? V_BOTTOM : V_CENTER;
                     } else if (fabsf(pos_z - 96.0f) < 0.5f) {
                         // 96.0: Dialogue & Help text box (bottom left), and the button guides of the village / Hub (top
