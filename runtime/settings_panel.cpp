@@ -97,6 +97,7 @@ struct State {
     int leave_to = 0;               // View::Exit: 0 the desktop, 1 the launcher (mhxx-launcher)
     int capture_pad = 0;            // the Switch button (PAD_*) a controller button is being chosen for
     uint64_t capture_pad_since = 0;  // when that began (SDL_GetTicksNS): it gives up after PAD_CAPTURE_SECONDS
+    bool aspect_custom = false;      // Aspect ratio: Custom chosen (its number shown though it is one of the named ones)
 } s;
 std::atomic<bool> request_exit, request_back, is_dirty, is_confirming, is_capturing, capture_mouse, capture_wheel;
 // (the key pressed while a key is being chosen, or KEY_MOUSE + a mouse button; -1: none yet)
@@ -1209,11 +1210,35 @@ std::vector<Row> main_rows() {
             number(r, "render.width", "Width", &c.render_w, 320, 16384, 80, ini("RenderResolution"));
             number(r, "render.height", "Height", &c.render_h, 180, 16384, 45, ini("RenderResolution"));
         }
-        add_choice(
-            r, "aspect.auto", "Automatic aspect ratio", c.aspect_ratio == 0 ? 0 : 1,
-            {tr("Auto"), tr("Custom")}, [](int v) { s.draft.aspect_ratio = v ? 16.f / 9 : 0; }, ini("AspectRatio"));
-        if (c.aspect_ratio)
-            number(r, "aspect", tr("Aspect ratio"), &c.aspect_ratio, lo("AspectRatio"), hi("AspectRatio"), .05f, ini("AspectRatio"));
+        {  // Auto, the usual shapes by name ("21:9", not 2.33), or Custom: a number typed (width / height)
+            static const struct { const char *name; float aspect; } shapes[] = {
+                {"16:9", 16.f / 9}, {"16:10", 16.f / 10}, {"21:9", 21.f / 9}, {"32:9", 32.f / 9}, {"4:3", 4.f / 3}};
+            const int n = (int)(sizeof shapes / sizeof *shapes);
+            int sel = n + 1;
+            if (c.aspect_ratio == 0) s.aspect_custom = false;  // (Reset: back to Auto)
+            if (!s.aspect_custom) {
+                if (c.aspect_ratio == 0) sel = 0;
+                for (int i = 0; i < n; i++)
+                    if (fabsf(c.aspect_ratio - shapes[i].aspect) < 0.005f) sel = i + 1;
+            }
+            std::vector<std::string> names = {tr("Auto")};
+            for (const auto &sh : shapes) names.push_back(sh.name);
+            names.push_back(tr("Custom"));
+            add_choice(
+                r, "aspect", "Aspect ratio", sel, names,
+                [n](int v) {
+                    s.aspect_custom = v == n + 1;
+                    if (s.aspect_custom) {
+                        if (!s.draft.aspect_ratio) s.draft.aspect_ratio = 16.f / 9;
+                    } else {
+                        s.draft.aspect_ratio = v ? shapes[v - 1].aspect : 0;
+                    }
+                },
+                ini("AspectRatio"));
+            if (sel == n + 1)
+                number(r, "aspect.custom", tr("Width / height"), &c.aspect_ratio, lo("AspectRatio"), hi("AspectRatio"), .05f,
+                       ini("AspectRatio"));
+        }
         number(r, "fov", tr("Field of view"), &c.fov, lo("FOV"), hi("FOV"), .05f, ini("FOV"));
         add_choice(
             r, "anchor", "HUD anchor", c.ui_anchor - 1, {"16:9", "21:9", "32:9", tr("Edges")},
