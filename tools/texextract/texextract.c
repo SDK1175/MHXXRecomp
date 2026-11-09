@@ -12,13 +12,20 @@
 // The textures are stored as the Switch's GPU reads them (block-linear); key is the dump's: the hash of the level
 // deswizzled to block rows, its size and its NVN format. Nothing is sent anywhere; the PNGs are for the player's own
 // texture pack.
+//
+// The archives are read on several threads (up to 8; MHXX_TEXEXTRACT_THREADS sets the number). A texture found in
+// several archives is saved once, and index.txt names the first of them in the folders' order and is written in that
+// order at the end, as with one thread: the output doesn't depend on which thread got where first. (While it runs,
+// index.txt grows a line a texture saved: the launcher counts them for its progress.)
 #include <dirent.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <zlib.h>
 
 #include "../../runtime/nvn/astc.h"
@@ -26,6 +33,7 @@
 #include "../../runtime/nvn/tegra.h"
 
 #ifdef _WIN32
+#include <windows.h>
 #include <direct.h>
 #define mkdir_one(p) _mkdir(p)
 #else
@@ -70,7 +78,8 @@ static bool save_png(const char *path, const uint8_t *rgba, uint32_t w, uint32_t
         raw[(uint64_t)y * (w * 4 + 1)] = 0;
         memcpy(raw + (uint64_t)y * (w * 4 + 1) + 1, rgba + (uint64_t)y * w * 4, (size_t)w * 4);
     }
-    bool ok = compress2(z, &zn, raw, raw_n, 6) == Z_OK;
+    // (level 1: these are the upscaler's input, read once; level 6 took the most of the time for a few % smaller)
+    bool ok = compress2(z, &zn, raw, raw_n, 1) == Z_OK;
     FILE *f = ok ? fopen(path, "wb") : NULL;
     if (f) {
         static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', 13, 10, 26, 10};
@@ -96,31 +105,42 @@ static const Fmt fmts[] = {
     {0x19, 0x49, BCN_BC4U, "mask"},        // BC4
     {0x1f, 0x4b, BCN_BC5U, "normal"},      // BC5 (normal maps: _NM)
 };
+static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;  // (all below)
 static uint32_t unknown_fmt[256], n_tex, n_saved, n_known, n_other;
-static uint64_t *seen;
+// each texture saved: where it was first found (order: the archive's place in the folders' walk, then the entry's)
+typedef struct {
+    uint64_t key, order;
+    uint32_t w, h;
+    const char *kind, *arc;
+    char name[65];
+} Entry;
+static Entry *g_ent;
+static uint32_t g_nent, g_cent;
+// key -> its entry (open addressing; 0 is no key, a key of 0 is kept as 1)
+static struct { uint64_t key; uint32_t ent; } *seen;
 static uint32_t seen_cap, seen_n;
-static bool seen_add(uint64_t k) {
+static uint32_t *seen_find(uint64_t k, bool *is_new) {
     if (!k) k = 1;
     if (seen_n * 2 >= seen_cap) {
         uint32_t cap = seen_cap ? seen_cap * 2 : 1 << 16;
-        uint64_t *n = calloc(cap, sizeof *n);
+        __typeof__(seen) n = calloc(cap, sizeof *n);
         for (uint32_t i = 0; i < seen_cap; i++)
-            if (seen[i])
-                for (uint32_t j = (uint32_t)seen[i] & (cap - 1);; j = (j + 1) & (cap - 1))
-                    if (!n[j]) { n[j] = seen[i]; break; }
+            if (seen[i].key)
+                for (uint32_t j = (uint32_t)seen[i].key & (cap - 1);; j = (j + 1) & (cap - 1))
+                    if (!n[j].key) { n[j] = seen[i]; break; }
         free(seen);
         seen = n, seen_cap = cap;
     }
     for (uint32_t j = (uint32_t)k & (seen_cap - 1);; j = (j + 1) & (seen_cap - 1)) {
-        if (seen[j] == k) return false;
-        if (!seen[j]) { seen[j] = k, seen_n++; return true; }
+        if (seen[j].key == k) { *is_new = false; return &seen[j].ent; }
+        if (!seen[j].key) { seen[j].key = k, seen_n++; *is_new = true; return &seen[j].ent; }
     }
 }
 
 static const char *g_out;
 static FILE *g_index;
 
-static void texture(const char *arc, const char *name, const uint8_t *t, uint64_t n) {
+static void texture(const char *arc, const char *name, const uint8_t *t, uint64_t n, uint64_t order) {
     if (n < 0x18 || memcmp(t, "TEX", 4)) return;
     // header: "TEX\0", three packed words, the data's size (+0x10), then each level's offset into the data (+0x14,
     // one word a level); the data follows that table (+0x18 with one level, +0x40 with eleven)
@@ -128,13 +148,18 @@ static void texture(const char *arc, const char *name, const uint8_t *t, uint64_
     memcpy(&d1, t + 4, 4), memcpy(&d2, t + 8, 4), memcpy(&d3, t + 12, 4);
     uint32_t levels = d2 & 0x3f, w = (d2 >> 6) & 0x1fff, h = (d2 >> 19) & 0x1fff, count = d3 & 0xff,
              code = (d3 >> 8) & 0xff, dim = d1 >> 28;
+    pthread_mutex_lock(&g_lock);
     n_tex++;
-    if (dim != 2 || count != 1 || w < 16 || h < 16) { n_other++; return; }  // (cube maps, arrays, tiny ones)
+    if (dim != 2 || count != 1 || w < 16 || h < 16) n_other++;
+    pthread_mutex_unlock(&g_lock);
+    if (dim != 2 || count != 1 || w < 16 || h < 16) return;  // (cube maps, arrays, tiny ones)
     const Fmt *f = NULL;
     for (unsigned i = 0; i < sizeof fmts / sizeof *fmts; i++)
         if (fmts[i].tex == code) f = &fmts[i];
     if (!f) {
+        pthread_mutex_lock(&g_lock);
         if (!unknown_fmt[code]++) fprintf(stderr, "format %#x not known (first: %s %s)\n", code, arc, name);
+        pthread_mutex_unlock(&g_lock);
         return;
     }
     TexLayout lay = {.width = w, .height = h, .depth = 1, .layers = 1, .levels = levels ? levels : 1,
@@ -155,8 +180,23 @@ static void texture(const char *arc, const char *name, const uint8_t *t, uint64_
     uint8_t *lin = malloc(size);
     tegra_deswizzle(t + data, lin, l.wb, l.hb, 1, bpb, l.block_height_log2, l.block_depth_log2);
     uint64_t key = texpack_key(lin, size, w, h, f->nvn);
+    bool is_new;
+    pthread_mutex_lock(&g_lock);
     n_known++;
-    if (seen_add(key)) {
+    uint32_t *slot = seen_find(key, &is_new);
+    if (is_new) {
+        if (g_nent == g_cent) g_ent = realloc(g_ent, sizeof *g_ent * (g_cent = g_cent ? g_cent * 2 : 4096));
+        *slot = g_nent;
+        Entry *e = &g_ent[g_nent++];
+        e->key = key, e->order = order, e->w = w, e->h = h, e->kind = f->kind, e->arc = arc;
+        snprintf(e->name, sizeof e->name, "%s", name);
+    } else if (g_ent[*slot].order > order) {  // (found first by another thread, but this archive comes first)
+        Entry *e = &g_ent[*slot];
+        e->order = order, e->arc = arc;
+        snprintf(e->name, sizeof e->name, "%s", name);
+    }
+    pthread_mutex_unlock(&g_lock);
+    if (is_new) {
         char path[1024];
         snprintf(path, sizeof path, "%s/%016llx.png", g_out, (unsigned long long)key);
         uint8_t *px = malloc((uint64_t)w * h * 4);
@@ -172,14 +212,19 @@ static void texture(const char *arc, const char *name, const uint8_t *t, uint64_
                 }
             if (d != px) free(d);
         }
-        if (save_png(path, px, w, h)) n_saved++;
+        bool saved = save_png(path, px, w, h);
         free(px);
+        pthread_mutex_lock(&g_lock);
+        if (saved) n_saved++;
+        // (the line for the launcher's progress; index.txt is written again in order at the end)
         fprintf(g_index, "%016llx %ux%u %s %s %s\n", (unsigned long long)key, w, h, f->kind, arc, name);
+        fflush(g_index);
+        pthread_mutex_unlock(&g_lock);
     }
     free(lin);
 }
 
-static void arc_file(const char *path, const char *rel) {
+static void arc_file(const char *path, const char *rel, uint64_t arc_order) {
     FILE *fp = fopen(path, "rb");
     if (!fp) return;
     fseek(fp, 0, SEEK_END);
@@ -201,16 +246,19 @@ static void arc_file(const char *path, const char *rel) {
         if (t && uncompress(t, &un, d + off, csize) == Z_OK) {
             char name[65];
             memcpy(name, e, 64), name[64] = 0;
-            texture(rel, name, t, un);
+            texture(rel, name, t, un, arc_order << 16 | i);
         }
         free(t);
     }
     free(d);
 }
 
-// every .arc under dir (rel: its path below nativeNX/arc), the mods' copies first
+// every .arc under dir (rel: its path below nativeNX/arc), the mods' copies first: listed, then read on the threads
 static int nmods;
 static char **mods;
+typedef struct { char *use, *rel; } ArcJob;
+static ArcJob *g_jobs;
+static uint32_t g_njobs, g_cjobs, g_next, g_arcs_done;
 static void walk(const char *dir, const char *rel) {
     DIR *dd = opendir(dir);
     if (!dd) return;
@@ -231,11 +279,42 @@ static void walk(const char *dir, const char *rel) {
             snprintf(mp, sizeof mp, "%s/nativeNX/arc/%s", mods[m], r);
             if (!stat(mp, &st)) { use = mp; break; }
         }
-        arc_file(use, r);
-        static unsigned arcs;
-        if (!(++arcs % 100)) fprintf(stderr, "%u .arc files, %u textures saved\n", arcs, n_saved);
+        if (g_njobs == g_cjobs) g_jobs = realloc(g_jobs, sizeof *g_jobs * (g_cjobs = g_cjobs ? g_cjobs * 2 : 1024));
+        g_jobs[g_njobs].use = strdup(use), g_jobs[g_njobs++].rel = strdup(r);
     }
     closedir(dd);
+}
+static void *worker(void *arg) {
+    (void)arg;
+    for (;;) {
+        pthread_mutex_lock(&g_lock);
+        uint32_t i = g_next < g_njobs ? g_next++ : UINT32_MAX;
+        pthread_mutex_unlock(&g_lock);
+        if (i == UINT32_MAX) return NULL;
+        arc_file(g_jobs[i].use, g_jobs[i].rel, i);
+        pthread_mutex_lock(&g_lock);
+        if (!(++g_arcs_done % 100)) fprintf(stderr, "%u .arc files, %u textures saved\n", g_arcs_done, n_saved);
+        pthread_mutex_unlock(&g_lock);
+    }
+}
+static int threads(void) {
+    const char *e = getenv("MHXX_TEXEXTRACT_THREADS");
+    int n = e ? atoi(e) : 0;
+    if (n <= 0) {
+#ifdef _WIN32
+        SYSTEM_INFO si;
+        GetSystemInfo(&si);
+        n = (int)si.dwNumberOfProcessors;
+#else
+        n = (int)sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+        if (n > 8) n = 8;  // (each holds an archive in memory, some are large)
+    }
+    return n < 1 ? 1 : n > 64 ? 64 : n;
+}
+static int by_order(const void *a, const void *b) {
+    uint64_t x = ((const Entry *)a)->order, y = ((const Entry *)b)->order;
+    return x < y ? -1 : x > y;
 }
 
 int main(int argc, char **argv) {
@@ -254,9 +333,26 @@ int main(int argc, char **argv) {
     struct stat st;
     if (stat(arcdir, &st)) { fprintf(stderr, "%s not found: give the folder that holds nativeNX\n", arcdir); return 1; }
     walk(arcdir, "");
+    int nt = threads();
+    fprintf(stderr, "%u .arc files, %d threads\n", g_njobs, nt);
+    pthread_t th[64];
+    for (int i = 0; i < nt; i++) pthread_create(&th[i], NULL, worker, NULL);
+    for (int i = 0; i < nt; i++) pthread_join(th[i], NULL);
     fclose(g_index);
+    // index.txt again, in the folders' order (as with one thread)
+    qsort(g_ent, g_nent, sizeof *g_ent, by_order);
+    char tmp[1100];
+    snprintf(tmp, sizeof tmp, "%s.tmp", idx);
+    FILE *o = fopen(tmp, "w");
+    bool ok = o != NULL;
+    for (uint32_t i = 0; ok && i < g_nent; i++)
+        ok = fprintf(o, "%016llx %ux%u %s %s %s\n", (unsigned long long)g_ent[i].key, g_ent[i].w, g_ent[i].h,
+                     g_ent[i].kind, g_ent[i].arc, g_ent[i].name) > 0;
+    if (o) ok = fclose(o) == 0 && ok;
+    remove(idx);
+    if (!ok || rename(tmp, idx)) { fprintf(stderr, "can't write %s\n", idx); return 1; }
     fprintf(stderr, "done: %u textures, %u saved (%u repeated), %u cube maps / arrays / tiny ones skipped\n", n_tex,
-            n_saved, n_known - seen_n, n_other);
+            n_saved, n_known - g_nent, n_other);
     for (int i = 0; i < 256; i++)
         if (unknown_fmt[i]) fprintf(stderr, "  format %#x: %u textures not saved\n", i, unknown_fmt[i]);
     return 0;

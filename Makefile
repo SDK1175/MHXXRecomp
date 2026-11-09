@@ -526,7 +526,7 @@ TEXEXTRACT_SRC := tools/texextract/texextract.c runtime/nvn/tegra.c runtime/nvn/
 texextract: $(TEXEXTRACT)
 $(TEXEXTRACT): $(TEXEXTRACT_SRC) runtime/nvn/tegra.h runtime/nvn/bcn.h runtime/nvn/astc.h
 	@mkdir -p $(dir $@)
-	$(CC) -O2 -o $@ $(TEXEXTRACT_SRC) $(if $(filter windows,$(PLATFORM)),-fuse-ld=lld -static-libgcc -Wl$(comma)-Bstatic -lz -Wl$(comma)-Bdynamic,-lz)
+	$(CC) -O2 -pthread -o $@ $(TEXEXTRACT_SRC) $(if $(filter windows,$(PLATFORM)),-fuse-ld=lld -static-libgcc -Wl$(comma)-Bstatic -lz -lwinpthread -Wl$(comma)-Bdynamic,-lz)
 
 # mhxx-launcher: the launcher (tools/launcher: settings before the game, game file setup, high-resolution textures,
 # the update), built by its own script (incremental; its objects in $(O)/launcher)
