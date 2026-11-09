@@ -70,7 +70,16 @@ static void to_calendar(int64_t t, IpcResp *resp, int utc) {
     resp_size(resp, 0x20);
 }
 
+// Commands answered with nothing: logged once each (MHXX asks ITimeZoneService 4, LoadTimeZoneRule, every frame)
+static bool first_time(uint8_t *seen, uint32_t cmd) {
+    if (cmd >= 512) return true;
+    if (seen[cmd / 8] & (1u << (cmd % 8))) return false;
+    seen[cmd / 8] |= (uint8_t)(1u << (cmd % 8));
+    return true;
+}
+
 static void timezone_service(Service *s, IpcReq *req, IpcResp *resp) {
+    static uint8_t seen[64];
     (void)s;
     switch (req->cmd) {
     case 0: memcpy(resp->data, "UTC", 4); resp_size(resp, 0x24); break;
@@ -90,13 +99,16 @@ static void timezone_service(Service *s, IpcReq *req, IpcResp *resp) {
         resp_size(resp, 4);
         break;
     }
-    default: LOG("[time] ITimeZoneService cmd %u (ok)\n", req->cmd); resp_size(resp, 0x10);
+    default:
+        if (first_time(seen, req->cmd)) LOG("[time] ITimeZoneService cmd %u (ok; logged once)\n", req->cmd);
+        resp_size(resp, 0x10);
     }
 }
 
 static uint32_t g_shmem_handle;
 
 static void static_service(Service *s, IpcReq *req, IpcResp *resp) {
+    static uint8_t seen[64];
     (void)s;
     switch (req->cmd) {
     case 0: case 1: case 4: case 5:
@@ -109,7 +121,9 @@ static void static_service(Service *s, IpcReq *req, IpcResp *resp) {
         resp->copy_handles[resp->ncopy++] = g_shmem_handle;
         break;
     case 100: case 101: OUT(uint8_t, 0) = 0; resp_size(resp, 1); break;
-    default: LOG("[time] IStaticService cmd %u (ok)\n", req->cmd); resp_size(resp, 0x10);
+    default:
+        if (first_time(seen, req->cmd)) LOG("[time] IStaticService cmd %u (ok; logged once)\n", req->cmd);
+        resp_size(resp, 0x10);
     }
 }
 

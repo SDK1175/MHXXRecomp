@@ -9,7 +9,9 @@
 //   game shows a text entry (names, chat) the keyboard types instead
 //   (runtime/textinput.c). / ([Controls] ChatKey) opens a line of chat, Enter sends it, also in a quest (runtime/hle/chat.c).
 //   F11 switches windowed <-> full screen, F12 saves a screenshot, Shift+F12 the next 8
-//   frames (exact rendered pixels, run\shots\), F10 dumps every render pass of the next 2 frames (debug, slow), F9 toggles how colour clears are done (debug).
+//   frames (exact rendered pixels, run\shots\), F10 dumps every render pass of the next 2 frames (debug, slow), F9 toggles how colour clears are done (debug),
+//   F7 MSAA, F8 shadow scissors: F7-F10 only with MHXX_DEBUG_KEYS=1 (players pressed them by chance: F9 stops the game
+//   a moment while the pipelines are made again).
 // Gamepad (SDL): face buttons by position as on a Switch controller (the bottom one is B), or by their labels
 //   (settings FaceButtons, runtime/config.c; MHGU_PAD_POSITIONAL=0|1 overrides).
 //   Every controller is open and the one a button was last pressed on is read (a Steam Deck with a controller plugged
@@ -548,6 +550,17 @@ static bool chat_mouse(const SDL_Event *e) {
     return false;
 }
 
+// F7-F10, the graphics debugging keys: only for development (MHXX_DEBUG_KEYS=1)
+static bool debug_keys(void) {
+    static int on = -1;
+    if (on < 0) {
+        const char *e = getenv("MHXX_DEBUG_KEYS");
+        on = e && atoi(e) > 0;
+        if (on) LOG("[input] debug keys F7-F10 on (MHXX_DEBUG_KEYS)\n");
+    }
+    return on;
+}
+
 void host_input_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) pad_pressed(e->gbutton.which);
     if (overlay_event(e)) return;  // (Forge's menu open: keyboard and mouse are its)
@@ -577,16 +590,16 @@ void host_input_event(const SDL_Event *e) {
                 snprintf(g_burst_name, sizeof g_burst_name, "burst_%llu_%d", (unsigned long long)t, nshot++);
                 g_burst_index = 0;
                 g_burst_left = 8;
-            } else if (e->key.scancode == SDL_SCANCODE_F10) {
+            } else if (e->key.scancode == SDL_SCANCODE_F10 && debug_keys()) {
                 g_dump_request = 2;  // (debug) every render pass of the next 2 frames, as "dump 2"
-            } else if (e->key.scancode == SDL_SCANCODE_F7) {  // MSAA off / 2x / 4x / 8x (to compare; the settings set it)
+            } else if (e->key.scancode == SDL_SCANCODE_F7 && debug_keys()) {  // MSAA off / 2x / 4x / 8x (to compare; the settings set it)
                 void vk_cycle_msaa(void);
                 vk_cycle_msaa();
-            } else if (e->key.scancode == SDL_SCANCODE_F8) {  // (debug) shadow-pass scissors: as set / none / mirrored
+            } else if (e->key.scancode == SDL_SCANCODE_F8 && debug_keys()) {  // (debug) shadow-pass scissors: as set / none / mirrored
                 extern volatile int g_shadow_scissor_mode;
                 g_shadow_scissor_mode = (g_shadow_scissor_mode + 1) % 3;
                 LOG("[input] F8: shadow scissor mode %d\n", g_shadow_scissor_mode);
-            } else if (e->key.scancode == SDL_SCANCODE_F9) {  // (debug) colour clears: vkCmdClearAttachments <-> draws
+            } else if (e->key.scancode == SDL_SCANCODE_F9 && debug_keys()) {  // (debug) colour clears: vkCmdClearAttachments <-> draws
                 extern volatile int g_clear_draw;
                 g_clear_draw = g_clear_draw > 0 ? 0 : 1;
                 LOG("[input] F9: colour clears as %s\n", g_clear_draw ? "draws" : "vkCmdClearAttachments");
