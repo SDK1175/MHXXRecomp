@@ -21,6 +21,7 @@
 #endif
 #include <algorithm>
 #include <cfloat>
+#include <cstdarg>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -64,6 +65,25 @@ int ui_take_picked_folder(char *out, size_t size) {
 int ldn_hub_status(const char *, const char *, int *, int *) { return 0; }
 void ldn_hub_check(const char *, const char *) {}
 int cheats_count(void) { return 0; }
+
+// launcher.log beside it: each start's steps with the time (seconds since it started), so a launcher that didn't open
+// or didn't close shows where it stopped (Tools > Problem report takes it)
+static SDL_IOStream *g_launcher_log;
+static std::mutex g_launcher_log_lock;
+static void launcher_log_open() { g_launcher_log = SDL_IOFromFile("launcher.log", "w"); }
+static void launcher_log(const char *fmt, ...) {
+    char msg[512];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(msg, sizeof msg, fmt, ap);
+    va_end(ap);
+    std::lock_guard<std::mutex> g(g_launcher_log_lock);
+    if (!g_launcher_log) return;
+    char line[600];
+    int n = SDL_snprintf(line, sizeof line, "[%8.3f] %s", SDL_GetTicksNS() / 1e9, msg);
+    SDL_WriteIO(g_launcher_log, line, (size_t)std::min(n, (int)sizeof line - 1));
+    SDL_FlushIO(g_launcher_log);
+}
 void cheats_rescan(void) {}
 const char *cheats_name(int) { return ""; }
 const char *cheats_file(int) { return ""; }
@@ -872,11 +892,17 @@ struct Tools {
     std::string confirm_file;
     std::string report;               // the last report made
     bool auto_backup = true;
-    void begin_check() {
-        spec_check(spec);
+    void begin_check() { spec_check(spec); }
+    // The Vulkan check, once the window shows: started with the window's own setup (its Direct3D renderer), a driver or
+    // an overlay's layer (Steam, Discord, OBS) loading into both at once could hang the launcher before its window
+    // appeared - double-clicked, nothing, and the second double-click opened it
+    void begin_vulkan() {
+        if (vk_thread.joinable() || vk_ready) return;
+        launcher_log("vulkan check started\n");
         vk_thread = std::thread([this]() {
             spec_vulkan(vk);
             vk_ready = true;
+            launcher_log("vulkan check done: %s\n", vk.vulkan ? vk.vulkan_gpu.c_str() : "no Vulkan");
         });
     }
     bool poll_vulkan() {  // (true once, when it is in)
@@ -936,6 +962,7 @@ struct Tools {
 // check's, a hung Vulkan check, a file dialog's) kept the process alive after its window had gone: the launcher left
 // in the background (and its .exe locked: "Permission denied" when building, an update that couldn't replace it).
 [[noreturn]] static void launcher_end(int code) {
+    launcher_log("ended\n");
     fflush(nullptr);
 #ifdef _WIN32
     TerminateProcess(GetCurrentProcess(), (UINT)code);  // (not ExitProcess: no DLL detach to wait in)
@@ -1209,17 +1236,22 @@ int main(int argc, char **argv) {
         const char *base = SDL_GetBasePath();
         if (base && chdir(base) != 0) SDL_Log("can't enter %s", base);
     }
+    launcher_log_open();
+    launcher_log("MHXX Recomp launcher started\n");
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "MHXX Recomp", SDL_GetError(), nullptr);
         return 1;
     }
+    launcher_log("SDL started\n");
     config_load();
     measure_gpu();
+    launcher_log("graphics card: %s\n", g_gpu_name);
     Tools tools;  // (the PC's check now, Vulkan on a thread: a warning at the start when the game can't run here)
     tools.begin_check();
     bool spec_warn = false, spec_never = false;
     Update upd;  // (the check runs while the launcher shows: update.cpp)
     update_begin(&upd, g_config.updates);
+    launcher_log("version %s\n", upd.version.empty() ? "(development build)" : upd.version.c_str());
     bool upd_shown = false, upd_dismissed = false;
     uint64_t upd_done_at = 0;
     float scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
@@ -1232,6 +1264,7 @@ int main(int argc, char **argv) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "MHXX Recomp", SDL_GetError(), nullptr);
         return 1;
     }
+    launcher_log("window made (%s)\n", SDL_GetRendererName(rd));
     SDL_SetRenderVSync(rd, 1);
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -1315,7 +1348,9 @@ int main(int argc, char **argv) {
     int frames = 0;
     if (shot) ask_shortcut = SDL_getenv("MHXX_LAUNCHER_SHOT_ASK") != nullptr;
     bool name_focus = true;
+    int loops = 0;
     while (!quit) {
+        if (++loops == 3) launcher_log("window shown\n"), tools.begin_vulkan();  // (two frames drawn)
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             ImGui_ImplSDL3_ProcessEvent(&e);
@@ -1764,6 +1799,7 @@ int main(int argc, char **argv) {
             } else quit = true;
         }
     }
+    launcher_log("closing\n");
     SDL_HideWindow(win);  // (gone at once: what's left to stop happens out of sight)
     setup.stop();
     texmaker.stop();
