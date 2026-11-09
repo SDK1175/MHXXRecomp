@@ -25,6 +25,7 @@
 #ifndef MHGU_VERSION
 #define MHGU_VERSION "unknown"  // (the Makefile gives the build's release: VERSION)
 #endif
+const char *g_port_version = MHGU_VERSION;  // (runtime/net/ldn.c: players of another version can't play together)
 
 const char *g_game_dir = "game";  // folder holding exefs/ and romfs/ (the player's own dump)
 
@@ -252,7 +253,7 @@ int main(int argc, char **argv) {
             return 1;
         }
     }
-    LOG("MHGU Recomp %s\n", MHGU_VERSION);
+    LOG("MHXX Recomp %s\n", MHGU_VERSION);
     { void fnprof_init(void); fnprof_init(); }
     crash_handler_install();
     ui_init();

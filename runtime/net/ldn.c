@@ -106,6 +106,45 @@ typedef struct {
     char name[0x21];
     uint8_t pad2[3];
 } Hello;
+// After the Hello (and after the host's Welcome and Refuse): the port's version ("0.9"), since 0.9. Players of
+// different releases don't play together (what the port changes in the game can differ between them): the host
+// refuses, and both are told which version the other has. A development build ("0.8.2-13-g443028e") only warns.
+// A peer without it is from 0.8.x or before.
+#define VER_TAG "MXV1"
+typedef struct {
+    char tag[4];
+    char version[28];
+} PortVer;
+extern const char *g_port_version;
+static PortVer port_ver(void) {
+    PortVer v = {{0}};
+    memcpy(v.tag, VER_TAG, 4);
+    snprintf(v.version, sizeof v.version, "%s", g_port_version);
+    return v;
+}
+// the version in a frame from `at` on, if it has one ("" for an older peer)
+static void peer_ver(const uint8_t *buf, int n, int at, char *out, size_t size) {
+    out[0] = 0;
+    if (n >= at + (int)sizeof(PortVer) && !memcmp(buf + at, VER_TAG, 4)) {
+        PortVer v;
+        memcpy(&v, buf + at, sizeof v);
+        v.version[sizeof v.version - 1] = 0;
+        snprintf(out, size, "%s", v.version);
+    }
+}
+static bool dev_build(const char *v) { return !*v || strstr(v, "-g") || !strcmp(v, "unknown"); }
+// may these two play together: the same release ("" = 0.8.x or before: never with a release of 0.9 on); a
+// development build on either side: yes, with a warning
+static bool versions_match(const char *mine, const char *theirs, bool *warn) {
+    *warn = false;
+    if (*theirs && (dev_build(mine) || dev_build(theirs))) {
+        *warn = strcmp(mine, theirs) != 0;
+        return true;
+    }
+    if (!*theirs) return dev_build(mine);
+    return !strcmp(mine, theirs);
+}
+static void version_notice(bool host, const char *theirs, bool refused);
 #define MAX_FRAME (0x10000 + 64)
 
 // The game's packets go by UDP when it gets through (Pia, the game's network library, expects datagrams: over TCP
@@ -502,6 +541,24 @@ static void *station_thread(void *arg) {
         hclose(acc.s);
         return NULL;
     }
+    char theirs[32];
+    peer_ver(buf, n, (int)sizeof h, theirs, sizeof theirs);
+    if (!h.scan_only) {
+        bool warn;
+        if (!versions_match(g_port_version, theirs, &warn)) {
+            uint32_t r = R_CONNECT_REJECTED;
+            PortVer v = port_ver();
+            frame_send(acc.s, F_REFUSE, &r, 4, &v, sizeof v);
+            hclose(acc.s);
+            LOG("[ldn] refused %.32s: version %s, this one %s\n", h.name, *theirs ? theirs : "0.8.x or before", g_port_version);
+            version_notice(true, theirs, true);
+            return NULL;
+        }
+        if (warn) {
+            LOG("[ldn] %.32s has version %s, this one %s (a development build: let in)\n", h.name, theirs, g_port_version);
+            version_notice(true, theirs, false);
+        }
+    }
     pthread_mutex_lock(&L.mu);
     if (h.scan_only || L.state != ST_AP_CREATED) {
         uint8_t info[NETINFO_SIZE];
@@ -548,7 +605,8 @@ static void *station_thread(void *arg) {
     uint8_t welcome[8 + NETINFO_SIZE] = {(uint8_t)slot};  // node, -, -, -, u32 UDP token, NetworkInfo
     wr32(welcome + 4, l->token);
     memcpy(welcome + 8, L.info, NETINFO_SIZE);
-    link_send(l, F_WELCOME, welcome, sizeof welcome, NULL, 0);
+    PortVer mine = port_ver();
+    link_send(l, F_WELCOME, welcome, sizeof welcome, &mine, sizeof mine);
     push_info_locked(slot);
     pthread_mutex_unlock(&L.mu);
     hset_timeout(acc.s, 0);
@@ -729,6 +787,18 @@ static int lobby_state(uint32_t code) {  // a server's error as a HUB_* state (n
 // 10 s. Texts in UI_TEXT are translated as the settings menu's (settings_locale.h,
 // tests/test_settings_locale.py).
 #define UI_TEXT(s) s
+// another version's player: refused (or let in, a development build); host: someone tried to join, else: the host
+static void version_notice(bool host, const char *theirs, bool refused) {
+    int lang = config_language();
+    char line[160];
+    const char *v = *theirs ? theirs : settings_text(lang, UI_TEXT("0.8.x or before"));
+    snprintf(line, sizeof line,
+             settings_text(lang, host ? UI_TEXT("A player with version %s tried to join (yours: %s)")
+                                      : UI_TEXT("The host has version %s (yours: %s)")),
+             v, g_port_version);
+    overlay_notice(line, settings_text(lang, refused ? UI_TEXT("Players of different versions can't play together: update to the same version in the launcher.")
+                                                     : UI_TEXT("A development build: played together anyway.")));
+}
 enum { NOTE_HOST, NOTE_SEARCH, NOTE_JOIN };
 static pthread_mutex_t hub_mu = PTHREAD_MUTEX_INITIALIZER;
 static struct { int state, ms, hubs; char server[LOBBY_NAME], key[sizeof g_config.ldn_key]; uint32_t check; } hub_now;
@@ -1530,15 +1600,33 @@ static uint32_t connect_network(const uint8_t *info, const uint8_t *user, uint16
     uint8_t type;
     int n;
     hset_timeout(s, 5000);
-    if (!frame_send(s, F_HELLO, &h, sizeof h, NULL, 0) || (n = frame_recv(s, &type, buf)) < 4) {
+    PortVer mine = port_ver();
+    if (!frame_send(s, F_HELLO, &h, sizeof h, &mine, sizeof mine) || (n = frame_recv(s, &type, buf)) < 4) {
         hclose(s);
         return R_CONNECT_TIMEOUT;
     }
+    char theirs[32];
     if (type == F_REFUSE) {
         hclose(s);
         uint32_t r = rd32(buf);
-        LOG("[ldn] the host refused (result %#x)\n", r);
+        peer_ver(buf, n, 4, theirs, sizeof theirs);
+        LOG("[ldn] the host refused (result %#x)%s%s\n", r, *theirs ? ", its version " : "", theirs);
+        if (*theirs) version_notice(false, theirs, true);
         return (r & 0x1FF) == 203 ? r : R_CONNECT_REJECTED;  // (an nn::ldn result only)
+    }
+    peer_ver(buf, n, 8 + NETINFO_SIZE, theirs, sizeof theirs);
+    {  // (a host from 0.8.x or before lets anyone in: this side says no)
+        bool warn;
+        if (type == F_WELCOME && !versions_match(g_port_version, theirs, &warn)) {
+            hclose(s);
+            LOG("[ldn] the host has version %s, this one %s: not joined\n", *theirs ? theirs : "0.8.x or before", g_port_version);
+            version_notice(false, theirs, true);
+            return R_CONNECT_REJECTED;
+        }
+        if (type == F_WELCOME && warn) {
+            LOG("[ldn] the host has version %s, this one %s (a development build: joined)\n", theirs, g_port_version);
+            version_notice(false, theirs, false);
+        }
     }
     int node = buf[0];
     if (type != F_WELCOME || n < 8 + NETINFO_SIZE || node < 1 || node >= MAX_NODES || !info_sane(buf + 8) ||
