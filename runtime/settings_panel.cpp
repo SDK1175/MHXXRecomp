@@ -326,6 +326,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(smooth_gradients);
     SAME(anisotropy);
     SAME(texture_dump);
+    SAME(texture_pack);
     SAME(msaa);
     SAME(fxaa);
     SAME(fxaa_mode);
@@ -899,6 +900,7 @@ void reset_section() {
         c.smooth_gradients = f.smooth_gradients;
         c.anisotropy = f.anisotropy;
         c.texture_dump = f.texture_dump;
+        c.texture_pack = f.texture_pack;
         c.msaa = f.msaa;
         c.fxaa = f.fxaa;
         c.fxaa_mode = f.fxaa_mode;
@@ -920,6 +922,8 @@ void reset_section() {
         SDL_strlcpy(c.ldn_join, f.ldn_join, sizeof c.ldn_join);
         SDL_strlcpy(c.ldn_server, f.ldn_server, sizeof c.ldn_server);
         SDL_strlcpy(c.ldn_key, f.ldn_key, sizeof c.ldn_key);
+        c.discord = f.discord;
+        c.discord_hunter = f.discord_hunter;
         break;
     case 4:
         c.sync_small_monsters = f.sync_small_monsters;
