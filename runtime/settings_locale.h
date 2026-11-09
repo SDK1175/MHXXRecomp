@@ -432,6 +432,8 @@ static inline const char *settings_text_ko(const char *english) {
         {"Could not make them: %s", "만들지 못했습니다: %s"},
         {"Make", "만들기"},
         {"Close", "닫기"},
+        {"Type a whole number from %.0f to %.0f.", "%.0f부터 %.0f까지의 정수를 입력해 주세요."},
+        {"Type a number from %.2f to %.2f.", "%.2f부터 %.2f까지의 숫자를 입력해 주세요."},
         {"Tools", "도구"},
         {"Save backup", "세이브 백업"},
         {"Install a mod", "모드 설치"},

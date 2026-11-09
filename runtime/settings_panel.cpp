@@ -585,6 +585,27 @@ void add_number(std::vector<Row> &rows, const std::string &id, const std::string
     r.title = name;
     r.value = text;
     keyed(r, key);
+    // (Confirm, a click: the number typed - left / right step it; with a mouse that was all there was, and Width
+    // 1920 -> 2560 took 8 clicks of a key the player didn't know about)
+    r.activate = [name, get, set, low, high, integral, check]() {
+        char now[64];
+        snprintf(now, sizeof now, integral ? "%.0f" : "%.2f", get());
+        keyboard(name, now, 12, [set, low, high, integral, check](const std::string &typed, std::string &error) {
+            char *end = nullptr;
+            std::string t = typed;
+            for (char &ch : t)
+                if (ch == ',') ch = '.';
+            double v = strtod(t.c_str(), &end);
+            if (t.empty() || !end || *end || (integral && v != (double)(long long)v) || v < low || v > high) {
+                error = fmt(tr(integral ? "Type a whole number from %.0f to %.0f." : "Type a number from %.2f to %.2f."),
+                            low, high);
+                return false;
+            }
+            if (check && !check(v, error)) return false;
+            set(v);
+            return true;
+        });
+    };
     r.adjust = [get, set, low, high, step, check](int d) {
         double v = std::clamp(get() + d * step, low, high);
         std::string error;
