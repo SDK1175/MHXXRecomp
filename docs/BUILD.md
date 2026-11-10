@@ -37,14 +37,14 @@ make -j8 GAME=/f/path/to/game      # build/에 게임("MHXX Recomp.exe", mhgugam
 ## 3. 배포용 zip
 
 ```bash
-make dist VERSION=0.9 ANDROID_DIST=
+make dist VERSION=0.10.0 ANDROID_DIST=
 ```
 
-`dist\Windows-MHXXRecomp.0.9.zip`: 게임, 게임 코드, 런처, 텍스처 뽑기, DLL, `version.txt`, `licenses\`, 빈 `data\` `mods\`
+`dist\Windows-MHXXRecomp.0.10.0.zip`: 게임, 게임 코드, 런처, 텍스처 뽑기, DLL, `version.txt`, `licenses\`, 빈 `data\` `mods\`
 `cheats\` `bonus\`. 게임 파일, 한글패치, 텍스처, 설정, 세이브는 들어가지 않습니다(`tools/dist.py`).
 
 런처가 업데이트를 맡습니다(예전 업데이터 프로그램은 없어짐). zip의 `version.txt`(= `VERSION`)와 이 저장소
-(`SDK1175/MHXXRecomp`, `tools/launcher/update.cpp`)의 최신 릴리스를 비교합니다. 릴리스는 태그를 버전과 같게(`0.8`), 정식
+(`SDK1175/MHXXRecomp`, `tools/launcher/update.cpp`)의 최신 릴리스를 비교합니다. 릴리스는 태그를 버전과 같게(`0.10.0`: 0.10부터 세 자리, 업데이트·멀티는 `0.9` = `0.9.0`으로 봄), 정식
 릴리스로, zip을 첨부해 올립니다. 릴리스 설명이 런처의 패치 노트로 보입니다. `version.txt`가 없는 빌드(직접 빌드한 것)는
 개발 빌드로 보고 업데이트를 확인하지 않습니다.
 

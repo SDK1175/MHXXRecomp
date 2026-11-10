@@ -137,14 +137,32 @@ static void peer_ver(const uint8_t *buf, int n, int at, char *out, size_t size) 
 static bool dev_build(const char *v) { return !*v || strstr(v, "-g") || !strcmp(v, "unknown"); }
 // may these two play together: the same release ("" = 0.8.x or before: never with a release of 0.9 on); a
 // development build on either side: yes, with a warning
+// The same release however it's written: by its numbers, a missing one 0 ("0.9" = "0.9.0", as the launcher's update
+// compares them); anything else by its text
+static bool same_version(const char *a, const char *b) {
+    int va[4] = {0}, vb[4] = {0}, na = 0, nb = 0;
+    char *e;
+    for (const char *s = a; na < 4 && *s >= '0' && *s <= '9';) {
+        va[na++] = (int)strtol(s, &e, 10), s = e;
+        if (*s != '.') break;
+        s++;
+    }
+    for (const char *s = b; nb < 4 && *s >= '0' && *s <= '9';) {
+        vb[nb++] = (int)strtol(s, &e, 10), s = e;
+        if (*s != '.') break;
+        s++;
+    }
+    bool numbers = na && nb && !strpbrk(a, "-+ ") && !strpbrk(b, "-+ ");
+    return numbers ? !memcmp(va, vb, sizeof va) : !strcmp(a, b);
+}
 static bool versions_match(const char *mine, const char *theirs, bool *warn) {
     *warn = false;
     if (*theirs && (dev_build(mine) || dev_build(theirs))) {
-        *warn = strcmp(mine, theirs) != 0;
+        *warn = !same_version(mine, theirs);
         return true;
     }
     if (!*theirs) return dev_build(mine);
-    return !strcmp(mine, theirs);
+    return same_version(mine, theirs);
 }
 static void version_notice(bool host, const char *theirs, bool refused);
 #define MAX_FRAME (0x10000 + 64)
