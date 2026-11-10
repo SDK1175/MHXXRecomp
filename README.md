@@ -54,6 +54,7 @@ MHXX Recomp는 [MHGU Recomp](https://github.com/morerokk/MHGURecomp)를 포크�
 
 | 버전 | 이름 | 내용 |
 |---|---|---|
+| [0.9](docs/changelog/0.9.md) | | 고프레임 보정, 로딩 시간 단축(41초 → 10초), 21:9 화면 수정, 멀티 버전 확인·가상 LAN 방 찾기, 런처·게임이 꺼지지 않던 문제 수정, 7z·폴더 모드 설치 |
 | [0.8.2](docs/changelog/0.8.2.md) | | 고해상도 텍스처를 처음 만들 때 런처가 꺼지던 문제 수정 |
 | [0.8.1](docs/changelog/0.8.1.md) | | 고해상도 텍스처 설정이 저장되지 않던 문제 수정 |
 | [0.8](docs/changelog/0.8.md) | | 런처 자동 업데이트, 도구(세이브 백업·복원, 모드 zip 설치, PC 사양 검사, 캐시 지우기, 문제 보고), 실행 파일 이름 `MHXX Recomp.exe` |
