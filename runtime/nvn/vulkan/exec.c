@@ -3419,7 +3419,17 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                             st.scissor[0][1], st.scissor[0][2], st.scissor[0][3]);
                 }
 
-                m[0] *= s; m[4] *= s; m[8] *= s;
+                // A cinematic's black bars (layer 100 at the top / bottom edge, the canvas's whole width: x 0 or 640, or
+                // 1200+ wide) cover the picture's whole width: narrowed and placed Right like the layer's prompts they
+                // left its left quarter open on a 21:9 picture, the scene showing above and below them.
+                bool edge_bar = s < 1.0f && !is_3d_overlay && fabsf(pos_z - 100.0f) < 0.5f && (pos_y < 10.0f || pos_y > 712.0f) &&
+                                (fabsf(m[0]) >= 1200.0f || fabsf(pos_x) <= 1.0f || fabsf(pos_x - 640.0f) <= 1.0f);
+                if (edge_bar) {
+                    new_pos_x = pos_x;
+                    if (g_hudtrace_active) LOG("[hud] z %.1f pos %.1f,%.1f m %.2f: an edge bar, the whole width\n", pos_z, pos_x, pos_y, m[0]);
+                } else {
+                    m[0] *= s; m[4] *= s; m[8] *= s;
+                }
                 m[1] *= sy; m[5] *= sy; m[9] *= sy;
                 m[12] = new_pos_x;
                 m[13] = new_pos_y;
