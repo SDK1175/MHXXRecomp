@@ -9,6 +9,7 @@
 #include "keymap.h"
 #include "modorder.h"
 #include "net/net.h"
+#include "voice.h"
 #include "imgui_internal.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -346,6 +347,8 @@ bool equal(const Config &a, const Config &b) {
     SAME(combo_window);
     SAME(volume);
     SAME(mute_in_background);
+    SAME(mic_volume);
+    SAME(voice_volume);
     SAME(button_icons);
     SAME(menu_theme);
     SAME(discord);
@@ -1248,6 +1251,28 @@ std::vector<Row> main_rows() {
         header(r, "audio.header", tr("Audio"));
         number(r, "volume", "Volume (%)", &c.volume, (int)lo("Volume"), (int)hi("Volume"), 1, ini("Volume"));
         add_bool(r, "mutebg", "Mute in background", &c.mute_in_background, ini("MuteInBackground"));
+        header(r, "voice.header", tr("Voice chat"));
+        number(r, "voice.mic", "Mic volume (%)", &c.mic_volume, (int)lo("MicVolume"), (int)hi("MicVolume"), 5, ini("MicVolume"));
+        number(r, "voice.volume", "Voice volume (%)", &c.voice_volume, (int)lo("VoiceVolume"), (int)hi("VoiceVolume"), 5,
+               ini("VoiceVolume"));
+        {  // what the microphone hears, packed and unpacked as it will be sent, back at once; its level as a bar
+            Row t;
+            t.id = "voice.test";
+            t.title = tr("Mic test");
+            t.help = tr("Plays back what your microphone hears, as the other players will hear it, with its level. Confirm "
+                        "again to stop; closing the menu stops it too.");
+            if (voice_test_on()) {
+                voice_preview(c.mic_volume, c.voice_volume);
+                int bars = (int)(voice_mic_level() * 12.0f + 0.5f);
+                if (bars > 12) bars = 12;
+                t.value = std::string(tr("On")) + "  " + std::string(bars, '|') + std::string(12 - bars, '.');
+            } else {
+                t.value = *voice_error() ? tr(voice_error()) : tr("Off");
+                t.warn = *voice_error() != 0;
+            }
+            t.activate = []() { voice_test(!voice_test_on()); };
+            r.push_back(std::move(t));
+        }
         header(r, "graphics.header", tr("Graphics"));
         add_bool(r, "show.fps", "FPS counter", &c.show_fps, ini("ShowFPS"));
 #ifdef __ANDROID__
@@ -2159,6 +2184,7 @@ bool settings_panel_wheel(int notches) {
 }
 // Ownership has to precede NewFrame: native cancel/windowing runs there.
 void settings_panel_before_frame(bool open) {
+    if (!open && voice_test_on()) voice_test(false);  // (the mic test: only while the menu shows it)
     if (!open && !request_exit.load())
         return;
     const ImGuiKey keys[] = {ImGuiKey_GamepadFaceRight,

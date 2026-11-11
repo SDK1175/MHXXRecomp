@@ -85,6 +85,9 @@
     /* [Audio] */                                                                                   \
     .volume = 100,                                                                                  \
     .mute_in_background = 0,                                                                        \
+    /* [Voice] */                                                                                   \
+    .mic_volume = 100,                                                                              \
+    .voice_volume = 100,                                                                            \
     /* [Application] */                                                                             \
     .confirm_exit = 1,                                                                              \
     .language = 2,                                                                                  \
@@ -416,6 +419,17 @@ static const char DEFAULT_INI[] =
     "; Default: Off\n"
     "MuteInBackground = Off\n"
     "\n"
+    "[Voice]\n"
+    "; Volume of your microphone, in percent\n"
+    "; Between 0 and 200\n"
+    "; Default: 100\n"
+    "MicVolume = 100\n"
+    "\n"
+    "; Volume of the other players' voices, in percent\n"
+    "; Between 0 and 200\n"
+    "; Default: 100\n"
+    "VoiceVolume = 100\n"
+    "\n"
     "[Application]\n"
     "; Ask before the game window closes (closing does not save the game)\n"
     "; Default: On\n"
@@ -639,6 +653,8 @@ const ConfigSetting g_settings[] = {
     ON_OFF("Bonus Content", "BonusContent", bonus_content, false),
     {"Audio", "Volume", SET_INT, F(volume), 0, 0, 100, NULL, NULL, false, ERR_MISC},
     ON_OFF("Audio", "MuteInBackground", mute_in_background, false),
+    {"Voice", "MicVolume", SET_INT, F(mic_volume), 0, 0, 200, NULL, NULL, false, ERR_MISC},
+    {"Voice", "VoiceVolume", SET_INT, F(voice_volume), 0, 0, 200, NULL, NULL, false, ERR_MISC},
     ON_OFF("Application", "ConfirmExit", confirm_exit, false),
     {"Application", "Language", SET_CHOICE, F(language), 0, 0, 0, "English|en,Spanish|es,Korean|ko|한국어", NULL, false, ERR_LANGUAGE},
     {"Application", "ButtonIcons", SET_CHOICE, F(button_icons), 0, 0, 0, "Xbox,Switch,PlayStation", NULL, false, ERR_ICONS},

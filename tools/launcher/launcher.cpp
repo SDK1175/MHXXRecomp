@@ -65,6 +65,12 @@ int ui_take_picked_folder(char *out, size_t size) {
 int ldn_hub_status(const char *, const char *, int *, int *) { return 0; }
 void ldn_hub_check(const char *, const char *) {}
 int cheats_count(void) { return 0; }
+// (voice chat: the game's - the launcher shows no voice rows)
+void voice_test(bool) {}
+bool voice_test_on(void) { return false; }
+float voice_mic_level(void) { return 0.0f; }
+const char *voice_error(void) { return ""; }
+void voice_preview(int, int) {}
 
 // launcher.log beside it: each start's steps with the time (seconds since it started), so a launcher that didn't open
 // or didn't close shows where it stopped (Tools > Problem report takes it)

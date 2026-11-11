@@ -13,7 +13,7 @@
      mingw-w64-ucrt-x86_64-clang mingw-w64-ucrt-x86_64-lld mingw-w64-ucrt-x86_64-pkgconf \
      mingw-w64-ucrt-x86_64-sdl3 mingw-w64-ucrt-x86_64-shaderc mingw-w64-ucrt-x86_64-nasm \
      mingw-w64-ucrt-x86_64-vulkan-headers mingw-w64-ucrt-x86_64-vulkan-loader \
-     mingw-w64-ucrt-x86_64-vulkan-memory-allocator mingw-w64-ucrt-x86_64-zlib
+     mingw-w64-ucrt-x86_64-vulkan-memory-allocator mingw-w64-ucrt-x86_64-zlib mingw-w64-ucrt-x86_64-opus
    ```
 3. Windows용 [Python](https://www.python.org/) 3.10 이상을 설치하고, 명령 프롬프트에서 저장소 폴더로 가서:
    ```bat
