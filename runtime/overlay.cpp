@@ -34,6 +34,9 @@ static void ImGui_ImplVulkan_UpdateTexture(ImTextureData *) {}
 #include "overlay.h"
 #include "hle/chat.h"
 #include "settings_panel.h"
+#include "settings_locale.h"
+#include "voice.h"
+#include "net/net.h"
 
 extern "C" volatile uint64_t g_present_count;  // (runtime/rt.h: frames the game presented)
 
@@ -592,6 +595,34 @@ static void draw_fps(uint64_t now) {
     }
 }
 
+// Voice chat (voice.c): who is talking now, by the left edge - this player ("You") while their voice is sent, the others
+// by the names the network gives them. Not a window to move or click.
+static bool voice_marks() { return voice_sending() || voice_talking() > 0; }
+static void draw_voice(float scale) {
+    uint32_t ids[8];
+    int n = voice_speakers(ids, 8);
+    bool me = voice_sending();
+    if (!n && !me) return;
+    uint32_t ips[8];
+    char names[8][33];
+    int np = ldn_players(ips, names, 8);
+    ImGui::SetNextWindowPos(ImVec2(10 * scale, ImGui::GetIO().DisplaySize.y * 0.35f), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.55f);
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs |
+                             ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoSavedSettings;
+    if (ImGui::Begin("Voice##talking", nullptr, flags)) {
+        const ImVec4 green(0.45f, 0.95f, 0.45f, 1.0f);
+        if (me) ImGui::TextColored(green, "%s  %s", ">>", settings_text(config_language(), "You"));
+        for (int i = 0; i < n; i++) {
+            const char *name = "?";
+            for (int k = 0; k < np; k++)
+                if (ips[k] == ids[i] && names[k][0]) name = names[k];
+            ImGui::TextColored(green, "%s  %s", "<<", name);
+        }
+    }
+    ImGui::End();
+}
+
 // ------------------------------------------------------------------ frames (game thread)
 static std::mutex g_snap_lock;  // the copy the render thread draws
 static ImDrawData g_snap;
@@ -646,7 +677,8 @@ void overlay_frame(void *cpu) {
 #else
     bool fps = config_show_fps();
 #endif
-    if (!open && !free_render && !notice && !chat && !fps) {  // (nothing to draw)
+    bool voice = voice_marks();
+    if (!open && !free_render && !notice && !chat && !fps && !voice) {  // (nothing to draw)
         std::lock_guard<std::mutex> l(g_snap_lock);
         if (g_snap.Valid) snap_clear();
         apply_input(io);  // (keep the queue short)
@@ -712,6 +744,7 @@ void overlay_frame(void *cpu) {
     if (notice) draw_notice(now, scale);
     if (chat) draw_chat(line, now, scale);
     if (fps) draw_fps(now);
+    if (voice) draw_voice(scale);
     ImGui::Render();
 
     ImDrawData *dd = ImGui::GetDrawData();

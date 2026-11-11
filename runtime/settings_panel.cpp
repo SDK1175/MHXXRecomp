@@ -348,6 +348,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(volume);
     SAME(mute_in_background);
     SAME(voice_mode);
+    SAME(talk_button);
     SAME(mic_volume);
     SAME(voice_volume);
     SAME(button_icons);
@@ -370,7 +371,7 @@ bool equal(const Config &a, const Config &b) {
     if (memcmp(a.binds, b.binds, sizeof a.binds))
         return false;
     if (strcmp(a.ldn_join, b.ldn_join) || strcmp(a.ldn_server, b.ldn_server) || strcmp(a.ldn_key, b.ldn_key) ||
-        strcmp(a.chat_key, b.chat_key) || strcmp(a.save_dir, b.save_dir) || strcmp(a.save_location, b.save_location) || strcmp(a.game_dir, b.game_dir))
+        strcmp(a.chat_key, b.chat_key) || strcmp(a.talk_key, b.talk_key) || strcmp(a.save_dir, b.save_dir) || strcmp(a.save_location, b.save_location) || strcmp(a.game_dir, b.game_dir))
         return false;
     for (int n = 0; n < 4; ++n)
         if (a.hp.scale[n] != b.hp.scale[n])
@@ -752,11 +753,13 @@ const char *key_use(int code, int skip) {
         for (int k = 0; k < BIND_KEYS; k++)
             if (i != skip && s.draft.binds[i][k] == code)
                 return tr(bind_titles[i]);
-    if (skip >= 0 && code == (int)SDL_GetScancodeFromName(s.draft.chat_key))
+    if (skip != -1 && code == (int)SDL_GetScancodeFromName(s.draft.chat_key))
         return tr("Chat key");
+    if (skip != -2 && s.draft.voice_mode == 2 && code == (int)SDL_GetScancodeFromName(s.draft.talk_key))
+        return tr("Talk key");
     return nullptr;
 }
-// Choosing a key: for a keybind (BIND_*, add: its second key) or the chat key (-1)
+// Choosing a key: for a keybind (BIND_*, add: its second key), the chat key (-1) or the talk key (-2)
 void capture(int bind, bool add) {
     s.capture_bind = bind;
     s.capture_add = add;
@@ -1253,8 +1256,26 @@ std::vector<Row> main_rows() {
         number(r, "volume", "Volume (%)", &c.volume, (int)lo("Volume"), (int)hi("Volume"), 1, ini("Volume"));
         add_bool(r, "mutebg", "Mute in background", &c.mute_in_background, ini("MuteInBackground"));
         header(r, "voice.header", tr("Voice chat"));
-        add_choice(r, "voice.mode", "Voice chat", c.voice_mode, {tr("Off"), tr("Always")}, [](int v) { c.voice_mode = v; },
-                   ini("VoiceChat"));
+        add_choice(r, "voice.mode", "Voice chat", c.voice_mode, {tr("Off"), tr("Always"), tr("Push to talk")},
+                   [](int v) { c.voice_mode = v; }, ini("VoiceChat"));
+        if (c.voice_mode == 2) {
+            Row k;  // (chosen as the chat key is: KeyCapture, its bind -2)
+            k.id = "voice.key";
+            k.title = tr("Talk key");
+            keyed(k, ini("TalkKey"));
+            SDL_Scancode key = SDL_GetScancodeFromName(c.talk_key);
+            k.value = key != SDL_SCANCODE_UNKNOWN ? c.talk_key : tr("None");
+            if (const char *use = key != SDL_SCANCODE_UNKNOWN ? key_use((int)key, -2) : nullptr) {
+                k.value += std::string(" (") + tr("in use:") + " " + use + ")";
+                k.warn = true;
+            }
+            k.activate = []() { capture(-2, false); };
+            r.push_back(std::move(k));
+            add_choice(r, "voice.button", "Talk button", c.talk_button,
+                       {tr("None"), tr("Share / Capture"), "Paddle 1", "Paddle 2", "Paddle 3", "Paddle 4", tr("Touchpad"),
+                        tr("Back / View"), tr("Left stick click"), tr("Right stick click")},
+                       [](int v) { c.talk_button = v; }, ini("TalkButton"));
+        }
         number(r, "voice.mic", "Mic volume (%)", &c.mic_volume, (int)lo("MicVolume"), (int)hi("MicVolume"), 5, ini("MicVolume"));
         number(r, "voice.volume", "Voice volume (%)", &c.voice_volume, (int)lo("VoiceVolume"), (int)hi("VoiceVolume"), 5,
                ini("VoiceVolume"));
@@ -1275,6 +1296,23 @@ std::vector<Row> main_rows() {
             }
             t.activate = []() { voice_test(!voice_test_on()); };
             r.push_back(std::move(t));
+        }
+        {  // the other players now in the network: each one's volume here (or muted), until the game closes
+            uint32_t ips[8];
+            char names[8][33];
+            int n = ldn_players(ips, names, 8);
+            static const int steps[] = {0, 25, 50, 75, 100, 150, 200};
+            for (int i = 0; i < n; i++) {
+                int now = voice_player_volume(ips[i]), sel = 4;
+                for (int k = 0; k < (int)std::size(steps); k++)
+                    if (steps[k] == now) sel = k;
+                std::vector<std::string> names_k;
+                for (int st : steps) names_k.push_back(st ? std::to_string(st) + "%" : std::string(tr("Muted")));
+                uint32_t ip = ips[i];
+                add_choice(r, ("voice.player." + std::to_string(ip)).c_str(), names[i][0] ? names[i] : "?", sel, names_k,
+                           [ip](int v) { voice_set_player_volume(ip, steps[v]); }, nullptr);
+                r.back().help = tr("This player's voice, in this game only (until it closes).");
+            }
         }
         header(r, "graphics.header", tr("Graphics"));
         add_bool(r, "show.fps", "FPS counter", &c.show_fps, ini("ShowFPS"));
@@ -1722,7 +1760,8 @@ std::vector<Row> rows_for_view(bool *open) {
                 pop();
             }
         } else if (key > 0 && *name && strlen(name) < sizeof s.draft.chat_key && !strpbrk(name, ";#")) {
-            SDL_strlcpy(s.draft.chat_key, name, sizeof s.draft.chat_key);
+            if (s.capture_bind == -2) SDL_strlcpy(s.draft.talk_key, name, sizeof s.draft.talk_key);
+            else SDL_strlcpy(s.draft.chat_key, name, sizeof s.draft.chat_key);
             pop();
         } else if (key > 0)
             s.error = tr("That key can't be used for chat.");
@@ -1730,6 +1769,8 @@ std::vector<Row> rows_for_view(bool *open) {
             action(r, "capture.none", tr("None"), []() {
                 if (s.capture_bind >= 0)
                     s.draft.binds[s.capture_bind][0] = s.draft.binds[s.capture_bind][1] = 0;
+                else if (s.capture_bind == -2)
+                    s.draft.talk_key[0] = 0;
                 else
                     s.draft.chat_key[0] = 0;
                 pop();

@@ -71,6 +71,9 @@ bool voice_test_on(void) { return false; }
 float voice_mic_level(void) { return 0.0f; }
 const char *voice_error(void) { return ""; }
 void voice_preview(int, int) {}
+void voice_set_player_volume(uint32_t, int) {}
+int voice_player_volume(uint32_t) { return 100; }
+int ldn_players(uint32_t *, char (*)[33], int) { return 0; }
 
 // launcher.log beside it: each start's steps with the time (seconds since it started), so a launcher that didn't open
 // or didn't close shows where it stopped (Tools > Problem report takes it)

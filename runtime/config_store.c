@@ -64,7 +64,7 @@ static SDL_AtomicInt live_bonus;
 static SDL_AtomicInt volume = {100};
 static SDL_AtomicInt mute_in_background;
 // [Voice]
-static SDL_AtomicInt mic_volume = {100}, voice_volume = {100}, voice_mode;
+static SDL_AtomicInt mic_volume = {100}, voice_volume = {100}, voice_mode, talk_key, talk_button;
 // [Application]
 static SDL_AtomicInt confirm_exit = {1};
 static SDL_AtomicInt language = {0};
@@ -132,6 +132,8 @@ void config_store_loaded(const Config *c) {
     SDL_SetAtomicInt(&mute_in_background, c->mute_in_background);
     SDL_SetAtomicInt(&mic_volume, c->mic_volume);
     SDL_SetAtomicInt(&voice_mode, c->voice_mode);
+    SDL_SetAtomicInt(&talk_key, *c->talk_key ? (int)SDL_GetScancodeFromName(c->talk_key) : 0);
+    SDL_SetAtomicInt(&talk_button, c->talk_button);
     SDL_SetAtomicInt(&voice_volume, c->voice_volume);
     SDL_SetAtomicInt(&confirm_exit, c->confirm_exit);
     SDL_SetAtomicInt(&show_fps, c->show_fps);
@@ -203,6 +205,8 @@ float config_audio_gain(void) {
     return SDL_GetAtomicInt(&volume) / 100.0f;
 }
 int config_voice_mode(void) { return SDL_GetAtomicInt(&voice_mode); }
+int config_live_talk_key(void) { return SDL_GetAtomicInt(&talk_key); }
+int config_talk_button(void) { return SDL_GetAtomicInt(&talk_button); }
 float config_mic_gain(void) { return SDL_GetAtomicInt(&mic_volume) / 100.0f; }
 float config_voice_gain(void) { return SDL_GetAtomicInt(&voice_volume) / 100.0f * config_audio_gain(); }
 void config_window_focus(bool focused) { SDL_SetAtomicInt(&window_focused, focused); }

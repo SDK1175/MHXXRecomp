@@ -87,6 +87,8 @@
     .mute_in_background = 0,                                                                        \
     /* [Voice] */                                                                                   \
     .voice_mode = 0,                                                                                \
+    .talk_key = "V",                                                                                \
+    .talk_button = 0,                                                                               \
     .mic_volume = 100,                                                                              \
     .voice_volume = 100,                                                                            \
     /* [Application] */                                                                             \
@@ -423,8 +425,18 @@ static const char DEFAULT_INI[] =
     "[Voice]\n"
     "; Voice chat with the other players of a multiplayer game (on this port)\n"
     "; Off: the microphone stays closed. Always: your voice is sent while the microphone hears more than a breath\n"
+    "; PushToTalk: while TalkKey or TalkButton is held\n"
     "; Default: Off\n"
     "VoiceChat = Off\n"
+    "\n"
+    "; Push to talk on the keyboard (SDL's key name, empty: none)\n"
+    "; Default: V\n"
+    "TalkKey = V\n"
+    "\n"
+    "; Push to talk on a controller\n"
+    "; None, Misc (Share / Capture), Paddle1 to Paddle4, Touchpad, Back, LeftStick, RightStick\n"
+    "; Default: None\n"
+    "TalkButton = None\n"
     "\n"
     "; Volume of your microphone, in percent\n"
     "; Between 0 and 200\n"
@@ -659,7 +671,9 @@ const ConfigSetting g_settings[] = {
     ON_OFF("Bonus Content", "BonusContent", bonus_content, false),
     {"Audio", "Volume", SET_INT, F(volume), 0, 0, 100, NULL, NULL, false, ERR_MISC},
     ON_OFF("Audio", "MuteInBackground", mute_in_background, false),
-    {"Voice", "VoiceChat", SET_CHOICE, F(voice_mode), 0, 0, 0, "Off,Always", NULL, false, ERR_MISC},
+    {"Voice", "VoiceChat", SET_CHOICE, F(voice_mode), 0, 0, 0, "Off,Always,PushToTalk|ptt", NULL, false, ERR_MISC},
+    {"Voice", "TalkKey", SET_TEXT, F(talk_key), sizeof g_config.talk_key, 0, 0, NULL, NULL, false, ERR_MISC},
+    {"Voice", "TalkButton", SET_CHOICE, F(talk_button), 0, 0, 0, TALK_BUTTONS, NULL, false, ERR_MISC},
     {"Voice", "MicVolume", SET_INT, F(mic_volume), 0, 0, 200, NULL, NULL, false, ERR_MISC},
     {"Voice", "VoiceVolume", SET_INT, F(voice_volume), 0, 0, 200, NULL, NULL, false, ERR_MISC},
     ON_OFF("Application", "ConfirmExit", confirm_exit, false),

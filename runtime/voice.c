@@ -18,6 +18,10 @@ static char g_error[] = "Opus didn't start";
 void voice_tick(void) {}
 void voice_aux_received(const void *data, uint32_t len) { (void)data, (void)len; }
 int voice_talking(void) { return 0; }
+int voice_speakers(uint32_t *ids, int max) { (void)ids, (void)max; return 0; }
+bool voice_sending(void) { return false; }
+void voice_set_player_volume(uint32_t id, int percent) { (void)id, (void)percent; }
+int voice_player_volume(uint32_t id) { (void)id; return 100; }
 void voice_test(bool on) { (void)on; }
 bool voice_test_on(void) { return false; }
 float voice_mic_level(void) { return 0.0f; }
@@ -67,7 +71,8 @@ typedef struct {
 static SDL_Mutex *g_lock;  // (opening and closing: voice_tick, voice_test, voice_shutdown)
 static SDL_Mutex *g_rx;    // (the speakers: the network threads add, the voice thread plays)
 static SDL_Thread *g_thread;
-static SDL_AtomicInt g_running, g_level, g_test, g_talking, g_preview_mic = {-1}, g_preview_voice = {-1};
+static SDL_AtomicInt g_running, g_level, g_test, g_talking, g_sending, g_ptt, g_preview_mic = {-1}, g_preview_voice = {-1};
+static struct { uint32_t id; int percent; } g_volumes[SPEAKERS];  // (each player's volume, this game only; g_rx)
 static SDL_AudioStream *g_mic, *g_out;
 static OpusEncoder *g_enc;
 static Speaker g_spk[SPEAKERS];
@@ -162,6 +167,9 @@ static bool mix_frame(int16_t *out) {
     for (int i = 0; i < SPEAKERS; i++) {
         Speaker *s = &g_spk[i];
         if (!s->id || !s->dec) continue;
+        int percent = 100;
+        for (int v = 0; v < SPEAKERS; v++)
+            if (g_volumes[v].id == s->id) percent = g_volumes[v].percent;
         uint16_t lowest = 0;
         int n = buffered(s, &lowest);
         if (!s->playing) {
@@ -186,9 +194,9 @@ static bool mix_frame(int16_t *out) {
             }
         }
         s->next++;
-        if (got == VOICE_FRAME) {
-            for (int k = 0; k < VOICE_FRAME; k++) sum[k] += pcm[k];
-            if (s->id != SELF_ID) talking++;
+        if (got == VOICE_FRAME && percent > 0) {
+            for (int k = 0; k < VOICE_FRAME; k++) sum[k] += pcm[k] * percent / 100;
+            if (s->id != SELF_ID && !s->made_up) talking++;
         }
     }
     SDL_UnlockMutex(g_rx);
@@ -229,9 +237,13 @@ static int SDLCALL run(void *unused) {
                 peak = 0.0f, frames = 0;
             }
             bool test = SDL_GetAtomicInt(&g_test) != 0;
-            bool net = config_voice_mode() && ldn_net_up();
-            hangover = frame_peak > GATE ? HANGOVER : hangover > 0 ? hangover - 1 : 0;
-            if ((test || net) && (hangover > 0 || test)) {
+            int mode = config_voice_mode();
+            bool net = mode && ldn_net_up();
+            // Always: louder than a breath, and 300 ms after; push to talk: held, and 100 ms after (the last word)
+            bool loud = mode == 2 ? SDL_GetAtomicInt(&g_ptt) != 0 : frame_peak > GATE;
+            hangover = loud ? (mode == 2 ? 10 : HANGOVER) : hangover > 0 ? hangover - 1 : 0;
+            SDL_SetAtomicInt(&g_sending, net && !test && hangover > 0);
+            if ((test || net) && (hangover > 0 || (test && mode != 2))) {
                 int n = opus_encode(g_enc, pcm, VOICE_FRAME, msg + sizeof(Header), VOICE_MAX_PACKET);
                 if (n > 0) {
                     Header h = {VOICE_MAGIC, 0, seq, test ? SELF_ID : ldn_own_ip()};
@@ -269,6 +281,7 @@ static void close_all(void) {  // (g_lock held)
     SDL_UnlockMutex(g_rx);
     SDL_SetAtomicInt(&g_level, 0);
     SDL_SetAtomicInt(&g_talking, 0);
+    SDL_SetAtomicInt(&g_sending, 0);
 }
 static void open_all(void) {  // (g_lock held)
     g_error[0] = 0;
@@ -297,6 +310,7 @@ static void open_all(void) {  // (g_lock held)
 }
 
 void voice_tick(void) {
+    SDL_SetAtomicInt(&g_ptt, host_talk_held());  // (read here, on the game's thread, beside the game's own input)
     static bool failed;  // (an open that failed isn't tried again every frame: once more after voice chat was off)
     bool want = SDL_GetAtomicInt(&g_test) || (config_voice_mode() && ldn_net_up());
     if (!want) failed = false;
@@ -320,6 +334,36 @@ void voice_test(bool on) {
 bool voice_test_on(void) { return SDL_GetAtomicInt(&g_test) != 0; }
 float voice_mic_level(void) { return SDL_GetAtomicInt(&g_level) / 1000.0f; }
 int voice_talking(void) { return SDL_GetAtomicInt(&g_talking); }
+bool voice_sending(void) { return SDL_GetAtomicInt(&g_sending) != 0; }
+int voice_speakers(uint32_t *ids, int max) {
+    int n = 0;
+    if (!g_rx) return 0;
+    SDL_LockMutex(g_rx);
+    for (int i = 0; i < SPEAKERS && n < max; i++)
+        if (g_spk[i].id && g_spk[i].id != SELF_ID && g_spk[i].playing && !g_spk[i].made_up) ids[n++] = g_spk[i].id;
+    SDL_UnlockMutex(g_rx);
+    return n;
+}
+void voice_set_player_volume(uint32_t id, int percent) {
+    lock();
+    SDL_LockMutex(g_rx);
+    int at = -1;  // (its own slot, else a free one)
+    for (int i = 0; i < SPEAKERS; i++)
+        if (g_volumes[i].id == id) at = i;
+    for (int i = 0; i < SPEAKERS && at < 0; i++)
+        if (!g_volumes[i].id) at = i;
+    if (at >= 0) g_volumes[at].id = percent == 100 ? 0 : id, g_volumes[at].percent = percent;
+    SDL_UnlockMutex(g_rx);
+}
+int voice_player_volume(uint32_t id) {
+    int percent = 100;
+    if (!g_rx) return percent;
+    SDL_LockMutex(g_rx);
+    for (int i = 0; i < SPEAKERS; i++)
+        if (g_volumes[i].id == id) percent = g_volumes[i].percent;
+    SDL_UnlockMutex(g_rx);
+    return percent;
+}
 const char *voice_error(void) { return g_error; }
 void voice_preview(int mic_percent, int voice_percent) {
     SDL_SetAtomicInt(&g_preview_mic, mic_percent);

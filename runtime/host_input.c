@@ -752,6 +752,21 @@ static uint64_t pad_remap(uint64_t usual) {
     return b;
 }
 
+// Push to talk: its key (the window's key state) or its button on any open controller (TALK_BUTTONS' order)
+bool host_talk_held(void) {
+    int k = config_live_talk_key();
+    if (k > 0 && k < SDL_SCANCODE_COUNT && keys[k]) return true;
+    static const SDL_GamepadButton buttons[] = {SDL_GAMEPAD_BUTTON_INVALID,      SDL_GAMEPAD_BUTTON_MISC1,
+                                                SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1, SDL_GAMEPAD_BUTTON_LEFT_PADDLE1,
+                                                SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2, SDL_GAMEPAD_BUTTON_LEFT_PADDLE2,
+                                                SDL_GAMEPAD_BUTTON_TOUCHPAD,      SDL_GAMEPAD_BUTTON_BACK,
+                                                SDL_GAMEPAD_BUTTON_LEFT_STICK,    SDL_GAMEPAD_BUTTON_RIGHT_STICK};
+    int b = config_talk_button();
+    if (b <= 0 || b >= (int)(sizeof buttons / sizeof *buttons)) return false;
+    for (int i = 0; i < npads; i++)
+        if (pads[i].pad && SDL_GetGamepadButton(pads[i].pad, buttons[b])) return true;
+    return false;
+}
 int host_pad_layout(void) {
     if (!pad) return -1;
     switch (SDL_GetGamepadType(pad)) {

@@ -418,6 +418,21 @@ uint32_t ldn_own_ip(void) { return L.own_ip; }
 uint32_t ldn_broadcast_ip(void) { return L.subnet ? L.subnet | 0xFF : 0xFFFFFFFFu; }
 bool ldn_net_up(void) { return L.state == ST_AP_CREATED || L.state == ST_STATION_CONNECTED; }
 bool ldn_hosting(void) { return L.state == ST_AP_CREATED; }
+int ldn_players(uint32_t *ips, char (*names)[33], int max) {
+    int n = 0;
+    pthread_mutex_lock(&L.mu);
+    if (ldn_net_up())
+        for (int i = 0; i < MAX_NODES && i < L.info[NI_NODE_MAX] && n < max; i++) {
+            const uint8_t *nd = node_at(L.info, i);
+            if (!nd[NODE_CONNECTED] || rd32(nd + NODE_IP) == L.own_ip) continue;
+            ips[n] = rd32(nd + NODE_IP);
+            memcpy(names[n], nd + NODE_NAME, 32);
+            names[n][32] = 0;
+            n++;
+        }
+    pthread_mutex_unlock(&L.mu);
+    return n;
+}
 bool ldn_party(int *n, int *max, char *id, size_t size) {
     pthread_mutex_lock(&L.mu);
     bool up = ldn_net_up();
