@@ -34,7 +34,7 @@ MHXX Recomp는 [MHGU Recomp](https://github.com/morerokk/MHGURecomp)를 포크�
 
 ## 시작하기
 
-1. [Releases](https://github.com/SDK1175/MHXXRecomp/releases)에서 `Windows-MHXXRecomp.<버전>.zip`을 받아 **C 드라이브가 아닌 곳**에 풉니다.
+1. [Releases](https://github.com/SDK1175/MHXXRecomp/releases)에서 `Windows-MHXXRecomp.<버전>.zip`을 받아 새 폴더에 풉니다(예: `C:\Games\MHXXRecomp`, `D:\Games\MHXXRecomp`). **`Program Files`, 바탕화면, 문서 폴더는 피해 주세요**: 관리자 권한이나 OneDrive 동기화 때문에 업데이트·모드·캐시 저장이 실패할 수 있습니다.
 2. `mhxx-launcher.exe`를 실행합니다.
 3. **게임 파일 설치** 화면에서 게임 원본, 업데이트, prod.keys, (한글패치)를 고르고 **설치**.
 4. **게임 시작**.
