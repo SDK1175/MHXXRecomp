@@ -149,6 +149,10 @@ MHXX_PATCHES = {
     ('main', 0x82bc00): (0xE3A00014, '{ extern uint32_t buffcycle_reload(void); c->r[0] = buffcycle_reload(); }'),
     # Two-button input window (GU 0x47ca84): the player's +0x1448 countdown
     ('main', 0x479cc8): (0xEEBF1A00, '{ extern float combowin_tick(void); c->v.f[2] = -combowin_tick(); }'),
+    # ... and the new-press word the code from here to 0x479e9c decides on: real presses, a third button waited for
+    # (`mov r6, r4` at the start, `ldrh r1, [sb]` where all its paths have met; GU 0x47ca38 / 0x47cc58, from MHGU Recomp e48a4a5)
+    ('main', 0x479c7c): (0xE1A06004, '{ extern void combowin_begin(uint32_t); c->r[6] = c->r[4]; combowin_begin(c->r[4]); }'),
+    ('main', 0x479e9c): (0xE1D910B0, '{ extern void combowin_end(uint32_t); combowin_end(c->r[4]); c->r[1] = LD16(c->r[9]); }'),
     # Town NPC fade and its speech bubble (GU 0x8c2e34 / 0x8c127c; tables 0x8b7d98 / 0x8b61c8: 2500^2, 1800^2)
     ('main', 0x8b7cdc): (0xED924A00, '{ extern float npc_fade_dist2(float); c->v.f[8] = npc_fade_dist2(LDF(c->r[2])); }'),
     ('main', 0x8b611c): (0xED924A00, '{ extern float npc_fade_dist2(float); c->v.f[8] = npc_fade_dist2(LDF(c->r[2])); }'),
