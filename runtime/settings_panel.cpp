@@ -100,7 +100,8 @@ struct State {
     uint64_t capture_pad_since = 0;  // when that began (SDL_GetTicksNS): it gives up after PAD_CAPTURE_SECONDS
     bool aspect_custom = false;      // Aspect ratio: Custom chosen (its number shown though it is one of the named ones)
 } s;
-std::atomic<bool> request_exit, request_back, is_dirty, is_confirming, is_capturing, capture_mouse, capture_wheel;
+std::atomic<bool> request_exit, request_back, is_dirty, is_confirming, is_capturing, capture_mouse, capture_wheel,
+    capture_pointing;
 // (the key pressed while a key is being chosen, or KEY_MOUSE + a mouse button; -1: none yet)
 std::atomic<int> captured_key{-1};
 // (the controller button pressed while one is being chosen, PAD_SRC_*; -1: none yet)
@@ -2206,7 +2207,8 @@ bool settings_panel_key(int scancode) {
     return true;
 }
 bool settings_panel_mouse(int button) {
-    if (!capture_mouse.load() || button < 1 || button > SDL_BUTTON_X2)
+    if (!capture_mouse.load() || button < 1 || button > SDL_BUTTON_X2 ||
+        (button == SDL_BUTTON_LEFT && capture_pointing.load()))  // (a left click on the view's buttons is theirs)
         return false;
     captured_key = KEY_MOUSE + button;
     return true;
@@ -2648,7 +2650,8 @@ void settings_panel(bool *open) {
     is_capturing = *open && (s.view == View::KeyCapture || s.view == View::PadCapture);  // (PadCapture: for Esc)
     is_pad_capturing = *open && s.view == View::PadCapture;
     // (a click on the capture view's buttons is theirs; anywhere else it is the mouse button chosen)
-    capture_mouse = *open && s.view == View::KeyCapture && s.capture_bind >= 0 && !s.pointing;
+    capture_mouse = *open && s.view == View::KeyCapture && s.capture_bind >= 0;  // (from MHGU Recomp 534dbc7: side
+    capture_pointing = s.pointing;  // buttons too with the pointer on the view)
     capture_wheel = *open && s.view == View::KeyCapture && s.capture_bind >= 0;  // (the capture view doesn't scroll)
     if (!*open)
         s.editing = false;
