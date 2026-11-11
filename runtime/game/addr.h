@@ -72,6 +72,19 @@
 #define A_HATESTEP_FN_HATE                   0x2bacd4u  // MHXX 1.5.1 (called once, from the monster update 0x2a4240; +0x1428 the status block, scores +0x254 + 4 * i += (int)(rate * step +0x1c), rate from 0x2ba564 = this - 0x770 as in GU). GU 1.4.0: 0x2bbf98  (monster): the update of its attention scores
 #define HATESTEP_PORTED (A_HATESTEP_FN_HATE)
 
+// ---- runtime/hle/fastload.c (MHXX 1.5.1 found 2026-11-12 from main.bin, by GU's layout: the town code is GU - 0xb160,
+// the sound code GU - 0x51d8)
+#define A_FASTLOAD_FN_TOWN_LEAVE             0x8b25c0u  // MHXX 1.5.1 (switch on +5, state 9 counts +0xe4 down by the step). GU 1.4.0: 0x8bd720  town area, mode 4
+#define A_FASTLOAD_FN_STREAM_STOP            0x6decf4u  // MHXX 1.5.1. GU 1.4.0: 0x6e3ecc  (sound, stream slot, kind, fade ms)
+#define A_FASTLOAD_STOP_TOWN1                0x6d97c0u  // MHXX 1.5.1: 0x6d9714's three calls with 1500 ms (GU 0x6de8f4: 0x6dea34)
+#define A_FASTLOAD_STOP_TOWN2                0x6d9854u
+#define A_FASTLOAD_STOP_TOWN3                0x6d98ecu
+#define A_FASTLOAD_STOP_ZONE                 0x6d9030u  // MHXX 1.5.1: in 0x6d8e68, 1000 ms. GU 1.4.0: 0x6de210 (in 0x6de048)
+#define A_FASTLOAD_FN_MUSIC_FADE             0x6d9c68u  // MHXX 1.5.1 (+0x1c += step, against 60 / 90). GU 1.4.0: 0x6dee48  (sound, 1) -> 1 when stopped
+#define A_FASTLOAD_RET_TOWN                  0x8b27acu  // MHXX 1.5.1 (the town's mode 4, state 4, after 0x5f37a0). GU 1.4.0: 0x8bd90c
+#define A_FASTLOAD_RET_ZONE                  0x894e2cu  // MHXX 1.5.1 (in 0x894cd4, which calls the zone stop 0x6d8e68). GU 1.4.0: 0x89fcc0
+#define FASTLOAD_PORTED (A_FASTLOAD_FN_TOWN_LEAVE && A_FASTLOAD_FN_STREAM_STOP && A_FASTLOAD_FN_MUSIC_FADE && A_G_SYSTEM)
+
 // ---- runtime/hle/hpscale.c
 #define A_HPSCALE_FN_NANDO_ROW               0x0u  // GU 1.4.0: 0x2baaac  (monster, column) -> the monster's row of the difficulty table
 #define HPSCALE_PORTED (A_HPSCALE_FN_NANDO_ROW && A_G_GAMECONTROL && A_G_SELECTOR && A_G_SENEMY && A_G_SPLAYER && A_G_SQUEST)
