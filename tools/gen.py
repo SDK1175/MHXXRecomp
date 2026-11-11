@@ -117,6 +117,11 @@ GU_PATCHES.update(emjump_patches(GU_EMJUMP, lambda a: 1 if a == 0x1122bc8 else 0
 # Same format: ('main', address): (expected word, C). The C is usually GU's as it is; check the registers the
 # instruction uses, which can differ between the builds.
 MHXX_PATCHES = {
+    # The GPU memory pool render targets and textures share (game heap 6; GU 0x351e40 / 0x351fa4, `movt #0x3520`):
+    # MHXX's `movt #0x2f20` = 754 MB, sized for the Switch's resolutions; larger with a larger render size (runtime/
+    # config.c g_gpu_pool_size, from MHGU Recomp 9275cc8). 0x350044: the heap table's entry, 0x3501a8: the pool's creation.
+    ('main', 0x350044): (0xE3422F20, '{ extern uint32_t g_gpu_pool_size; c->r[2] = g_gpu_pool_size; }'),
+    ('main', 0x3501a8): (0xE3423F20, '{ extern uint32_t g_gpu_pool_size; c->r[3] = g_gpu_pool_size; }'),
     # Quest photo request (sScreenShot, registered at 0xa64468; GU 0xa6f9ac): `mov r1, #1` before the strb to +0x2c.
     # Without it the reward screen's background is other textures' data (seen 2026-11-06 at 240 fps).
     ('main', 0xa643c8): (0xE3A01001, '{ extern void backend_photo_requested(void); backend_photo_requested(); c->r[1] = 1; }'),

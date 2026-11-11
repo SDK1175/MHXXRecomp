@@ -116,6 +116,9 @@ int texpack_effective(void) {
 Config g_config = {CONFIG_DEFAULT_VALUES};
 Config config_defaults(void) { Config c = {CONFIG_DEFAULT_VALUES}; return c; }
 uint32_t g_render_size[2] = {1920, 1080};
+// the game's GPU pool for render targets and textures (gen.py PATCHES): MHXX 1.5.1's 754 MB (GU: 848)
+#define GPU_POOL_BASE 0x2f200000u
+uint32_t g_gpu_pool_size = GPU_POOL_BASE;
 float g_render_aspect = 16.0f / 9.0f;
 float g_fov_scale = 1.0f;
 uint32_t g_ui_size[2] = {1280, 720};
@@ -1166,9 +1169,33 @@ void config_load(void) {
             "%.2f\n", names[g_config.fsr_quality], r, w, h, g_fsr_output[0], g_fsr_output[1], g_config.fsr_sharpness,
             g_fsr_lod_bias);
     }
+    {   // (from MHGU Recomp 9275cc8) The game's 2.5 GB heap fits its GPU pool (below) grown by ~665 MB at most (GU:
+        // 4800x2700 played; 5120x2880, +774: "out of command memory" before the town). Larger render sizes never
+        // worked: their targets alone are more than the pool. Keep the shape, lower the size to what fits with 640 MB.
+        const uint64_t max_px = 1920ull * 1080ull + (640ull << 20) / 64;
+        uint64_t px = (uint64_t)w * (uint64_t)h;
+        if (px > max_px) {
+            double s = sqrt((double)max_px / (double)px);
+            int ow = w, oh = h;
+            fit_aspect((int)(w * s), (int)(h * s), aspect, &w, &h);
+            while ((uint64_t)w * (uint64_t)h > max_px) fit_aspect(w - 8, h - 8, aspect, &w, &h);
+            LOG("[config] 3D resolution %dx%d is more than the game's memory holds: using %dx%d\n", ow, oh, w, h);
+            if (g_config.fsr && !getenv("MHGU_FSR_LODBIAS")) g_fsr_lod_bias = log2f((float)w / (float)g_fsr_output[0]);
+        }
+    }
     g_config.render_w = w, g_config.render_h = h;
     g_render_size[0] = (uint32_t)w;
     g_render_size[1] = (uint32_t)h;
+    {   // The game's screen-sized targets come out of its GPU pool: ~59 bytes a pixel (GU, measured at 720p to
+        // 4320x2430). Above the Switch's 1920x1080 the pool grows by that much (64 a pixel), so what's left for
+        // textures stays as on the Switch; in GU at 4320x2430 the pool was otherwise too full for a boss demo's 5.6 MB
+        // texture, and the game copied it to address 0 over its own code (a cutscene crash at high resolutions).
+        uint64_t px = (uint64_t)w * (uint64_t)h, base = 1920ull * 1080ull;
+        uint64_t size = GPU_POOL_BASE + (px > base ? ((px - base) * 64 + 0xfffff) & ~0xfffffull : 0);
+        g_gpu_pool_size = (uint32_t)size;
+        if (px > base) LOG("[config] GPU memory pool %u MB (%u + %u for the render size)\n", (unsigned)(size >> 20),
+                           (unsigned)(GPU_POOL_BASE >> 20), (unsigned)((size - GPU_POOL_BASE) >> 20));
+    }
     g_render_aspect = aspect;
     g_fov_scale = g_config.fov;
 
