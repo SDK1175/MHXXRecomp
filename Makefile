@@ -125,7 +125,7 @@ OPUS_LIBS :=
 ifneq ($(shell pkg-config --exists opus 2>/dev/null && echo y),)
 OPUS_LIBS := -Wl,-Bstatic -lopus -Wl,-Bdynamic
 endif
-LDFLAGS  := -fuse-ld=lld -Wl,--stack,16777216 $(SDL_LIBS) $(AV_LIBS) $(OPUS_LIBS) -lvulkan-1 $(SHADERC_LIBS) -lwinmm -lversion -lole32 -lshell32 -luuid -lws2_32 \
+LDFLAGS  := -fuse-ld=lld -Wl,--stack,268435456 $(SDL_LIBS) $(AV_LIBS) $(OPUS_LIBS) -lvulkan-1 $(SHADERC_LIBS) -lwinmm -lversion -lole32 -lshell32 -luuid -lws2_32 \
             -lbcrypt -static-libgcc -static-libstdc++ -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic \
             -Wl,--export-all-symbols -Wl,--out-implib,$(O)/mhgurecomp.dll.a
 GAMELIB  := $(B)/mhgugame.dll
