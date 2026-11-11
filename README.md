@@ -67,8 +67,11 @@ MHXX Recomp는 [MHGU Recomp](https://github.com/morerokk/MHGURecomp)를 포크�
 
 ## 문제가 생기면
 
-이 저장소의 [Issues](https://github.com/SDK1175/MHXXRecomp/issues)에 런처 **도구 → 문제 보고**로 만든 zip(로그와 PC
-사양이 들어 있음)을 첨부해 올려 주세요. **원본 MHGU Recomp 저장소에는 MHXX 문제를 올리지 말아 주세요.**
+- **[구글 폼으로 남기기](https://docs.google.com/forms/d/e/1FAIpQLScC3lvrLqtWjTighlP7S_UbcYKcbeIt0gnN29hMizKGI6MA5Q/viewform)**: 기능 추천, 버그 제보, 불편했던 점. 로그인 없이 익명으로 쓸 수 있습니다.
+- GitHub 계정이 있다면 이 저장소의 [Issues](https://github.com/SDK1175/MHXXRecomp/issues)에 런처 **도구 → 문제 보고**로
+  만든 zip(로그와 PC 사양이 들어 있음)을 첨부해 올려 주세요.
+
+**원본 MHGU Recomp 저장소에는 MHXX 문제를 올리지 말아 주세요.**
 
 ## 크레딧
 
