@@ -7,6 +7,7 @@
 #include "../kernel.h"
 #include "chat.h"
 #include "input.h"
+#include "../voice.h"
 #include "../net/discord.h"
 #include "../net/net.h"
 
@@ -48,6 +49,7 @@ uint64_t input_npad_state(int32_t sticks[4]) {
 // stick, u32 attributes. GetNpadState(state *, const NpadId &)
 static void fill_state(Cpu *c) {
     emsync_tick();  // (multiplayer small monster sync: on the game's thread, once a frame is plenty)
+    voice_tick();   // (voice chat: its devices opened in a network with it on, closed out of one)
     hpscale_tick();  // (the hub host's [Monster HP] settings to the others)
     chat_tick(c);  // (a line typed after "/": sent as a shoutout is, runtime/hle/chat.c)
     presence_tick();  // (Discord Rich Presence, once a second: runtime/hle/presence.c)

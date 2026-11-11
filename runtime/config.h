@@ -91,6 +91,7 @@ typedef struct {
     int shader_prewarm;       // [Performance] ShaderPrewarm: translate the game's shaders at start-up (nvn/vulkan/exec.c)
     float draw_distance;      // [Graphics] DrawDistance: town NPCs' fade distance factor, 0 no limit (config.c npc_fade_dist2)
     int mute_in_background;   // [Audio] MuteInBackground: no sound while the window is not focused (config_audio_gain)
+    int voice_mode;           // [Voice] VoiceChat: 0 Off (the microphone closed), 1 Always (config_voice_mode)
     int mic_volume;           // [Voice] MicVolume: the microphone, 0..200 % (config_mic_gain)
     int voice_volume;         // [Voice] VoiceVolume: the other players' voices, 0..200 % (config_voice_gain)
     int combo_window;         // [Controls] ComboInputWindow: COMBO_*, how long a press waits for a second button
@@ -224,6 +225,7 @@ int config_live_share_urgent(void);    // [Multiplayer] ShareUrgentCredit
 void config_live_ldn(char *server, size_t server_size, char *key, size_t key_size);  // [Multiplayer] Server, Key
 bool config_restart_required(const Config *draft); // Raw cold fields vs this process's startup INI values.
 float config_audio_gain(void);  // atomic, safe on audio threads; 0 while muted in the background
+int config_voice_mode(void);    // [Voice] VoiceChat (atomic)
 float config_mic_gain(void);    // [Voice] MicVolume as a factor (atomic)
 float config_voice_gain(void);  // [Voice] VoiceVolume as a factor, times config_audio_gain (atomic)
 void config_window_focus(bool focused);  // the window got / lost the focus (runtime/host_input.c)

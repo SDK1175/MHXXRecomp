@@ -86,6 +86,7 @@
     .volume = 100,                                                                                  \
     .mute_in_background = 0,                                                                        \
     /* [Voice] */                                                                                   \
+    .voice_mode = 0,                                                                                \
     .mic_volume = 100,                                                                              \
     .voice_volume = 100,                                                                            \
     /* [Application] */                                                                             \
@@ -420,6 +421,11 @@ static const char DEFAULT_INI[] =
     "MuteInBackground = Off\n"
     "\n"
     "[Voice]\n"
+    "; Voice chat with the other players of a multiplayer game (on this port)\n"
+    "; Off: the microphone stays closed. Always: your voice is sent while the microphone hears more than a breath\n"
+    "; Default: Off\n"
+    "VoiceChat = Off\n"
+    "\n"
     "; Volume of your microphone, in percent\n"
     "; Between 0 and 200\n"
     "; Default: 100\n"
@@ -653,6 +659,7 @@ const ConfigSetting g_settings[] = {
     ON_OFF("Bonus Content", "BonusContent", bonus_content, false),
     {"Audio", "Volume", SET_INT, F(volume), 0, 0, 100, NULL, NULL, false, ERR_MISC},
     ON_OFF("Audio", "MuteInBackground", mute_in_background, false),
+    {"Voice", "VoiceChat", SET_CHOICE, F(voice_mode), 0, 0, 0, "Off,Always", NULL, false, ERR_MISC},
     {"Voice", "MicVolume", SET_INT, F(mic_volume), 0, 0, 200, NULL, NULL, false, ERR_MISC},
     {"Voice", "VoiceVolume", SET_INT, F(voice_volume), 0, 0, 200, NULL, NULL, false, ERR_MISC},
     ON_OFF("Application", "ConfirmExit", confirm_exit, false),

@@ -347,6 +347,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(combo_window);
     SAME(volume);
     SAME(mute_in_background);
+    SAME(voice_mode);
     SAME(mic_volume);
     SAME(voice_volume);
     SAME(button_icons);
@@ -1252,6 +1253,8 @@ std::vector<Row> main_rows() {
         number(r, "volume", "Volume (%)", &c.volume, (int)lo("Volume"), (int)hi("Volume"), 1, ini("Volume"));
         add_bool(r, "mutebg", "Mute in background", &c.mute_in_background, ini("MuteInBackground"));
         header(r, "voice.header", tr("Voice chat"));
+        add_choice(r, "voice.mode", "Voice chat", c.voice_mode, {tr("Off"), tr("Always")}, [](int v) { c.voice_mode = v; },
+                   ini("VoiceChat"));
         number(r, "voice.mic", "Mic volume (%)", &c.mic_volume, (int)lo("MicVolume"), (int)hi("MicVolume"), 5, ini("MicVolume"));
         number(r, "voice.volume", "Voice volume (%)", &c.voice_volume, (int)lo("VoiceVolume"), (int)hi("VoiceVolume"), 5,
                ini("VoiceVolume"));

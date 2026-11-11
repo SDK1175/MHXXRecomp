@@ -1,7 +1,11 @@
-// Voice chat, its first part (voice.h): the microphone and the speakers through Opus, and the F1 menu's microphone test.
-// One thread moves 10 ms frames: the recording stream's samples (48 kHz mono S16, SDL converts the device's own),
-// times [Voice] MicVolume, packed by Opus (VoIP, 24 kbit/s) and unpacked, into the playback stream at [Voice]
-// VoiceVolume times the game's volume. Less than 100 ms is kept queued to play: a voice late by more is dropped.
+// Voice chat (voice.h). One thread, while the devices are open:
+// - the microphone: 10 ms frames (48 kHz mono S16, SDL converts the device's own) times [Voice] MicVolume, packed by
+//   Opus (VoIP, 24 kbit/s) while louder than a breath (and 300 ms after), sent to the other games (ldn_send_aux) - in
+//   the microphone test given to this game's own player instead;
+// - the speakers: each player's packets (by their network address) in a jitter buffer that starts playing at 30 ms,
+//   decoded in order (a missing one made up by Opus), all mixed, at [Voice] VoiceVolume times the game's volume, with
+//   at most ~40 ms queued in the playback stream. A player silent for 100 ms stops until they're heard again; one
+//   whose buffer grows past 80 ms is skipped ahead (the voice stays near real time).
 #include "voice.h"
 
 #include <SDL3/SDL.h>
@@ -11,6 +15,9 @@
 
 #if !__has_include(<opus/opus.h>)  // (built without Opus: voice chat off, the test says so)
 static char g_error[] = "Opus didn't start";
+void voice_tick(void) {}
+void voice_aux_received(const void *data, uint32_t len) { (void)data, (void)len; }
+int voice_talking(void) { return 0; }
 void voice_test(bool on) { (void)on; }
 bool voice_test_on(void) { return false; }
 float voice_mic_level(void) { return 0.0f; }
@@ -23,21 +30,53 @@ void voice_shutdown(void) {}
 #include <opus/opus.h>
 #include <string.h>
 
+#include "net/net.h"
+
 #define VOICE_BITRATE 24000
 #define VOICE_MAX_PACKET 400
+#define VOICE_MAGIC 0xE7u   // (F_AUX: emsync.c's are 0xE5, hpscale.c's 0xE6)
+#define SPEAKERS 8
+#define RING 16             // packets kept per player (160 ms)
+#define START_FRAMES 3      // buffered before a player's voice starts (30 ms)
+#define SKIP_FRAMES 8       // buffered past this: skipped ahead
+#define QUIET_FRAMES 10     // made up this many in a row: the player stopped
+#define GATE 0.015f         // louder than this (of full scale) is sent
+#define HANGOVER 30         // and this many frames after (300 ms)
+#define SELF_ID 0xFFFFFFFFu // the microphone test's own voice
 
-static SDL_Mutex *g_lock;  // (voice_test from the menu, voice_shutdown at exit)
+typedef struct {  // on the wire, after it the Opus packet
+    uint8_t magic, pad;
+    uint16_t seq;
+    uint32_t id;  // the sender's address in the network
+} Header;
+typedef struct {
+    uint16_t seq;
+    uint16_t len;  // 0: empty
+    uint8_t data[VOICE_MAX_PACKET];
+} Slot;
+typedef struct {
+    uint32_t id;  // 0: free
+    OpusDecoder *dec;
+    bool playing;
+    uint16_t next;  // the next seq to play
+    int made_up;    // frames made up in a row
+    uint64_t heard; // last packet (ns)
+    Slot ring[RING];
+} Speaker;
+
+static SDL_Mutex *g_lock;  // (opening and closing: voice_tick, voice_test, voice_shutdown)
+static SDL_Mutex *g_rx;    // (the speakers: the network threads add, the voice thread plays)
 static SDL_Thread *g_thread;
-static SDL_AtomicInt g_running, g_level, g_preview_mic = {-1}, g_preview_voice = {-1};
+static SDL_AtomicInt g_running, g_level, g_test, g_talking, g_preview_mic = {-1}, g_preview_voice = {-1};
 static SDL_AudioStream *g_mic, *g_out;
 static OpusEncoder *g_enc;
-static OpusDecoder *g_dec;
+static Speaker g_spk[SPEAKERS];
 static char g_error[96];
 
 static SDL_Mutex *lock(void) {
     static SDL_SpinLock once;
     SDL_LockSpinlock(&once);
-    if (!g_lock) g_lock = SDL_CreateMutex();
+    if (!g_lock) g_lock = SDL_CreateMutex(), g_rx = SDL_CreateMutex();
     SDL_UnlockSpinlock(&once);
     return g_lock;
 }
@@ -49,88 +88,194 @@ static float voice_gain(void) {
     int p = SDL_GetAtomicInt(&g_preview_voice);
     return p >= 0 ? p / 100.0f * config_audio_gain() : config_voice_gain();
 }
-
-static bool codec_open(void) {
+static bool encoder_open(void) {
     int err = 0;
-    if (!g_enc) {
-        g_enc = opus_encoder_create(VOICE_RATE, 1, OPUS_APPLICATION_VOIP, &err);
-        if (!g_enc) return LOG("[voice] Opus encoder: %s\n", opus_strerror(err)), false;
-        opus_encoder_ctl(g_enc, OPUS_SET_BITRATE(VOICE_BITRATE));
-        opus_encoder_ctl(g_enc, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
-        opus_encoder_ctl(g_enc, OPUS_SET_COMPLEXITY(5));  // (cheap: the game runs beside it)
-    }
-    if (!g_dec) {
-        g_dec = opus_decoder_create(VOICE_RATE, 1, &err);
-        if (!g_dec) return LOG("[voice] Opus decoder: %s\n", opus_strerror(err)), false;
-    }
+    if (g_enc) return true;
+    g_enc = opus_encoder_create(VOICE_RATE, 1, OPUS_APPLICATION_VOIP, &err);
+    if (!g_enc) return LOG("[voice] Opus encoder: %s\n", opus_strerror(err)), false;
+    opus_encoder_ctl(g_enc, OPUS_SET_BITRATE(VOICE_BITRATE));
+    opus_encoder_ctl(g_enc, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
+    opus_encoder_ctl(g_enc, OPUS_SET_COMPLEXITY(5));  // (cheap: the game runs beside it)
+    opus_encoder_ctl(g_enc, OPUS_SET_INBAND_FEC(1));  // (a lost packet partly rebuilt from the next one)
+    opus_encoder_ctl(g_enc, OPUS_SET_PACKET_LOSS_PERC(5));
     return true;
+}
+
+// ---- receiving: a player's packet into their ring (any thread)
+static void received(uint32_t id, uint16_t seq, const uint8_t *data, int len) {
+    if (len <= 0 || len > VOICE_MAX_PACKET || !id) return;
+    SDL_LockMutex(g_rx);
+    Speaker *s = NULL, *free_one = NULL, *oldest = &g_spk[0];
+    for (int i = 0; i < SPEAKERS; i++) {
+        if (g_spk[i].id == id) s = &g_spk[i];
+        if (!g_spk[i].id && !free_one) free_one = &g_spk[i];
+        if (g_spk[i].heard < oldest->heard) oldest = &g_spk[i];
+    }
+    if (!s) {
+        s = free_one ? free_one : oldest;
+        if (!s->dec) {
+            int err = 0;
+            s->dec = opus_decoder_create(VOICE_RATE, 1, &err);
+        } else {
+            opus_decoder_ctl(s->dec, OPUS_RESET_STATE);
+        }
+        s->id = id, s->playing = false, s->made_up = 0;
+        memset(s->ring, 0, sizeof s->ring);
+    }
+    s->heard = SDL_GetTicksNS();
+    if (s->playing && (int16_t)(seq - s->next) < 0) {  // (too late: already played or made up)
+        SDL_UnlockMutex(g_rx);
+        return;
+    }
+    Slot *sl = &s->ring[seq % RING];
+    sl->seq = seq, sl->len = (uint16_t)len;
+    memcpy(sl->data, data, (size_t)len);
+    SDL_UnlockMutex(g_rx);
+}
+void voice_aux_received(const void *data, uint32_t len) {
+    Header h;
+    if (len <= sizeof h) return;
+    memcpy(&h, data, sizeof h);
+    if (h.magic != VOICE_MAGIC || !SDL_GetAtomicInt(&g_running) || !config_voice_mode()) return;
+    received(h.id, h.seq, (const uint8_t *)data + sizeof h, (int)(len - sizeof h));
+}
+
+// ---- playing: one 10 ms frame of every player's voice, mixed (the voice thread)
+// The packets waiting (from `from` on while playing; all of them before), and the earliest
+static int buffered(const Speaker *s, uint16_t *lowest) {
+    int n = 0;
+    bool any = false;
+    for (int i = 0; i < RING; i++) {
+        const Slot *sl = &s->ring[i];
+        if (!sl->len || (s->playing && (int16_t)(sl->seq - s->next) < 0)) continue;
+        n++;
+        if (!any || (int16_t)(sl->seq - *lowest) < 0) *lowest = sl->seq;
+        any = true;
+    }
+    return n;
+}
+static bool mix_frame(int16_t *out) {
+    int32_t sum[VOICE_FRAME] = {0};
+    int16_t pcm[VOICE_FRAME];
+    int talking = 0;
+    SDL_LockMutex(g_rx);
+    for (int i = 0; i < SPEAKERS; i++) {
+        Speaker *s = &g_spk[i];
+        if (!s->id || !s->dec) continue;
+        uint16_t lowest = 0;
+        int n = buffered(s, &lowest);
+        if (!s->playing) {
+            if (n < START_FRAMES) continue;
+            s->playing = true, s->next = lowest, s->made_up = 0;
+        } else if (n > SKIP_FRAMES) {  // (behind: catch up, the oldest dropped)
+            s->next = (uint16_t)(lowest + (n - START_FRAMES));
+        }
+        Slot *sl = &s->ring[s->next % RING];
+        int got;
+        if (sl->len && sl->seq == s->next) {
+            got = opus_decode(s->dec, sl->data, sl->len, pcm, VOICE_FRAME, 0);
+            sl->len = 0, s->made_up = 0;
+        } else {
+            Slot *after = &s->ring[(uint16_t)(s->next + 1) % RING];
+            got = after->len && after->seq == (uint16_t)(s->next + 1)
+                      ? opus_decode(s->dec, after->data, after->len, pcm, VOICE_FRAME, 1)  // (from the next one's FEC)
+                      : opus_decode(s->dec, NULL, 0, pcm, VOICE_FRAME, 0);
+            if (++s->made_up >= QUIET_FRAMES) {  // (stopped talking: what's left is stale)
+                s->playing = false;
+                memset(s->ring, 0, sizeof s->ring);
+            }
+        }
+        s->next++;
+        if (got == VOICE_FRAME) {
+            for (int k = 0; k < VOICE_FRAME; k++) sum[k] += pcm[k];
+            if (s->id != SELF_ID) talking++;
+        }
+    }
+    SDL_UnlockMutex(g_rx);
+    SDL_SetAtomicInt(&g_talking, talking);
+    bool any = false;
+    for (int k = 0; k < VOICE_FRAME; k++) {
+        int32_t v = sum[k];
+        out[k] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
+        any |= v != 0;
+    }
+    return any;
 }
 
 static int SDLCALL run(void *unused) {
     (void)unused;
-    int16_t pcm[VOICE_FRAME], back[VOICE_FRAME];
-    uint8_t packet[VOICE_MAX_PACKET];
+    int16_t pcm[VOICE_FRAME], mixed[VOICE_FRAME];
+    uint8_t msg[sizeof(Header) + VOICE_MAX_PACKET];
     float peak = 0.0f;
-    int frames = 0;
+    int frames = 0, hangover = 0;
+    uint16_t seq = 0;
     while (SDL_GetAtomicInt(&g_running)) {
-        if (SDL_GetAudioStreamAvailable(g_mic) < (int)sizeof pcm) {
-            SDL_Delay(2);
-            continue;
+        bool idle = true;
+        // the microphone
+        if (g_mic && SDL_GetAudioStreamAvailable(g_mic) >= (int)sizeof pcm &&
+            SDL_GetAudioStreamData(g_mic, pcm, sizeof pcm) == (int)sizeof pcm) {
+            idle = false;
+            float g = mic_gain(), frame_peak = 0.0f;
+            for (int i = 0; i < VOICE_FRAME; i++) {
+                float v = pcm[i] * g;
+                v = v > 32767.0f ? 32767.0f : v < -32768.0f ? -32768.0f : v;
+                pcm[i] = (int16_t)v;
+                float a = fabsf(v) / 32768.0f;
+                if (a > frame_peak) frame_peak = a;
+            }
+            if (frame_peak > peak) peak = frame_peak;
+            if (++frames == 10) {  // (100 ms)
+                SDL_SetAtomicInt(&g_level, (int)(peak * 1000.0f));
+                peak = 0.0f, frames = 0;
+            }
+            bool test = SDL_GetAtomicInt(&g_test) != 0;
+            bool net = config_voice_mode() && ldn_net_up();
+            hangover = frame_peak > GATE ? HANGOVER : hangover > 0 ? hangover - 1 : 0;
+            if ((test || net) && (hangover > 0 || test)) {
+                int n = opus_encode(g_enc, pcm, VOICE_FRAME, msg + sizeof(Header), VOICE_MAX_PACKET);
+                if (n > 0) {
+                    Header h = {VOICE_MAGIC, 0, seq, test ? SELF_ID : ldn_own_ip()};
+                    memcpy(msg, &h, sizeof h);
+                    if (test) received(SELF_ID, seq, msg + sizeof h, n);
+                    else ldn_send_aux(msg, (uint32_t)(sizeof h + (size_t)n));
+                }
+            }
+            seq++;
         }
-        if (SDL_GetAudioStreamData(g_mic, pcm, sizeof pcm) != (int)sizeof pcm) continue;
-        float g = mic_gain();
-        for (int i = 0; i < VOICE_FRAME; i++) {
-            float v = pcm[i] * g;
-            v = v > 32767.0f ? 32767.0f : v < -32768.0f ? -32768.0f : v;
-            pcm[i] = (int16_t)v;
-            float a = fabsf(v) / 32768.0f;
-            if (a > peak) peak = a;
+        // the speakers: kept 20..40 ms ahead
+        if (g_out && SDL_GetAudioStreamQueued(g_out) < 2 * VOICE_FRAME * (int)sizeof(int16_t)) {
+            SDL_SetAudioStreamGain(g_out, voice_gain());
+            if (mix_frame(mixed)) SDL_PutAudioStreamData(g_out, mixed, sizeof mixed), idle = false;
         }
-        if (++frames == 10) {  // (100 ms)
-            SDL_SetAtomicInt(&g_level, (int)(peak * 1000.0f));
-            peak = 0.0f, frames = 0;
-        }
-        int n = opus_encode(g_enc, pcm, VOICE_FRAME, packet, sizeof packet);
-        if (n <= 0) continue;
-        int m = opus_decode(g_dec, packet, n, back, VOICE_FRAME, 0);
-        if (m <= 0) continue;
-        SDL_SetAudioStreamGain(g_out, voice_gain());
-        if (SDL_GetAudioStreamQueued(g_out) > VOICE_RATE / 10 * (int)sizeof(int16_t)) SDL_ClearAudioStream(g_out);
-        SDL_PutAudioStreamData(g_out, back, m * (int)sizeof(int16_t));
+        if (idle) SDL_Delay(2);
     }
     return 0;
 }
 
-static void close_all(void) {  // (lock held)
+static void close_all(void) {  // (g_lock held)
     if (g_thread) {
         SDL_SetAtomicInt(&g_running, 0);
         SDL_WaitThread(g_thread, NULL);
         g_thread = NULL;
+        LOG("[voice] closed\n");
     }
     if (g_mic) SDL_DestroyAudioStream(g_mic), g_mic = NULL;
     if (g_out) SDL_DestroyAudioStream(g_out), g_out = NULL;
+    SDL_LockMutex(g_rx);
+    for (int i = 0; i < SPEAKERS; i++) {
+        if (g_spk[i].dec) opus_decoder_destroy(g_spk[i].dec);
+        memset(&g_spk[i], 0, sizeof g_spk[i]);
+    }
+    SDL_UnlockMutex(g_rx);
     SDL_SetAtomicInt(&g_level, 0);
-    SDL_SetAtomicInt(&g_preview_mic, -1);
-    SDL_SetAtomicInt(&g_preview_voice, -1);
+    SDL_SetAtomicInt(&g_talking, 0);
 }
-
-void voice_test(bool on) {
-    SDL_LockMutex(lock());
-    if (!on) {
-        if (g_thread) LOG("[voice] mic test off\n");
-        close_all();
-        SDL_UnlockMutex(g_lock);
-        return;
-    }
-    if (g_thread) {
-        SDL_UnlockMutex(g_lock);
-        return;
-    }
+static void open_all(void) {  // (g_lock held)
     g_error[0] = 0;
     SDL_AudioSpec spec = {SDL_AUDIO_S16, 1, VOICE_RATE};
     if (!SDL_WasInit(SDL_INIT_AUDIO) && !SDL_InitSubSystem(SDL_INIT_AUDIO))
         SDL_strlcpy(g_error, "No sound device", sizeof g_error);
-    else if (!codec_open())
+    else if (!encoder_open())
         SDL_strlcpy(g_error, "Opus didn't start", sizeof g_error);
     else if (!(g_mic = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_RECORDING, &spec, NULL, NULL))) {
         LOG("[voice] no microphone: %s\n", SDL_GetError());
@@ -147,12 +292,34 @@ void voice_test(bool on) {
     }
     if (g_error[0]) close_all();
     else
-        LOG("[voice] mic test on: %s -> %s\n", SDL_GetAudioDeviceName(SDL_GetAudioStreamDevice(g_mic)),
+        LOG("[voice] open: %s -> %s\n", SDL_GetAudioDeviceName(SDL_GetAudioStreamDevice(g_mic)),
             SDL_GetAudioDeviceName(SDL_GetAudioStreamDevice(g_out)));
+}
+
+void voice_tick(void) {
+    static bool failed;  // (an open that failed isn't tried again every frame: once more after voice chat was off)
+    bool want = SDL_GetAtomicInt(&g_test) || (config_voice_mode() && ldn_net_up());
+    if (!want) failed = false;
+    if (want == (g_thread != NULL) || (want && failed)) return;
+    SDL_LockMutex(lock());
+    if (want && !g_thread) open_all(), failed = g_error[0] != 0;
+    else if (!want && g_thread) close_all();
     SDL_UnlockMutex(g_lock);
 }
-bool voice_test_on(void) { return SDL_GetAtomicInt(&g_running) != 0; }
+void voice_test(bool on) {
+    SDL_LockMutex(lock());
+    SDL_SetAtomicInt(&g_test, on);
+    if (!on) SDL_SetAtomicInt(&g_preview_mic, -1), SDL_SetAtomicInt(&g_preview_voice, -1);
+    bool want = on || (config_voice_mode() && ldn_net_up());
+    if (want && !g_thread) open_all();
+    else if (!want && g_thread) close_all();
+    if (on && g_error[0]) SDL_SetAtomicInt(&g_test, 0);
+    LOG("[voice] mic test %s\n", on ? "on" : "off");
+    SDL_UnlockMutex(g_lock);
+}
+bool voice_test_on(void) { return SDL_GetAtomicInt(&g_test) != 0; }
 float voice_mic_level(void) { return SDL_GetAtomicInt(&g_level) / 1000.0f; }
+int voice_talking(void) { return SDL_GetAtomicInt(&g_talking); }
 const char *voice_error(void) { return g_error; }
 void voice_preview(int mic_percent, int voice_percent) {
     SDL_SetAtomicInt(&g_preview_mic, mic_percent);
@@ -160,24 +327,28 @@ void voice_preview(int mic_percent, int voice_percent) {
 }
 void voice_shutdown(void) {
     SDL_LockMutex(lock());
+    SDL_SetAtomicInt(&g_test, 0);
     close_all();
     if (g_enc) opus_encoder_destroy(g_enc), g_enc = NULL;
-    if (g_dec) opus_decoder_destroy(g_dec), g_dec = NULL;
     SDL_UnlockMutex(g_lock);
 }
 
 int voice_selftest(void) {
-    if (!codec_open()) return -1;
+    lock();
+    if (!encoder_open()) return -1;
     int16_t pcm[VOICE_FRAME], back[VOICE_FRAME];
     uint8_t packet[VOICE_MAX_PACKET];
     int last = -1;
-    for (int f = 0; f < 50; f++) {  // (half a second of a 440 Hz tone: Opus settles in a few frames)
+    for (int f = 0; f < 50; f++) {  // (half a second of a 440 Hz tone, through the jitter buffer as the test's voice)
         for (int i = 0; i < VOICE_FRAME; i++)
             pcm[i] = (int16_t)(8000.0 * sin(2.0 * 3.14159265358979 * 440.0 * (f * VOICE_FRAME + i) / VOICE_RATE));
         int n = opus_encode(g_enc, pcm, VOICE_FRAME, packet, sizeof packet);
-        if (n <= 0 || opus_decode(g_dec, packet, n, back, VOICE_FRAME, 0) != VOICE_FRAME) return -1;
+        if (n <= 0) return -1;
+        if (f % 7 != 3) received(SELF_ID, (uint16_t)f, packet, n);  // (every 7th lost: made up)
+        if (f >= 2 && !mix_frame(back)) return -1;
         last = n;
     }
+    close_all();
     return last;
 }
 #endif
