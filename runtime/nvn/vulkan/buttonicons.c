@@ -1,7 +1,7 @@
 // The game's button prompts as an Xbox or a PlayStation controller's ([Controls] GameButtons): the pictures of the
 // Switch's buttons in two of the game's textures are painted over, as each is uploaded, with the port's own
 // (tools/buttonicons.py draws them: buttonicons_png.h). The text's prompts come from the button font
-// (button_festa_00_ID, 24-pixel cells), the HUD's from its sheet (HD_hud00, 32-pixel cells). Found by the textures'
+// (button_festa_00_ID, 24-pixel cells), the HUD's from two sheets (HD_hud00, HD_custom_pnl2: 32-pixel cells). Found by the textures'
 // keys (texpack.c), so a texture pack's picture of them is painted the same, at its size. Each Switch button shows the
 // controller button it is pressed with ([Controller] in F1, FaceButtons), painted again when they change.
 #include <SDL3/SDL.h>
@@ -31,6 +31,10 @@ static const Target targets[] = {
     {0xd58014a25649b59dull, 512, 512, 32, 6,  // GUI/99_texture/HD_hud00_BM_NOMIP (quest.arc)
      {{G_L, 0, 408}, {G_Y, 32, 408}, {G_X, 64, 408}, {G_B, 96, 408}, {G_A, 128, 408}, {G_R, 160, 408}},
      0, 408, 192, 32, 0xc01d4435a5d40cd8ull},
+    {0x8be885b4b732c2dbull, 512, 512, 32, 10,  // GUI/99_texture/HD_custom_pnl2_BM_NOMIP (resident.arc): the HUD's small
+     {{G_L, 4, 244}, {G_Y, 36, 244}, {G_X, 68, 244}, {G_B, 100, 244}, {G_A, 132, 244}, {G_R, 164, 244},  // ones (the
+      {G_ZL, 196, 244}, {G_ZR, 228, 244}, {G_MINUS, 388, 244}, {G_PLUS, 420, 244}},  // item bar's, the map's ZL)
+     4, 244, 256, 32, 0x343664272dbc9285ull},
 };
 
 // The sheet's row: 0 Xbox, 1 PlayStation; -1 the Switch's own pictures
