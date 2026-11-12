@@ -325,6 +325,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(fsr_reactive);
     SAME(fsr_animsurf);
     SAME(vsync);
+    SAME(background_fps);
     SAME(shader_prewarm);
     SAME(draw_distance);
     SAME(smooth_gradients);
@@ -930,6 +931,7 @@ void reset_section() {
         c.show_battery = f.show_battery;
         c.fps = f.fps;
         c.vsync = f.vsync;
+        c.background_fps = f.background_fps;
         c.shader_prewarm = f.shader_prewarm;
         c.draw_distance = f.draw_distance;
         c.smooth_gradients = f.smooth_gradients;
@@ -1347,6 +1349,8 @@ std::vector<Row> main_rows() {
             };
         }
         add_bool(r, "vsync", "VSync", &c.vsync, ini("VSync"));
+        number(r, "bgfps", tr("Background FPS"), &c.background_fps, (int)lo("BackgroundFPS"), (int)hi("BackgroundFPS"), 10, ini("BackgroundFPS"));
+        r.back().help = tr("The frame rate while another program is in front, so the graphics card is left for it. 0: the same as FPS.");
         add_bool(r, "prewarm", "Shader prewarm", &c.shader_prewarm, ini("ShaderPrewarm"));
         add_choice(r, "msaa", "MSAA",
                    c.msaa == 8   ? 3

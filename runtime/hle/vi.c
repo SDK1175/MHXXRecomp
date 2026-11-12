@@ -21,7 +21,11 @@ uint32_t g_native_window;
 // 60 and ~135 fps. The settings' FPS (mhgurecomp.ini: 30..240, default 60); MHGU_FRAMERATE supplies the initial override. Above the
 // monitor's refresh rate the settings' VSync must be Off (immediate present): FIFO / mailbox wait for the display.
 #define FPS_OBJ_GLOBAL A_G_SYSTEM
-static float framerate(void) { return config_live_fps(); }
+// In the background (another program in front): [Performance] BackgroundFPS, so the graphics card is left for it
+static float framerate(void) {
+    float fps = config_live_fps(), bg = (float)config_background_fps();
+    return !config_window_focused() && bg > 0 && bg < fps ? bg : fps;
+}
 void vi_apply_framerate(void) {  // (also called per presented frame: runtime/nvn/vulkan/device.c)
     float want = framerate();
     uint32_t obj = LDG(FPS_OBJ_GLOBAL);

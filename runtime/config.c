@@ -54,6 +54,7 @@
     .show_fps = 0,                                                                                  \
     .show_battery = BATTERY_OFF,                                                                    \
     .fps = 60,                                                                                      \
+    .background_fps = 30,                                                                       \
     .vsync = 1,                                                                                     \
     .shader_prewarm = 1,                                                                            \
     /* [Controls] */                                                                                \
@@ -248,6 +249,12 @@ static const char DEFAULT_INI[] =
     "\n"
     "; VSync\n"
     "VSync = On\n"
+    "\n"
+    "; Frame rate while the game's window is in the background (another program in front): the graphics card is left\n"
+    "; for it. 0: the same as FPS\n"
+    "; Between 0 and 240\n"
+    "; Default: 30\n"
+    "BackgroundFPS = 30\n"
     "\n"
     "; Translate all of the game's shaders in the background at startup, so fewer things are drawn black the first time\n"
     "; they appear. The first start does this in about 20 seconds while the logos play; it needs about 340 MB in the cache folder.\n"
@@ -649,6 +656,7 @@ const ConfigSetting g_settings[] = {
     {"Performance", "ShowBattery", SET_CHOICE, F(show_battery), 0, 0, 0, "Off,WithFPS,ByItself", NULL, false, ERR_MISC},
     {"Performance", "FPS|FrameRate", SET_INT, F(fps), 0, 30, 240, NULL, NULL, false, ERR_MISC},
     ON_OFF("Performance", "VSync", vsync, false),
+    {"Performance", "BackgroundFPS", SET_INT, F(background_fps), 0, 0, 240, NULL, NULL, false, ERR_MISC},
     ON_OFF("Performance", "ShaderPrewarm", shader_prewarm, true),
     {"Controls", "FaceButtons", SET_CHOICE, F(face_buttons), 0, 0, 0, "Position|positional|nintendo,Label|labels|xbox",
      NULL, false, ERR_MISC},

@@ -18,7 +18,7 @@
 
 static Config saved, startup;
 static bool have_saved, runtime_ready, runtime_fsr;
-static SDL_AtomicInt window_focused = {1};
+static SDL_AtomicInt window_focused = {1}, background_fps = {30};
 // [Display]
 static SDL_AtomicInt live_fov;
 // [Anti-aliasing]
@@ -133,6 +133,7 @@ void config_store_loaded(const Config *c) {
     SDL_SetAtomicInt(&mute_in_background, c->mute_in_background);
     SDL_SetAtomicInt(&mic_volume, c->mic_volume);
     SDL_SetAtomicInt(&noise_suppression, c->noise_suppression);
+    SDL_SetAtomicInt(&background_fps, c->background_fps);
     SDL_SetAtomicInt(&voice_mode, c->voice_mode);
     SDL_SetAtomicInt(&talk_key, *c->talk_key ? (int)SDL_GetScancodeFromName(c->talk_key) : 0);
     SDL_SetAtomicInt(&talk_button, c->talk_button);
@@ -210,6 +211,8 @@ int config_voice_mode(void) { return SDL_GetAtomicInt(&voice_mode); }
 int config_live_talk_key(void) { return SDL_GetAtomicInt(&talk_key); }
 int config_talk_button(void) { return SDL_GetAtomicInt(&talk_button); }
 float config_mic_gain(void) { return SDL_GetAtomicInt(&mic_volume) / 100.0f; }
+bool config_window_focused(void) { return SDL_GetAtomicInt(&window_focused) != 0; }
+int config_background_fps(void) { return SDL_GetAtomicInt(&background_fps); }
 bool config_noise_suppression(void) { return SDL_GetAtomicInt(&noise_suppression) != 0; }
 float config_voice_gain(void) {
     if (SDL_GetAtomicInt(&mute_in_background) && !SDL_GetAtomicInt(&window_focused)) return 0.0f;

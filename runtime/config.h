@@ -59,6 +59,7 @@ typedef struct {
     int width, height;        // screen / window size (Fullscreen: the monitor mode)
     int render_w, render_h;   // the game's 3D resolution (16:9)
     int fps;                  // frame rate cap: 30..240
+    int background_fps;       // [Performance] BackgroundFPS: the frame rate while the window isn't focused (0: as FPS)
     int vsync;                // 1: present without tearing (mailbox / FIFO, at most the refresh rate), 0: immediate
     int msaa;                 // samples of the 3D scene: 1 (off), 2, 4, 8
     int fxaa;                 // the game's own FXAA pass: 1 on, 0 off
@@ -243,6 +244,8 @@ bool config_noise_suppression(void);  // [Voice] NoiseSuppression (atomic)
 float config_voice_gain(void);  // [Voice] VoiceVolume as a factor; 0 while muted in the background (atomic)
 const char *config_nickname(void);  // [Multiplayer] Nickname, else "Hunter"
 void config_window_focus(bool focused);  // the window got / lost the focus (runtime/host_input.c)
+bool config_window_focused(void);
+int config_background_fps(void);  // [Performance] BackgroundFPS (atomic)
 int config_language(void);     // last saved UI language, atomic across host threads
 bool config_confirm_exit(void); // atomic, safe on the host main thread
 bool config_menu_chord(void);   // [Controls] MenuChord as saved, atomic (the input is read on another thread)
