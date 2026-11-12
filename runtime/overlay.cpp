@@ -412,6 +412,23 @@ static const char *korean_font(void) {
     return nullptr;
 }
 
+// Japanese the Hangul font lacks (a Japanese hunter's name in voice chat's names): Windows' own Japanese fonts, merged
+// after it (so only for what it has no glyph for). Noto Sans CJK (Linux, Android) has Japanese already.
+static const char *japanese_font(void) {
+#ifdef _WIN32
+    static char path[512];
+    const char *w = getenv("WINDIR");
+    for (const char *name : {"YuGothM.ttc", "meiryo.ttc", "msgothic.ttc"}) {
+        snprintf(path, sizeof path, "%s\\Fonts\\%s", w && *w ? w : "C:\\Windows", name);
+        if (FILE *f = fopen(path, "rb")) {
+            fclose(f);
+            return path;
+        }
+    }
+#endif
+    return nullptr;
+}
+
 void overlay_init(const char *font_path, float font_size, int menu_key) {
 #ifdef MHGU_NULL_BACKEND
     return;
@@ -436,6 +453,13 @@ void overlay_init(const char *font_path, float font_size, int menu_key) {
         LOG("[overlay] Hangul font %s%s\n", ko, ok ? "" : ": could not be read");
     } else
         LOG("[overlay] no Hangul font found (put one at fonts/menu.ttf): Korean shows as boxes\n");
+    if (const char *ja = japanese_font()) {
+        ImFontConfig merge;
+        merge.MergeMode = true;
+        merge.SizePixels = g_font_size;
+        bool ok = io.Fonts->AddFontFromFileTTF(ja, g_font_size, &merge) != nullptr;
+        LOG("[overlay] Japanese font %s%s\n", ja, ok ? "" : ": could not be read");
+    }
     ImGui::StyleColorsDark();
     forge_style(ImGui::GetStyle());
     ImGui::GetStyle().FontSizeBase = g_font_size;
