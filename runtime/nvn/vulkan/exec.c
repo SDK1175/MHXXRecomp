@@ -960,6 +960,10 @@ static void ui_group_hend(int n) {
             if ((lx1 - lx0 <= 40.0f && ly1 - ly0 > 200.0f) || (rx1 - rx0 <= 40.0f && ry1 - ry0 > 200.0f)) two = false;
         }
         if (two) cut = xs[k], h = ui_group_hside(x0, xs[k - 1]), h2 = ui_group_hside(xs[k], x1);
+        // One window well across the middle stays where 16:9 has it (Centre) even when it leans to a side: MHXX's
+        // Palico skill / support move list (x 461..845) with its description beside it (from x 25) leaned Left, and
+        // alone (the cursor on an empty slot, the description gone) leaned Right - the list jumped across the screen.
+        else if (fminf(640.0f - x0, x1 - 640.0f) > 64.0f) h = h2 = 2;
     }
     if (inside < 0 && x1 - x0 >= 200.0f && ui_group.ymax - ui_group.ymin >= 200.0f) {  // (a window: remembered)
         int b = ui_nboxes < UI_BOXES ? ui_nboxes++ : UI_BOXES - 1;
