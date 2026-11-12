@@ -518,7 +518,12 @@ static bool hook_install(uint32_t target, uint32_t detour, bool want_orig, uint3
         flog(3, "Failed to hook MHGU address %08x: this port does not know where it is in MHXX", target - GU_SHADOW + MAIN_BASE);
         return false;
     }
+    uint32_t w0 = LD32(target), w1 = LD32(target + 4);
     if (!hook_install_at(real, detour, want_orig, tramp)) return false;
+    // The trampoline as the plugin knows the function (Damage Numbers reads it back: the two words it saw, then a jump
+    // to its address + 8). It runs the same: the words differ from MHXX's only where they can't be moved anyway, and
+    // the jump comes back through the region to MHXX's address.
+    if (*tramp) ST32(*tramp, w0), ST32(*tramp + 4, w1), ST32(*tramp + 12, target + 8);
     gucompat_mirror(real, 8);
     return true;
 }
