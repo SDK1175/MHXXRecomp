@@ -36,6 +36,7 @@ static void ImGui_ImplVulkan_UpdateTexture(ImTextureData *) {}
 #include "settings_panel.h"
 #include "settings_locale.h"
 #include "voice.h"
+#include "updatecheck.h"
 #include "net/net.h"
 
 extern "C" volatile uint64_t g_present_count;  // (runtime/rt.h: frames the game presented)
@@ -519,6 +520,26 @@ static void draw_notice(uint64_t now, float scale) {
     dl->AddText(font, size, ImVec2(at_text.x, at_text.y + ts.y + gap), color(.96f, .97f, 1, 1), text.c_str(), nullptr, wrap);
 }
 
+// A newer release (updatecheck.c): a small note at the bottom left for 20 s, fading in and out
+static void draw_update(float age, const char *version, float scale) {
+    float alpha = std::clamp(std::min(age / .3f, (20.f - age) / 1.f), 0.f, 1.f);
+    char title[96];
+    snprintf(title, sizeof title, settings_text(config_language(), "New version %s"), version);
+    const char *text = settings_text(config_language(), "Update it from the launcher after playing.");
+    ImGuiViewport *vp = ImGui::GetMainViewport();
+    ImFont *font = ImGui::GetFont();
+    float size = ImGui::GetFontSize(), pad = 7 * scale, bar = 3 * scale;
+    ImVec2 ts = font->CalcTextSizeA(size, FLT_MAX, 0, title), xs = font->CalcTextSizeA(size * .9f, FLT_MAX, 0, text);
+    float w = std::max(ts.x, xs.x) + bar + 2 * pad, h = ts.y + xs.y + 2 * pad + 2 * scale;
+    ImVec2 p0(vp->WorkPos.x + 12 * scale, vp->WorkPos.y + vp->WorkSize.y - h - 12 * scale), p1(p0.x + w, p0.y + h);
+    auto color = [alpha](float r, float g, float b, float a) { return ImGui::ColorConvertFloat4ToU32(ImVec4(r, g, b, a * alpha)); };
+    ImDrawList *dl = ImGui::GetForegroundDrawList();
+    dl->AddRectFilled(p0, p1, color(.025f, .04f, .065f, .85f), 5 * scale);
+    dl->AddRectFilled(p0, ImVec2(p0.x + bar, p1.y), color(.45f, .8f, 1, 1), 5 * scale, ImDrawFlags_RoundCornersLeft);
+    dl->AddText(font, size, ImVec2(p0.x + bar + pad, p0.y + pad), color(.6f, .88f, 1, 1), title);
+    dl->AddText(font, size * .9f, ImVec2(p0.x + bar + pad, p0.y + pad + ts.y + 2 * scale), color(.92f, .94f, 1, 1), text);
+}
+
 // The line of chat being typed ("/", runtime/hle/chat.c): where the player dragged it (at first above the game's
 // chat window), wrapped
 static void draw_chat(const char *line, uint64_t now, float scale) {
@@ -702,7 +723,10 @@ void overlay_frame(void *cpu) {
     bool fps = config_show_fps();
 #endif
     bool voice = voice_marks();
-    if (!open && !free_render && !notice && !chat && !fps && !voice) {  // (nothing to draw)
+    char update_version[64];
+    float update_age = 0;
+    bool update = update_notice(now, update_version, sizeof update_version, &update_age);
+    if (!open && !free_render && !notice && !chat && !fps && !voice && !update) {  // (nothing to draw)
         std::lock_guard<std::mutex> l(g_snap_lock);
         if (g_snap.Valid) snap_clear();
         apply_input(io);  // (keep the queue short)
@@ -769,6 +793,7 @@ void overlay_frame(void *cpu) {
     if (chat) draw_chat(line, now, scale);
     if (fps) draw_fps(now);
     if (voice) draw_voice(scale);
+    if (update) draw_update(update_age, update_version, scale);
     ImGui::Render();
 
     ImDrawData *dd = ImGui::GetDrawData();

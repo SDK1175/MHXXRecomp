@@ -92,6 +92,7 @@ typedef struct {
     int fsr_objmotion;        // FSR: motion vectors of moving objects (characters, monsters): 1 on, 0 camera only
     float fsr_reactive;       // FSR: reactive mask strength on the game's moving-object mask, 0 (off) .. 1
     int fsr_animsurf;         // FSR: surfaces animated through their texture (banners, water): 1 detected, 0 off
+    int update_notice;        // [Application] UpdateNotice: a newer release noted in the game (runtime/updatecheck.c)
     int updates;              // [Application] Updates: UPDATES_*, read by the launcher (tools/launcher/update.cpp), not the game
     int shader_prewarm;       // [Performance] ShaderPrewarm: translate the game's shaders at start-up (nvn/vulkan/exec.c)
     float draw_distance;      // [Graphics] DrawDistance: town NPCs' fade distance factor, 0 no limit (config.c npc_fade_dist2)
@@ -246,6 +247,7 @@ const char *config_nickname(void);  // [Multiplayer] Nickname, else "Hunter"
 void config_window_focus(bool focused);  // the window got / lost the focus (runtime/host_input.c)
 bool config_window_focused(void);
 int config_background_fps(void);  // [Performance] BackgroundFPS (atomic)
+bool config_update_notice(void);  // [Application] UpdateNotice (atomic)
 int config_language(void);     // last saved UI language, atomic across host threads
 bool config_confirm_exit(void); // atomic, safe on the host main thread
 bool config_menu_chord(void);   // [Controls] MenuChord as saved, atomic (the input is read on another thread)

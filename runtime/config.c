@@ -54,6 +54,7 @@
     .show_fps = 0,                                                                                  \
     .show_battery = BATTERY_OFF,                                                                    \
     .fps = 60,                                                                                      \
+    .update_notice = 1,                                                                         \
     .background_fps = 30,                                                                       \
     .vsync = 1,                                                                                     \
     .shader_prewarm = 1,                                                                            \
@@ -497,6 +498,12 @@ static const char DEFAULT_INI[] =
     "; Default: 100\n"
     "MenuScale = 100\n"
     "\n"
+    "; While the game runs, a small note at the bottom left when a newer release is out on GitHub (checked a minute\n"
+    "; after the start, then every 30 minutes; nothing is downloaded: update from the launcher)\n"
+    "; On, Off\n"
+    "; Default: On\n"
+    "UpdateNotice = On\n"
+    "\n"
     "; What the launcher does when it starts: check GitHub for a newer release and ask (with its patch notes) before\n"
     "; installing it, install it without asking, or not check. Starting the game itself never checks or updates.\n"
     "; Ask, Auto, Off\n"
@@ -710,6 +717,7 @@ const ConfigSetting g_settings[] = {
     {"Application", "ButtonIcons", SET_CHOICE, F(button_icons), 0, 0, 0, "Xbox,Switch,PlayStation", NULL, false, ERR_ICONS},
     {"Application", "Theme", SET_CHOICE, F(menu_theme), 0, 0, 0, "Gold,Blue,Hunter,DoubleCross", NULL, false, ERR_MISC},
     {"Application", "MenuScale", SET_INT, F(menu_scale), 0, 50, 200, NULL, NULL, false, ERR_SCALE},
+    ON_OFF("Application", "UpdateNotice", update_notice, false),
     {"Application", "Updates", SET_CHOICE, F(updates), 0, 0, 0, "Ask,Auto|automatic,Off|never", NULL, false, ERR_UPDATES},
     {"Application", "SaveLocation", SET_TEXT, F(save_location), sizeof g_config.save_location, 0, 0, NULL, NULL, true, ERR_FOLDER},
 };

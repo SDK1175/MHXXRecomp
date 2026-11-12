@@ -326,6 +326,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(fsr_animsurf);
     SAME(vsync);
     SAME(background_fps);
+    SAME(update_notice);
     SAME(shader_prewarm);
     SAME(draw_distance);
     SAME(smooth_gradients);
@@ -994,6 +995,7 @@ void reset_section() {
         c.menu_confirm = f.menu_confirm;
         SDL_strlcpy(c.save_location, f.save_location, sizeof c.save_location);
         c.button_icons = f.button_icons;
+        c.update_notice = f.update_notice;
         c.confirm_exit = f.confirm_exit;
         c.updates = f.updates;
         c.bonus_content = f.bonus_content;
@@ -1557,6 +1559,8 @@ std::vector<Row> main_rows() {
         add_bool(r, "confirm.exit", "Confirm exit", &c.confirm_exit, ini("ConfirmExit"));
         add_choice(r, "updates", "Updates", c.updates, {tr("Ask"), tr("Auto"), tr("Off")},
                    [](int v) { c.updates = v; }, ini("Updates"));
+        add_bool(r, "update.notice", "Update notice in game", &c.update_notice, ini("UpdateNotice"));
+        r.back().help = tr("A small note at the bottom left while you play when a new version is out. Update from the launcher.");
         add_bool(r, "bonus", "Bonus content", &c.bonus_content, ini("BonusContent"));
 #ifndef __ANDROID__  // (Android: its own tab's Save folder)
         header(r, "save.header", tr("Save data"));

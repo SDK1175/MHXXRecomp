@@ -18,6 +18,7 @@
 #include "engine_module.h"
 #include "app_actions.h"
 #include "net/discord.h"
+#include "updatecheck.h"
 #ifdef __ANDROID__
 #include <SDL3/SDL_main.h>  // (main becomes SDL_main, which SDL's Java activity calls in libmain.so)
 #endif
@@ -260,6 +261,7 @@ int main(int argc, char **argv) {
     ui_init();
 #ifndef __ANDROID__
     engine_modules_init(MHGU_VERSION);  // (the ones engine_modules/enabled.txt lists: runtime/engine_module.c)
+    update_check_start();  // (a newer release noted in the game: updatecheck.c)
 #endif
     boot(g_game_dir);
     return ui_run();

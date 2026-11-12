@@ -126,7 +126,7 @@ ifneq ($(shell pkg-config --exists opus 2>/dev/null && echo y),)
 OPUS_LIBS := -Wl,-Bstatic -lopus -Wl,-Bdynamic
 endif
 LDFLAGS  := -fuse-ld=lld -Wl,--stack,268435456 $(SDL_LIBS) $(AV_LIBS) $(OPUS_LIBS) -lvulkan-1 $(SHADERC_LIBS) -lwinmm -lversion -lole32 -lshell32 -luuid -lws2_32 \
-            -lbcrypt -static-libgcc -static-libstdc++ -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic \
+            -lbcrypt -lwinhttp -static-libgcc -static-libstdc++ -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic \
             -Wl,--export-all-symbols -Wl,--out-implib,$(O)/mhgurecomp.dll.a
 GAMELIB  := $(B)/mhgugame.dll
 GAMELIB_LDFLAGS := -shared -fuse-ld=lld -static-libgcc $(O)/mhgurecomp.dll.a
@@ -172,7 +172,7 @@ SHADER_ID := $(shell cat $(SHADER_SRCS) | tr -d '\r' | sha256sum | cut -c1-16)
 VERSION ?= $(shell git describe --tags 2>/dev/null || echo unknown)
 
 RT_OBJ   = $(patsubst runtime/%.c,$(O)/rt/%.o,$(RT_SRC)) $(RT_CXX) $(O)/rt/overlay.o $(O)/rt/settings_panel.o $(IMGUI_OBJ) \
-           $(O)/updater/sha256.o $(ICON_RES) $(RNNOISE_OBJ)
+           $(O)/updater/sha256.o $(O)/updater/http.o $(O)/updater/json.o $(ICON_RES) $(RNNOISE_OBJ)
 # RNNoise 0.1.1 (third_party/rnnoise, BSD): voice chat's noise suppression (runtime/voice.c)
 RNNOISE_SRC := $(addprefix third_party/rnnoise/src/,denoise.c rnn.c rnn_data.c pitch.c kiss_fft.c celt_lpc.c)
 RNNOISE_OBJ := $(patsubst third_party/rnnoise/src/%.c,$(O)/rnnoise/%.o,$(RNNOISE_SRC))
