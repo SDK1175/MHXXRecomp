@@ -20,13 +20,17 @@ typedef struct {
     uint16_t w, h, cell;
     int n;
     Cell cells[G_N];
+    uint16_t fx, fy, fw, fh;  // the buttons' strip, and its FNV-1a of RGBA8: the same picture with other game files
+    uint64_t fnv;              // around it (the Korean patch's) has another key
 } Target;
 static const Target targets[] = {
     {0x473308d6d9f3b584ull, 256, 256, 24, 10,  // GUI/02_common/font/button_festa_00_ID
      {{G_Y, 0, 0}, {G_X, 24, 0}, {G_B, 48, 0}, {G_A, 72, 0}, {G_L, 96, 0}, {G_R, 0, 24}, {G_ZL, 120, 24},
-      {G_ZR, 144, 24}, {G_PLUS, 0, 72}, {G_MINUS, 24, 72}}},
+      {G_ZR, 144, 24}, {G_PLUS, 0, 72}, {G_MINUS, 24, 72}},
+     0, 0, 120, 24, 0xc6a5df3096b1a843ull},
     {0xd58014a25649b59dull, 512, 512, 32, 6,  // GUI/99_texture/HD_hud00_BM_NOMIP (quest.arc)
-     {{G_L, 0, 408}, {G_Y, 32, 408}, {G_X, 64, 408}, {G_B, 96, 408}, {G_A, 128, 408}, {G_R, 160, 408}}},
+     {{G_L, 0, 408}, {G_Y, 32, 408}, {G_X, 64, 408}, {G_B, 96, 408}, {G_A, 128, 408}, {G_R, 160, 408}},
+     0, 408, 192, 32, 0xc01d4435a5d40cd8ull},
 };
 
 // The sheet's row: 0 Xbox, 1 PlayStation; -1 the Switch's own pictures
@@ -130,15 +134,24 @@ static void paint_all(const Target *t, uint8_t *rgba, uint32_t w, uint32_t h, in
     }
 }
 
-bool buttonicons_apply(TexBackend *b, uint64_t key, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb) {
-    int ti = -1;
-    for (unsigned i = 0; i < sizeof targets / sizeof *targets; i++)
-        if (targets[i].key == key) ti = (int)i;
-    if (ti < 0) {  // (a texture of the same size: logged, to find the button textures of other game files)
-        static int n;
-        if (n++ < 40) LOG("[buttons] %016llx (%ux%u): not a texture with button pictures\n", (unsigned long long)key, w, h);
-        return false;
+int buttonicons_target(uint64_t key, const uint8_t *rgba, uint32_t w, uint32_t h) {
+    for (unsigned i = 0; i < sizeof targets / sizeof *targets; i++) {
+        const Target *t = &targets[i];
+        if (t->w != w || t->h != h) continue;
+        if (t->key == key) return (int)i;
+        uint64_t f = 0xcbf29ce484222325ull;
+        for (uint32_t y = t->fy; rgba && y < (uint32_t)t->fy + t->fh; y++)
+            for (uint32_t k = 0; k < (uint32_t)t->fw * 4; k++) f = (f ^ rgba[((size_t)y * w + t->fx) * 4 + k]) * 0x100000001b3ull;
+        if (rgba && f == t->fnv) {
+            LOG("[buttons] %016llx (%ux%u): its button pictures are the known ones (another key)\n", (unsigned long long)key, w, h);
+            return (int)i;
+        }
     }
+    return -1;
+}
+
+bool buttonicons_apply(TexBackend *b, int ti, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb) {
+    if (ti < 0 || ti >= (int)(sizeof targets / sizeof *targets)) return false;
     Live *l = &live[ti];
     uint8_t *base = malloc((size_t)w * h * 4), *px = malloc((size_t)w * h * 4);
     if (!base || !px) { free(base), free(px); return false; }
@@ -148,7 +161,7 @@ bool buttonicons_apply(TexBackend *b, uint64_t key, const uint8_t *rgba, uint32_
     paint_all(&targets[ti], px, w, h, buttonicons_style());
     bool ok = vk_tex_replace(b, px, w, h, srgb);
     free(px);
-    LOG("[buttons] %016llx (%ux%u): the button pictures as %s\n", (unsigned long long)key, w, h,
+    LOG("[buttons] texture %d (%ux%u): the button pictures as %s\n", ti, w, h,
         buttonicons_style() == 0 ? "Xbox" : buttonicons_style() == 1 ? "PlayStation" : "Switch");
     return ok;
 }

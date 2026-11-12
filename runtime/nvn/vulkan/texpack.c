@@ -319,13 +319,18 @@ bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat 
     tegra_deswizzle(mem + l.offset, lin, l.wb, l.hb, 1, fi->bpb, l.block_height_log2, l.block_depth_log2);
     uint64_t key = texpack_key(lin, size, l.w, l.h, t->format);
     const char *path = pack_state == 1 ? pack_find(key) : NULL;
-    if (!path && buttons) {  // the game's picture, decoded, with the controller's buttons painted on it
+    int button_target = -1;
+    if (buttons) {  // the game's picture, decoded: one with button pictures? (then painted with the controller's)
         Job j = {.data = lin, .size = size, .w = l.w, .h = l.h, .kind = (uint32_t)kind_of(vf, &srgb), .nvn_format = t->format,
                  .srgb = srgb};
         uint8_t *px = j.kind != K_NONE && j.kind != K_ASTC ? decode(&j) : NULL;
-        bool ok = px && buttonicons_apply(b, key, px, l.w, l.h, srgb);
-        free(px), free(lin);
-        return ok;
+        button_target = buttonicons_target(key, px, l.w, l.h);
+        if (button_target >= 0 && !path) {
+            bool ok = buttonicons_apply(b, button_target, px, l.w, l.h, srgb);
+            free(px), free(lin);
+            return ok;
+        }
+        free(px);
     }
     free(lin);
     if (!path) return false;
@@ -349,7 +354,7 @@ bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat 
                 for (uint32_t y = 0; y < h; y++) memcpy(tight + (uint64_t)y * w * 4, px + (uint64_t)y * c->pitch, (size_t)w * 4);
             px = tight;
         }
-        ok = px && ((buttons && buttonicons_apply(b, key, px, w, h, srgb)) || vk_tex_replace(b, px, w, h, srgb));  // (the
+        ok = px && ((button_target >= 0 && buttonicons_apply(b, button_target, px, w, h, srgb)) || vk_tex_replace(b, px, w, h, srgb));  // (the
         // button prompts are painted on a pack's picture too)
         free(tight);
         if (ok && replaced_n++ < 20) LOG("[texpack] %016llx %ux%u -> %ux%u\n", (unsigned long long)key, l.w, l.h, w, h);

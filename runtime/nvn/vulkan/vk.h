@@ -158,11 +158,13 @@ TexBackend *vk_tex(NvnTexture *t, bool for_render);
 // (texpack.c) [Graphics] TextureDump: t's first upload, saved as textures/dump/<key>.png on a thread of its own
 void texpack_first_upload(NvnTexture *t, const uint8_t *mem, VkFormat vf, bool linear);
 uint64_t texpack_key(const uint8_t *level0, uint64_t size, uint32_t w, uint32_t h, uint32_t nvn_format);
-// The button prompts as the controller's (buttonicons.c): a texture of a size it paints; b's picture (RGBA8, w x h: the
-// game's size or a texture pack's) painted and uploaded (false: not one of its textures); b gone; each frame, from
-// the render thread under vk_lock (painted again when the setting or a binding changed)
+// The button prompts as the controller's (buttonicons.c): a texture of a size it paints; which of its textures this is
+// (its key, its own picture decoded: RGBA8 w x h), -1 none; b's picture (the game's or a texture pack's, any size)
+// painted and uploaded; b gone; each frame, from the render thread under vk_lock (painted again when the setting or a
+// binding changed)
 bool buttonicons_size(uint32_t w, uint32_t h);
-bool buttonicons_apply(struct TexBackend *b, uint64_t key, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb);
+int buttonicons_target(uint64_t key, const uint8_t *rgba, uint32_t w, uint32_t h);
+bool buttonicons_apply(struct TexBackend *b, int target, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb);
 void buttonicons_forget(struct TexBackend *b);
 void buttonicons_frame(void);
 // (texpack.c) t's first upload: true when textures/load/ has a picture for it, now in b (vk_tex_replace)
