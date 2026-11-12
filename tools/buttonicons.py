@@ -3,9 +3,9 @@
   python buttonicons.py <out.png> [<out.h>]
 
 Drawn here from shapes and strokes (no font, nothing taken from a game): circles, rounded keys, letters as strokes.
-One sheet: rows of 24-pixel cells (the font of the text's prompts), then rows of 32-pixel cells (the HUD's), each row
-a style, each column a Switch button: A B X Y L R ZL ZR + -.
-Styles: 0 Xbox by position (the right button is B), 1 PlayStation by position, 2 Xbox by label (A is A).
+One sheet: rows of 24-pixel cells (the font of the text's prompts), then rows of 32-pixel cells (the HUD's); in each
+size a row for Xbox, then PlayStation; each column a button of the controller, in config.h's PAD_SRC_* order from
+south (the runtime picks the one each Switch button is pressed with, [Controller] and FaceButtons applied).
 """
 import sys
 from PIL import Image, ImageDraw, ImageFilter
@@ -27,6 +27,11 @@ LET = {
     'T': [[(1, 0), (9, 0)], [(5, 0), (5, 14)]],
     '1': [[(2.5, 2.5), (5.5, 0), (5.5, 14)], [(2.5, 14), (8.5, 14)]],
     '2': [[(1.5, 2.5), (3.5, 0), (6.5, 0), (8.5, 2.2), (8.5, 5), (1.5, 14), (8.8, 14)]],
+    '3': [[(1.5, 1.5), (3.5, 0), (6.5, 0), (8.3, 1.8), (8.3, 5), (6, 6.8), (4, 6.8)], [(6, 6.8), (8.5, 8.8), (8.5, 12.2), (6.5, 14), (3.5, 14), (1.3, 12.3)]],
+    '4': [[(6.5, 14), (6.5, 0), (1, 9.5), (9, 9.5)]],
+    'P': [[(2, 14), (2, 0), (6.5, 0), (8.5, 1.8), (8.5, 5.4), (6.5, 7.2), (2, 7.2)]],
+    'S': [[(8.3, 1.8), (6.5, 0), (3.5, 0), (1.6, 1.8), (1.6, 4.8), (3.5, 6.8), (6.5, 7.2), (8.5, 9.2), (8.5, 12.2), (6.5, 14), (3.5, 14), (1.4, 12.2)]],
+    'M': [[(1, 14), (1, 0), (5, 9), (9, 0), (9, 14)]],
 }
 
 
@@ -113,28 +118,78 @@ def menu(n, which):
     return finish(big, n)
 
 
-def row(n, style):
-    # Switch A (right), B (bottom), X (top), Y (left), L, R, ZL, ZR, +, -
-    if style == 0:
-        faces = [face(n, 'xbox', m) for m in 'BAYX']
-    elif style == 1:
-        faces = [face(n, 'ps', m) for m in ('circle', 'cross', 'triangle', 'square')]
-    else:
-        faces = [face(n, 'xbox', m) for m in 'ABXY']
-    if style == 1:
-        sh = [key(n, 'L1', False), key(n, 'R1', False), key(n, 'L2', True), key(n, 'R2', True)]
-    else:
-        sh = [key(n, 'LB', False), key(n, 'RB', False), key(n, 'LT', True), key(n, 'RT', True)]
-    return faces + sh + [menu(n, 'menu'), menu(n, 'view')]
+def dpad(n, arm):
+    """the d-pad, the pressed arm dark (0 up, 1 down, 2 left, 3 right)"""
+    N = n * SS
+    big = Image.new('RGBA', (N, N), (0, 0, 0, 0))
+    d = ImageDraw.Draw(big)
+    c, a, t, ow = N / 2, N * .43, N * .17, N * .07
+    for x0, y0, x1, y1 in ((c - t, c - a, c + t, c + a), (c - a, c - t, c + a, c + t)):
+        d.rectangle((x0, y0, x1, y1), fill=INK)
+    for x0, y0, x1, y1 in ((c - t + ow, c - a + ow, c + t - ow, c + a - ow), (c - a + ow, c - t + ow, c + a - ow, c + t - ow)):
+        d.rectangle((x0, y0, x1, y1), fill=FILL)
+    k = a - ow - t * .2
+    box = [(c - t + ow, c - a + ow, c + t - ow, c - t), (c - t + ow, c + t, c + t - ow, c + a - ow),
+           (c - a + ow, c - t + ow, c - t, c + t - ow), (c + t, c - t + ow, c + a - ow, c + t - ow)][arm]
+    d.rectangle(box, fill=INK)
+    return finish(big, n)
+
+
+def stick(n, label):
+    N = n * SS
+    big = Image.new('RGBA', (N, N), (0, 0, 0, 0))
+    d = ImageDraw.Draw(big)
+    m, ow = N * 0.07, N * 0.085
+    d.ellipse((m, m, N - m, N - m), fill=INK)
+    d.ellipse((m + ow, m + ow, N - m - ow, N - m - ow), fill=FILL)
+    text(d, label, N / 2, N / 2, N * .3, N * .075, INK)
+    return finish(big, n)
+
+
+def touchpad(n):
+    N = n * SS
+    big = Image.new('RGBA', (N, N), (0, 0, 0, 0))
+    d = ImageDraw.Draw(big)
+    d.rounded_rectangle((N * .06, N * .24, N * .94, N * .76), N * .12, fill=INK)
+    d.rounded_rectangle((N * .145, N * .325, N * .855, N * .675), N * .06, fill=FILL)
+    return finish(big, n)
+
+
+# The controller's buttons, in config.h's PAD_SRC_* order from PAD_SRC_SOUTH
+COLUMNS = ['south', 'east', 'west', 'north', 'lb', 'rb', 'lt', 'rt', 'start', 'back', 'up', 'down', 'left', 'right',
+           'ls', 'rs', 'p1', 'p2', 'p3', 'p4', 'misc', 'touchpad']
+
+
+def glyph(n, style, col):
+    ps = style == 1
+    if col in ('south', 'east', 'west', 'north'):
+        if ps:
+            return face(n, 'ps', {'south': 'cross', 'east': 'circle', 'west': 'square', 'north': 'triangle'}[col])
+        return face(n, 'xbox', {'south': 'A', 'east': 'B', 'west': 'X', 'north': 'Y'}[col])
+    if col in ('lb', 'rb', 'lt', 'rt'):
+        names = {'lb': 'L1', 'rb': 'R1', 'lt': 'L2', 'rt': 'R2'} if ps else {'lb': 'LB', 'rb': 'RB', 'lt': 'LT', 'rt': 'RT'}
+        return key(n, names[col], col in ('lt', 'rt'))
+    if col in ('start', 'back'):
+        return menu(n, 'menu' if col == 'start' else 'view')
+    if col in ('up', 'down', 'left', 'right'):
+        return dpad(n, ['up', 'down', 'left', 'right'].index(col))
+    if col in ('ls', 'rs'):
+        return stick(n, ('L3' if col == 'ls' else 'R3') if ps else ('LS' if col == 'ls' else 'RS'))
+    if col.startswith('p'):
+        return key(n, col.upper(), False)
+    if col == 'misc':
+        return key(n, 'M', False)
+    return touchpad(n)
 
 
 def sheet():
-    img = Image.new('RGBA', (10 * 32, 3 * 24 + 3 * 32), (0, 0, 0, 0))
+    """rows: 24-pixel cells (Xbox, PlayStation), then 32-pixel ones (the same)"""
+    img = Image.new('RGBA', (len(COLUMNS) * 32, 2 * 24 + 2 * 32), (0, 0, 0, 0))
     y = 0
     for n in (24, 32):
-        for style in range(3):
-            for i, g in enumerate(row(n, style)):
-                img.alpha_composite(g, (i * n, y))
+        for style in range(2):
+            for i, col in enumerate(COLUMNS):
+                img.alpha_composite(glyph(n, style, col), (i * n, y))
             y += n
     return img
 

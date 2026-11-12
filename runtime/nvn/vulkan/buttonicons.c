@@ -2,8 +2,8 @@
 // Switch's buttons in two of the game's textures are painted over, as each is uploaded, with the port's own
 // (tools/buttonicons.py draws them: buttonicons_png.h). The text's prompts come from the button font
 // (button_festa_00_ID, 24-pixel cells), the HUD's from its sheet (HD_hud00, 32-pixel cells). Found by the textures'
-// keys (texpack.c), so a texture pack's picture of them is painted the same, at its size. Chosen at the start: the
-// textures load once.
+// keys (texpack.c), so a texture pack's picture of them is painted the same, at its size. Each Switch button shows the
+// controller button it is pressed with ([Controller] in F1, FaceButtons), painted again when they change.
 #include <SDL3/SDL.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,20 +29,29 @@ static const Target targets[] = {
      {{G_L, 0, 408}, {G_Y, 32, 408}, {G_X, 64, 408}, {G_B, 96, 408}, {G_A, 128, 408}, {G_R, 160, 408}}},
 };
 
+// The sheet's row: 0 Xbox, 1 PlayStation; -1 the Switch's own pictures
 int buttonicons_style(void) {
-    static int style = -2;
-    if (style != -2) return style;
     int v = g_config.game_buttons, layout = host_pad_layout();
     if (v == GAME_BUTTONS_AUTO) v = layout == 0 ? GAME_BUTTONS_XBOX : layout == 2 ? GAME_BUTTONS_PS : GAME_BUTTONS_SWITCH;
-    // the sheet's rows: 0 Xbox by position, 1 PlayStation, 2 Xbox by label (FaceButtons = Label: A is A)
-    style = v == GAME_BUTTONS_XBOX ? (g_config.face_buttons == FACE_LABEL ? 2 : 0) : v == GAME_BUTTONS_PS ? 1 : -1;
-    LOG("[buttons] button prompts: %s (GameButtons %d, controller %d)\n",
-        style < 0 ? "Switch" : style == 1 ? "PlayStation" : "Xbox", g_config.game_buttons, layout);
-    return style;
+    return v == GAME_BUTTONS_XBOX ? 0 : v == GAME_BUTTONS_PS ? 1 : -1;
+}
+
+// The controller button a Switch button (PAD_A .. PAD_MINUS) is pressed with: [Controller], else the usual one
+// (host_input.c: the face buttons by position, or by label on an Xbox controller with FaceButtons = Label). The
+// sheet's column (PAD_SRC_* from south), -1: none (the game's picture is left)
+static int source_of(int g, int style) {
+    int src = config_live_pad_bind(g);
+    if (src == PAD_SRC_NONE) return -1;
+    if (src == PAD_SRC_DEFAULT) {
+        static const int pos[G_N] = {PAD_SRC_EAST, PAD_SRC_SOUTH, PAD_SRC_NORTH, PAD_SRC_WEST, PAD_SRC_LB, PAD_SRC_RB,
+                                     PAD_SRC_LT, PAD_SRC_RT, PAD_SRC_START, PAD_SRC_BACK};
+        static const int label[4] = {PAD_SRC_SOUTH, PAD_SRC_EAST, PAD_SRC_WEST, PAD_SRC_NORTH};
+        src = g < 4 && style == 0 && config_live_face_buttons() == FACE_LABEL ? label[g] : pos[g];
+    }
+    return src >= PAD_SRC_SOUTH && src < PAD_SRCS ? src - PAD_SRC_SOUTH : -1;
 }
 
 bool buttonicons_size(uint32_t w, uint32_t h) {
-    if (buttonicons_style() < 0) return false;
     for (unsigned i = 0; i < sizeof targets / sizeof *targets; i++)
         if (targets[i].w == w && targets[i].h == h) return true;
     return false;
@@ -91,20 +100,75 @@ static void paint(uint8_t *px, uint32_t pw, uint32_t ph, const SDL_Surface *s, i
     }
 }
 
-bool buttonicons_apply(uint64_t key, uint8_t *rgba, uint32_t w, uint32_t h) {
+// Each target's texture as it is now (the game's or a pack's picture, kept unpainted), to paint again when the setting
+// or a button's binding changes: from the render thread, each frame (buttonicons_frame)
+typedef struct {
+    TexBackend *b;
+    uint8_t *base;
+    uint32_t w, h;
+    bool srgb;
+    uint64_t sig;  // what it was painted for (0: not yet)
+} Live;
+static Live live[sizeof targets / sizeof *targets];
+
+static uint64_t signature(void) {
     int style = buttonicons_style();
-    if (style < 0) return false;
-    const Target *t = NULL;
-    for (unsigned i = 0; i < sizeof targets / sizeof *targets; i++)
-        if (targets[i].key == key) t = &targets[i];
-    const SDL_Surface *s = t ? sheet() : NULL;
-    if (!s) return false;
+    uint64_t sig = (uint64_t)(style + 2);
+    for (int g = 0; g < G_N; g++) sig = sig * 31 + (uint64_t)(source_of(g, style) + 2);
+    return sig;
+}
+
+static void paint_all(const Target *t, uint8_t *rgba, uint32_t w, uint32_t h, int style) {
+    const SDL_Surface *s = sheet();
+    if (!s || style < 0) return;
     float k = (float)w / t->w;
-    int row_y = t->cell == 24 ? style * 24 : 3 * 24 + style * 32;
+    int row_y = t->cell == 24 ? style * 24 : 2 * 24 + style * 32;
     for (int i = 0; i < t->n; i++) {
         const Cell *c = &t->cells[i];
-        paint(rgba, w, h, s, c->g * t->cell, row_y, t->cell, c->x, c->y, k);
+        int col = source_of(c->g, style);
+        if (col >= 0) paint(rgba, w, h, s, col * t->cell, row_y, t->cell, c->x, c->y, k);
     }
-    LOG("[buttons] %016llx: %d button pictures painted (%ux%u)\n", (unsigned long long)key, t->n, w, h);
-    return true;
+}
+
+bool buttonicons_apply(TexBackend *b, uint64_t key, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb) {
+    int ti = -1;
+    for (unsigned i = 0; i < sizeof targets / sizeof *targets; i++)
+        if (targets[i].key == key) ti = (int)i;
+    if (ti < 0) return false;
+    Live *l = &live[ti];
+    uint8_t *base = malloc((size_t)w * h * 4), *px = malloc((size_t)w * h * 4);
+    if (!base || !px) { free(base), free(px); return false; }
+    memcpy(base, rgba, (size_t)w * h * 4), memcpy(px, rgba, (size_t)w * h * 4);
+    free(l->base);
+    *l = (Live){b, base, w, h, srgb, signature()};
+    paint_all(&targets[ti], px, w, h, buttonicons_style());
+    bool ok = vk_tex_replace(b, px, w, h, srgb);
+    free(px);
+    LOG("[buttons] %016llx (%ux%u): the button pictures as %s\n", (unsigned long long)key, w, h,
+        buttonicons_style() == 0 ? "Xbox" : buttonicons_style() == 1 ? "PlayStation" : "Switch");
+    return ok;
+}
+
+void buttonicons_forget(TexBackend *b) {
+    for (unsigned i = 0; i < sizeof live / sizeof *live; i++)
+        if (live[i].b == b) { free(live[i].base); live[i] = (Live){0}; }
+}
+
+void buttonicons_frame(void) {
+    static uint64_t frames;
+    if (++frames % 15) return;  // (four times a second at 60)
+    uint64_t sig = 0;
+    for (unsigned i = 0; i < sizeof live / sizeof *live; i++) {
+        Live *l = &live[i];
+        if (!l->b || !l->base) continue;
+        if (!sig) sig = signature();
+        if (sig == l->sig) continue;
+        uint8_t *px = malloc((size_t)l->w * l->h * 4);
+        if (!px) continue;
+        memcpy(px, l->base, (size_t)l->w * l->h * 4);
+        paint_all(&targets[i], px, l->w, l->h, buttonicons_style());
+        if (vk_tex_replace(l->b, px, l->w, l->h, l->srgb)) l->sig = sig;
+        free(px);
+        LOG("[buttons] the button pictures painted again (setting or binding changed)\n");
+    }
 }

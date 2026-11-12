@@ -258,8 +258,8 @@ static const char DEFAULT_INI[] =
     "; Default: Position\n"
     "FaceButtons = Position\n"
     "\n"
-    "; The game's button prompts: as a Switch, Xbox or PlayStation controller's. Auto: as the controller connected at the\n"
-    "; start (none: the Switch's). Applied when the game starts.\n"
+    "; The game's button prompts: as a Switch, Xbox or PlayStation controller's, each showing the button it is pressed with\n"
+    "; ([Controller]). Auto: as the controller connected (none: the Switch's).\n"
     "; Auto, Switch, Xbox, PlayStation\n"
     "; Default: Auto\n"
     "GameButtons = Auto\n"
@@ -645,7 +645,7 @@ const ConfigSetting g_settings[] = {
     {"Controls", "FaceButtons", SET_CHOICE, F(face_buttons), 0, 0, 0, "Position|positional|nintendo,Label|labels|xbox",
      NULL, false, ERR_MISC},
     {"Controls", "GameButtons", SET_CHOICE, F(game_buttons), 0, 0, 0, "Auto,Switch|nintendo,Xbox,PlayStation|ps|playstation",
-     NULL, true, ERR_MISC},
+     NULL, false, ERR_MISC},
     {"Controls", "MenuConfirm", SET_CHOICE, F(menu_confirm), 0, 0, 0, "Original,South,East", NULL, false, ERR_CONFIRM},
     ON_OFF("Controls", "BackgroundInput", background_input, false),
     ON_OFF("Controls", "MenuChord", menu_chord, false),

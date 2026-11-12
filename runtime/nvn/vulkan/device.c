@@ -712,6 +712,7 @@ void backend_present(NvnTexture *t) {
         else if (g_hudtrace_request) { g_hudtrace_request = 0; g_hudtrace_active = 2; }
     }
     { void vk_gpuprof_frame(void); vk_gpuprof_frame(); }  // (debug) MHGU_CONTROL "gpuprof"
+    buttonicons_frame();  // (the game's button prompts, painted again when their setting changed)
     vk_unlock();
     static int fps = -1;
     if (fps < 0) fps = getenv("MHGU_FPS") != NULL;

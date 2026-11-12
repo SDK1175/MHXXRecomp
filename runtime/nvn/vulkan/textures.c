@@ -416,6 +416,7 @@ void backend_texture_destroyed(NvnTexture *t) {
     vk_lock();
     TexBackend *b = t->backend;
     if (b) {
+        buttonicons_forget(b);
         destroy_image(b);
         free(b->pending_rgba);
         free(b);

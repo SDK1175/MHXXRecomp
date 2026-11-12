@@ -1411,7 +1411,7 @@ std::vector<Row> main_rows() {
                    [](int v) { c.face_buttons = v; }, ini("FaceButtons"));
         add_choice(r, "gamebuttons", "Game button prompts", c.game_buttons, {tr("Auto"), "Switch", "Xbox", "PlayStation"},
                    [](int v) { c.game_buttons = v; }, ini("GameButtons"));
-        r.back().help = tr("The buttons shown in the game's own prompts and HUD. Auto: as the controller connected when the game starts. Applied at the next start.");
+        r.back().help = tr("The buttons shown in the game's own prompts and HUD. Each shows the controller button it is pressed with (Controller buttons). Auto: as the controller connected.");
         add_bool(r, "background", "Background input", &c.background_input, ini("BackgroundInput"));
         add_choice(r, "combo", "Combo input window", c.combo_window, {tr("Lenient"), tr("Strict")},
                    [](int v) { c.combo_window = v; }, ini("ComboInputWindow"));
