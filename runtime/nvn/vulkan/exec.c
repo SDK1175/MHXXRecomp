@@ -919,6 +919,26 @@ static int ui_float_cmp(const void *a, const void *b) {
 #define UI_BOX_EDGE 40.0f
 static struct { float z, x0, x1, y0, y1, cut; uint8_t h, h2; } ui_boxes[UI_BOXES];  // (z: its layer, the one it holds)
 static int ui_nboxes;
+// A window across the middle keeps the side it was given while it stays (same layer, right edge and height, seen within
+// a second): MHXX's Palico skill / support move list (x 461..845) with its description beside it (from x 25) leaned
+// Left, and alone (the cursor on an empty slot, the description gone) leaned Right - the list jumped across the screen.
+// (Centring it instead moved the Guild Card's frame off its card.)
+#define UI_STICKY 16
+static struct { float z, x1, y0, y1; uint64_t frame; uint8_t h; } ui_sticky[UI_STICKY];
+static uint32_t ui_nsticky;
+static int ui_group_sticky(float x1, int h) {
+    for (int i = 0; i < UI_STICKY; i++)
+        if (ui_sticky[i].frame && ui_sticky[i].z == ui_group.z && ui_sticky[i].x1 == x1 && ui_sticky[i].y0 == ui_group.ymin &&
+            ui_sticky[i].y1 == ui_group.ymax) {
+            if (g_present_count - ui_sticky[i].frame <= 60) h = ui_sticky[i].h;
+            ui_sticky[i].h = (uint8_t)h, ui_sticky[i].frame = g_present_count;
+            return h;
+        }
+    int i = (int)(ui_nsticky++ % UI_STICKY);
+    ui_sticky[i].z = ui_group.z, ui_sticky[i].x1 = x1, ui_sticky[i].y0 = ui_group.ymin, ui_sticky[i].y1 = ui_group.ymax;
+    ui_sticky[i].h = (uint8_t)h, ui_sticky[i].frame = g_present_count;
+    return h;
+}
 static void ui_group_hend(int n) {
     float x0 = ui_group.xmin, x1 = ui_group.xmax, cut = INFINITY, asp = g_render_aspect;
     int h = ui_group_hside(x0, x1), h2 = h;
@@ -960,10 +980,7 @@ static void ui_group_hend(int n) {
             if ((lx1 - lx0 <= 40.0f && ly1 - ly0 > 200.0f) || (rx1 - rx0 <= 40.0f && ry1 - ry0 > 200.0f)) two = false;
         }
         if (two) cut = xs[k], h = ui_group_hside(x0, xs[k - 1]), h2 = ui_group_hside(xs[k], x1);
-        // One window well across the middle stays where 16:9 has it (Centre) even when it leans to a side: MHXX's
-        // Palico skill / support move list (x 461..845) with its description beside it (from x 25) leaned Left, and
-        // alone (the cursor on an empty slot, the description gone) leaned Right - the list jumped across the screen.
-        else if (fminf(640.0f - x0, x1 - 640.0f) > 64.0f) h = h2 = 2;
+        else h = h2 = ui_group_sticky(x1, h);
     }
     if (inside < 0 && x1 - x0 >= 200.0f && ui_group.ymax - ui_group.ymin >= 200.0f) {  // (a window: remembered)
         int b = ui_nboxes < UI_BOXES ? ui_nboxes++ : UI_BOXES - 1;
