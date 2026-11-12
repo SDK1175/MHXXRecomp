@@ -7,6 +7,7 @@
 
 #include "engine_module.h"
 #include "gamelib.h"
+#include "gucompat.h"
 #include "hle.h"
 #include "interp.h"
 #include "kernel.h"
@@ -338,6 +339,13 @@ static GuestFn dispatch_slow(Cpu *c) {
     for (int i = 0; i < override_count; i++)
         if (overrides[i].addr == pc) return overrides[i].fn;
     if (pc & 1) FATAL("jump to Thumb code at %x (lr=%x)\n", pc, c->r[14]);
+    if (gucompat_in_shadow(pc)) {  // a plugin for MHGU calling the game at GU's address: MHXX's function
+        uint32_t real = gucompat_real(pc);
+        if (!real) FATAL("a plugin made for MHGU called MHGU address %x (lr=%x), which this port does not know in MHXX\n", pc - GU_SHADOW + MAIN_BASE, c->r[14]);
+        c->pc = pc = real;
+        for (int i = 0; i < override_count; i++)
+            if (overrides[i].addr == pc) return overrides[i].fn;
+    }
     GuestFn f = dispatch_lookup(pc);
     if (!f && interp_owns(pc)) f = interp_entry;
     if (!f && pc >= FORGE_TRAMP && pc < FORGE_STUBS) f = trampoline;

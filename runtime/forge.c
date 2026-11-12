@@ -17,6 +17,7 @@
 // A plugin that requires a Forge version newer than this one (FORGE_MAJOR.FORGE_MINOR) gets no calls. One that can't be
 // loaded (a relocation this port doesn't know) is dropped with a log line (runtime/loader.c); the others go on.
 #include "game/addr.h"
+#include "gucompat.h"
 #include <ctype.h>
 #include <math.h>
 #include <dirent.h>
@@ -56,6 +57,7 @@ typedef struct {
     uint32_t on_imgui[3];  // forge_onImGuiInit, forge_onImGuiRender, forge_onImGuiFreeRender (FORGE_IMGUI_*)
     uint32_t param;  // PluginInitParam: u16 major, minor, patch; char name[64]
     bool active;  // not rejected (a plugin without forge_onLoad is active too)
+    bool gu;  // made for MHGU 1.4.0 (every plugin whose file name has no "mhxx"): its addresses go through gucompat.c
 } Plugin;
 static Plugin plugins[MAX_PLUGINS];
 static int nplugins;
@@ -449,7 +451,7 @@ static bool hook_in_plugin(const Module *m, uint32_t target, uint32_t detour, bo
 }
 
 // false: nothing was hooked (logged), whatever the caller's original pointer says; *tramp: the original (0: none wanted)
-static bool hook_install(uint32_t target, uint32_t detour, bool want_orig, uint32_t *tramp) {
+static bool hook_install_at(uint32_t target, uint32_t detour, bool want_orig, uint32_t *tramp) {
     *tramp = 0;
     if (!target || !detour) {
         flog(3, "Invalid parameters: target=%p, detour=%p", (void *)(uintptr_t)target, (void *)(uintptr_t)detour);
@@ -507,6 +509,20 @@ static bool hook_install(uint32_t target, uint32_t detour, bool want_orig, uint3
 // (an HLE call between saved scratch registers), then at a function's entry calls the original through its trampoline
 // and returns (it pushes two words: not for functions with arguments on the stack), inside a function (hook_inside)
 // jumps on to it (the jump in is not a call). An entry and an inside hook on one function is what Damage Numbers does.
+// A target at a MHGU address (a plugin for MHGU, gucompat.c): the hook goes to MHXX's function, and the region shows it
+static bool hook_install(uint32_t target, uint32_t detour, bool want_orig, uint32_t *tramp) {
+    if (!gucompat_in_shadow(target)) return hook_install_at(target, detour, want_orig, tramp);
+    uint32_t real = gucompat_real(target);
+    *tramp = 0;
+    if (!real) {
+        flog(3, "Failed to hook MHGU address %08x: this port does not know where it is in MHXX", target - GU_SHADOW + MAIN_BASE);
+        return false;
+    }
+    if (!hook_install_at(real, detour, want_orig, tramp)) return false;
+    gucompat_mirror(real, 8);
+    return true;
+}
+
 static void forge_map_regions(void);
 #define MAX_TEST_HOOKS 4
 static struct { uint32_t target; int calls; } tests[MAX_TEST_HOOKS];
@@ -653,7 +669,7 @@ static void patch_apply(uint32_t p, bool on) {
     }
     memmove(G2H(addr), G2H(src), size);
     ST8(p + 16, on);
-    if (in_code(addr) || in_code(addr + size - 1)) code_changed(addr, size, on ? LD32(p + 12) : 0);
+    if (in_code(addr) || in_code(addr + size - 1)) code_changed(addr, size, on ? LD32(p + 12) : 0), gucompat_mirror(addr, size);
 }
 
 HLE_FUNC("forge_patch_create", f_patch_create) {  // (Patch *out, u32 address, const void *bytes, u32 length, bool enable)
@@ -664,6 +680,14 @@ HLE_FUNC("forge_patch_create", f_patch_create) {  // (Patch *out, u32 address, c
     }
     memset(G2H(out), 0, PATCH_SIZE);
     if (!len) return;
+    if (gucompat_in_shadow(addr)) {  // (a plugin for MHGU: MHXX's code is patched; a patch must lie in one known function)
+        uint32_t real = gucompat_real(addr), last = gucompat_real(addr + len - 1);
+        if (!real || last != real + len - 1) {
+            LOG("[forge] forge_patch_create: MHGU address %08x (%u bytes) is not known in MHXX: no patch\n", addr - GU_SHADOW + MAIN_BASE, len);
+            return;
+        }
+        addr = real;
+    }
     if (len > MAX_PATCH || !kernel_mapped(addr, len) || !kernel_mapped(bytes, len)) {
         LOG("[forge] forge_patch_create: %u bytes at %08x (from %08x) are not valid memory: no patch\n", len, addr, bytes);
         return;
@@ -686,7 +710,21 @@ HLE_FUNC("forge_patch_destroy", f_patch_destroy) {
 }
 
 // ------------------------------------------------------------------ memory
-HLE_FUNC("forge_mem_getMainTextAddr", f_text) { RET(g_modules[0].base + g_modules[0].text_off); }
+// A plugin for MHGU adds GU's offsets to this: it gets the region where MHXX's code is at GU's addresses (gucompat.c).
+// The caller is the plugin holding the return address (a call from elsewhere: any plugin for MHGU decides).
+static bool caller_for_gu(Cpu *c) {
+    const Module *m = plugin_code(c->r[14]);
+    bool any = false;
+    for (int i = 0; i < nplugins; i++) {
+        if (m && plugins[i].m == m) return plugins[i].gu;
+        any |= plugins[i].gu;
+    }
+    return any;
+}
+HLE_FUNC("forge_mem_getMainTextAddr", f_text) {
+    if (caller_for_gu(c) && gucompat_build()) { RET(GU_SHADOW); return; }
+    RET(g_modules[0].base + g_modules[0].text_off);
+}
 HLE_FUNC("forge_mem_getMainRodataAddr", f_rodata) { RET(g_modules[0].base + g_modules[0].ro_off); }
 HLE_FUNC("forge_mem_getMainDataAddr", f_data) { RET(g_modules[0].base + g_modules[0].data_off); }
 HLE_FUNC("forge_mem_getMainBssAddr", f_bss) {
@@ -1431,6 +1469,9 @@ void forge_init(void) {
         Plugin *p = &plugins[nplugins++];
         snprintf(p->name, sizeof p->name, "%s", name);
         p->m = m;
+        p->gu = true;  // (a plugin made for MHXX says so in its file name)
+        for (const char *q = name; *q; q++) p->gu &= strncasecmp(q, "mhxx", 4) != 0;
+        if (p->gu) LOG("[forge] plugin %s: taken as made for MHGU 1.4.0 (its addresses are translated; \"mhxx\" in the file name: not)\n", name);
         p->on_load = loader_module_symbol(m, "forge_onLoad");
         p->on_init = loader_module_symbol(m, "forge_onInit");
         p->on_update = loader_module_symbol(m, "forge_onUpdate");
