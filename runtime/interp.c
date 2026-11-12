@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #include "interp.h"
+#include "gucompat.h"
 #include "neon_rt.h"
 #include "rt.h"
 
@@ -1964,6 +1965,12 @@ static void interp_run_inner(Cpu *c) {
                 pc = next;
                 continue;
             }
+        }
+        // (a plugin made for MHGU jumping back into a function it hooked inside, at GU's address, gucompat.c: the
+        // function is interpreted, and this run goes on in it: its return is this run's)
+        if (__builtin_expect(gucompat_in_shadow(next), 0)) {
+            uint32_t real = gucompat_real(next);
+            if (real && interp_owns(real)) next = real;
         }
         if (interp_owns(next)) {
             pc = next;
