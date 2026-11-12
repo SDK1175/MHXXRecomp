@@ -19,6 +19,7 @@ static FnTable tables[2];
 #define MAX_HLE 8192
 typedef struct { const char *name; HostFn fn; } HleSlot;
 static HleSlot hle_slots[MAX_HLE];
+static int plugin_trace = -1;  // (debug) MHGU_PLUGIN_TRACE, see hle_traced
 static int hle_count;
 static pthread_mutex_t hle_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -331,7 +332,6 @@ static void interp_entry(Cpu *c) { interp_run(c); }
 static __thread struct { uint32_t addr; GuestFn fn; } dcache[DCACHE];
 
 // (debug) MHGU_PLUGIN_TRACE: the first calls a plugin makes of each host function, and of each of its hooks' detours
-static int plugin_trace = -1;
 static uint16_t trace_counts[MAX_HLE];
 static void hle_traced(Cpu *c) {
     int i = (int)((c->pc - HLE_BASE) / 16);
