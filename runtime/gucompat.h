@@ -17,3 +17,6 @@ uint32_t gucompat_real(uint32_t a);
 void gucompat_mirror(uint32_t real, uint32_t n);
 // How many addresses were asked for that the table does not know (the menu's note)
 int gucompat_unknown(void);
+// A plugin made for MHGU, loaded and not run yet: the offsets into GU's data its code holds (movw/movt pairs) changed
+// to give MHXX's addresses when added to the region's base. How many were
+int gucompat_fix_plugin(const char *name, uint32_t text, uint32_t size);

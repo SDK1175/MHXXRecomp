@@ -1483,6 +1483,7 @@ void forge_init(void) {
         p->gu = true;  // (a plugin made for MHXX says so in its file name)
         for (const char *q = name; *q; q++) p->gu &= strncasecmp(q, "mhxx", 4) != 0;
         if (p->gu) LOG("[forge] plugin %s: taken as made for MHGU 1.4.0 (its addresses are translated; \"mhxx\" in the file name: not)\n", name);
+        if (p->gu) gucompat_fix_plugin(name, m->base + m->text_off, m->text_size);
         p->on_load = loader_module_symbol(m, "forge_onLoad");
         p->on_init = loader_module_symbol(m, "forge_onInit");
         p->on_update = loader_module_symbol(m, "forge_onUpdate");

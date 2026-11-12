@@ -106,3 +106,50 @@ void gucompat_mirror(uint32_t real, uint32_t n) {
 }
 
 int gucompat_unknown(void) { return __atomic_load_n(&unknown, __ATOMIC_RELAXED); }
+
+// ---- data. A plugin reaches the game's data the same way (the base plus GU's offset), and compares what it reads
+// there with such sums (an object's vtable: "is this a monster?"). The region can't stand in for data that changes or
+// for addresses the game itself holds, so the plugin's own constants are changed where it is loaded: an offset into
+// GU's data becomes the one that, added to the region's base, gives the address in MHXX.
+#define NGLOBAL (sizeof GU2XX_GLOBAL / sizeof GU2XX_GLOBAL[0])
+static uint32_t global_xx(uint32_t gu) {
+    uint32_t lo = 0, hi = NGLOBAL;
+    while (lo < hi) {
+        uint32_t mid = (lo + hi) / 2;
+        if (GU2XX_GLOBAL[mid].gu <= gu) lo = mid + 1;
+        else hi = mid;
+    }
+    if (!lo || gu > GU2XX_GLOBAL[lo - 1].last + 0x40) return 0;
+    return GU2XX_GLOBAL[lo - 1].xx + (gu - GU2XX_GLOBAL[lo - 1].gu);
+}
+
+static bool shown_data(uint32_t gu) {  // (data the region shows as GU's: the build id)
+    for (uint32_t i = 0; i < sizeof GU2XX_DATA / sizeof GU2XX_DATA[0]; i++)
+        if (gu - GU2XX_DATA[i].gu < GU2XX_DATA[i].len) return true;
+    return false;
+}
+
+int gucompat_fix_plugin(const char *name, uint32_t text, uint32_t size) {
+    int n = 0;
+    for (uint32_t a = text; a + 8 <= text + size; a += 4) {
+        uint32_t w = LD32(a);
+        if ((w & 0x0FF00000u) != 0x03000000u || (w >> 28) != 0xE) continue;  // movw rd, #lo
+        uint32_t rd = (w >> 12) & 15;
+        for (uint32_t b = a + 4; b < a + 20 && b + 4 <= text + size; b += 4) {
+            uint32_t t = LD32(b);
+            if (((t >> 12) & 15) != rd || (t >> 28) != 0xE) continue;
+            if ((t & 0x0FF00000u) != 0x03400000u) break;  // (another write of rd first: not a pair)
+            uint32_t v = (((t >> 4) & 0xF000u) | (t & 0xFFFu)) << 16 | ((w >> 4) & 0xF000u) | (w & 0xFFFu);
+            uint32_t xx = v >= g_modules[0].text_size && !shown_data(v) ? global_xx(v) : 0;
+            if (xx) {
+                uint32_t nv = MAIN_BASE + xx - GU_SHADOW;
+                ST32(a, (w & 0xFFF0F000u) | ((nv & 0xF000u) << 4) | (nv & 0xFFFu));
+                ST32(b, (t & 0xFFF0F000u) | ((nv >> 28) << 16) | ((nv >> 16) & 0xFFFu));
+                LOG("[forge] %s+%x: MHGU data main+%x is MHXX's main+%x\n", name, a - text, v, xx);
+                n++;
+            }
+            break;
+        }
+    }
+    return n;
+}
