@@ -219,9 +219,7 @@ const char *config_nickname(void) {
     static char name[33];
     if (*g_config.nickname) return g_config.nickname;
     if (!*name) {
-        const char *u = getenv("MHGU_NICKNAME");
-        if (!u || !*u) u = getenv("USERNAME");
-        if (!u || !*u) u = getenv("USER");
+        const char *u = getenv("MHGU_NICKNAME");  // (never the computer's user name: it is often the person's own)
         SDL_strlcpy(name, u && *u ? u : "Hunter", sizeof name);
     }
     return name;

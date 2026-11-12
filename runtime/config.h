@@ -66,7 +66,7 @@ typedef struct {
     int game_buttons;         // GAME_BUTTONS_*: the game's button prompts (Auto: as the controller at the start)
     int ldn_port;             // local play: the port a hosted hub listens on (TCP; UDP for LAN search)
     char ldn_join[256];       // local play: hosts to search besides the LAN (host[:port], comma separated)
-    char nickname[33];        // [Multiplayer] Nickname: the name the others see (voice chat, the room); "": the computer's user
+    char nickname[33];        // [Multiplayer] Nickname: the name the others see (voice chat, the room); "": "Hunter"
     int sync_small_monsters;  // multiplayer: small monsters synced like large ones (runtime/net/emsync.c)
     int bonus_content;        // free downloads copied from a donor save into saves without any (runtime/services/bonus.c)
     int village_in_hub;       // L / R at the Hub's / Pub's quest counter switch to Village quests (runtime/hle/villagehub.c)
@@ -240,7 +240,7 @@ float config_mic_gain(void);    // [Voice] MicVolume as a factor (atomic)
 bool config_noise_suppression(void);  // [Voice] NoiseSuppression (atomic)
 #define VOICE_BOOST 2.0f  // VoiceVolume 100 %: voices this many times as loud as they come (rounded off past full scale)
 float config_voice_gain(void);  // [Voice] VoiceVolume as a factor; 0 while muted in the background (atomic)
-const char *config_nickname(void);  // [Multiplayer] Nickname, else the computer's user name, else "Hunter"
+const char *config_nickname(void);  // [Multiplayer] Nickname, else "Hunter"
 void config_window_focus(bool focused);  // the window got / lost the focus (runtime/host_input.c)
 int config_language(void);     // last saved UI language, atomic across host threads
 bool config_confirm_exit(void); // atomic, safe on the host main thread

@@ -1431,7 +1431,7 @@ std::vector<Row> main_rows() {
         number(r, "port", "Host port (TCP / UDP)", &c.ldn_port, (int)lo("Port"), (int)hi("Port"), 1, ini("Port"));
         text(r, "hosts", "Search hosts", c.ldn_join, sizeof c.ldn_join, *c.ldn_join ? c.ldn_join : tr("LAN"), ini("Join"));
         text(r, "nickname", "Nickname", c.nickname, sizeof c.nickname, *c.nickname ? c.nickname : config_nickname(), ini("Nickname"));
-        r.back().help = tr("The name the other players see in voice chat and the menu's player list. Empty: this computer's user name. Applied the next time you join or make a room.");
+        r.back().help = tr("The name the other players see in voice chat and the menu's player list. Empty: Hunter. Applied the next time you join or make a room.");
         text(r, "server", "Hub server", c.ldn_server, sizeof c.ldn_server,
              !*c.ldn_server ? std::string(tr("Default")) + (*LDN_DEFAULT_SERVER ? " (" LDN_DEFAULT_SERVER ")" : "")
                             : c.ldn_server,
