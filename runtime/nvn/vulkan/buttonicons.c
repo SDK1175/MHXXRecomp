@@ -134,7 +134,11 @@ bool buttonicons_apply(TexBackend *b, uint64_t key, const uint8_t *rgba, uint32_
     int ti = -1;
     for (unsigned i = 0; i < sizeof targets / sizeof *targets; i++)
         if (targets[i].key == key) ti = (int)i;
-    if (ti < 0) return false;
+    if (ti < 0) {  // (a texture of the same size: logged, to find the button textures of other game files)
+        static int n;
+        if (n++ < 40) LOG("[buttons] %016llx (%ux%u): not a texture with button pictures\n", (unsigned long long)key, w, h);
+        return false;
+    }
     Live *l = &live[ti];
     uint8_t *base = malloc((size_t)w * h * 4), *px = malloc((size_t)w * h * 4);
     if (!base || !px) { free(base), free(px); return false; }
