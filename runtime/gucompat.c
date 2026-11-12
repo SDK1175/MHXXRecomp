@@ -44,6 +44,33 @@ static int cmp_xx(const void *a, const void *b) {
     return x < y ? -1 : x > y;
 }
 
+// Data the code refers to by distance (ldr rd, [pc, #n] of a literal, then add / ldr with pc): the literal shown as
+// GU's, the distance from GU's address of the code to GU's of the data (plugins check such words in the code they
+// hook). From MHXX's data to GU's: GU2XX_GLOBAL backwards (gucompat.c's data part, declared below).
+static uint32_t global_gu(uint32_t xx);
+static int pc_literals(const Range *r) {
+    uint32_t lit_at[16] = {0}, n = 0;
+    int k = 0;
+    for (uint32_t o = 0; o < r->len; o += 4, n++) {
+        uint32_t w = LD32(MAIN_BASE + r->xx + o);
+        if ((w >> 28) != 0xE) continue;
+        if ((w & 0x0F7F0000u) == 0x051F0000u) {  // ldr rd, [pc, #+-imm]
+            uint32_t imm = w & 0xFFF, la = r->xx + o + 8 + ((w & 0x00800000u) ? imm : -imm);
+            lit_at[(w >> 12) & 15] = la - r->xx < r->len ? la : 0;
+            continue;
+        }
+        uint32_t rm = 16;
+        if ((w & 0x0FF00FF0u) == 0x00800000u && ((w >> 16) & 15) == 15) rm = w & 15;           // add rd, pc, rm
+        else if ((w & 0x0FF00FF0u) == 0x07900000u && ((w >> 16) & 15) == 15) rm = w & 15;      // ldr rd, [pc, rm]
+        else if ((w & 0x0FF00FF0u) == 0x00800000u && (w & 15) == 15) rm = (w >> 16) & 15;      // add rd, rn, pc
+        if (rm == 16 || !lit_at[rm]) continue;
+        uint32_t la = lit_at[rm], t = r->xx + o + 8 + LD32(MAIN_BASE + la), gt = global_gu(t);
+        if (gt) ST32(GU_SHADOW + r->gu + (la - r->xx), gt - (r->gu + o + 8)), k++;
+    }
+    (void)n;
+    return k;
+}
+
 bool gucompat_build(void) {
     pthread_mutex_lock(&lock);
     if (state) { pthread_mutex_unlock(&lock); return state > 0; }
@@ -76,6 +103,8 @@ bool gucompat_build(void) {
             ST32(GU_SHADOW + r->gu + o, w);
         }
     }
+    int lits = 0;
+    for (uint32_t i = 0; i < nranges; i++) lits += pc_literals(&by_xx[i]);
     for (uint32_t i = 0; i < sizeof GU2XX_DATA / sizeof GU2XX_DATA[0]; i++)
         if ((uint64_t)GU2XX_DATA[i].gu + GU2XX_DATA[i].len <= GU_SHADOW_SIZE && kernel_mapped(MAIN_BASE + GU2XX_DATA[i].xx, GU2XX_DATA[i].len))
             memcpy(G2H(GU_SHADOW + GU2XX_DATA[i].gu), G2H(MAIN_BASE + GU2XX_DATA[i].xx), GU2XX_DATA[i].len);
@@ -83,8 +112,8 @@ bool gucompat_build(void) {
         if (GU2XX_WORD[i].gu + 4 <= GU_SHADOW_SIZE) ST32(GU_SHADOW + GU2XX_WORD[i].gu, GU2XX_WORD[i].word);
     state = 1;
     pthread_mutex_unlock(&lock);
-    LOG("[forge] plugins for MHGU: %u ranges (%u bytes) of the game are shown at their MHGU 1.4.0 addresses (%08x)\n",
-        nranges, bytes, GU_SHADOW);
+    LOG("[forge] plugins for MHGU: %u ranges (%u bytes) of the game are shown at their MHGU 1.4.0 addresses (%08x), %d data references as GU has them\n",
+        nranges, bytes, GU_SHADOW, lits);
     return true;
 }
 
@@ -123,6 +152,29 @@ static uint32_t global_xx(uint32_t gu) {
     return GU2XX_GLOBAL[lo - 1].xx + (gu - GU2XX_GLOBAL[lo - 1].gu);
 }
 
+static uint32_t by_xx_global[sizeof GU2XX_GLOBAL / sizeof GU2XX_GLOBAL[0]];  // indexes into GU2XX_GLOBAL, by xx
+static int cmp_global_xx(const void *a, const void *b) {
+    uint32_t x = GU2XX_GLOBAL[*(const uint32_t *)a].xx, y = GU2XX_GLOBAL[*(const uint32_t *)b].xx;
+    return x < y ? -1 : x > y;
+}
+static uint32_t global_gu(uint32_t xx) {
+    static bool sorted;
+    if (!sorted) {
+        for (uint32_t i = 0; i < NGLOBAL; i++) by_xx_global[i] = i;
+        qsort(by_xx_global, NGLOBAL, sizeof by_xx_global[0], cmp_global_xx);
+        sorted = true;
+    }
+    uint32_t lo = 0, hi = NGLOBAL;
+    while (lo < hi) {
+        uint32_t mid = (lo + hi) / 2;
+        if (GU2XX_GLOBAL[by_xx_global[mid]].xx <= xx) lo = mid + 1;
+        else hi = mid;
+    }
+    if (!lo) return 0;
+    uint32_t i = by_xx_global[lo - 1], gu = GU2XX_GLOBAL[i].gu + (xx - GU2XX_GLOBAL[i].xx);
+    return gu <= GU2XX_GLOBAL[i].last + 0x40 ? gu : 0;
+}
+
 static bool shown_data(uint32_t gu) {  // (data the region shows as GU's: the build id)
     for (uint32_t i = 0; i < sizeof GU2XX_DATA / sizeof GU2XX_DATA[0]; i++)
         if (gu - GU2XX_DATA[i].gu < GU2XX_DATA[i].len) return true;
@@ -140,6 +192,16 @@ int gucompat_fix_plugin(const char *name, uint32_t text, uint32_t size) {
             if (((t >> 12) & 15) != rd || (t >> 28) != 0xE) continue;
             if ((t & 0x0FF00000u) != 0x03400000u) break;  // (another write of rd first: not a pair)
             uint32_t v = (((t >> 4) & 0xF000u) | (t & 0xFFFu)) << 16 | ((w >> 4) & 0xF000u) | (w & 0xFFFu);
+            // (a value the plugin compares with what it read from the game's code: a word as GU has it, which the
+            // region shows as GU has it, not an address)
+            bool compared = false;
+            for (uint32_t c = b + 4; c < b + 28 && c + 4 <= text + size; c += 4) {
+                uint32_t u = LD32(c);
+                bool reads = ((u >> 16) & 15) == rd || (u & 15) == rd;
+                if ((u & 0x0FF0F000u) == 0x01500000u && reads) { compared = true; break; }  // cmp rn, rm
+                if (reads || ((u >> 12) & 15) == rd) break;
+            }
+            if (compared) break;
             uint32_t xx = v >= g_modules[0].text_size && !shown_data(v) ? global_xx(v) : 0;
             if (xx) {
                 uint32_t nv = MAIN_BASE + xx - GU_SHADOW;
