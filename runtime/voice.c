@@ -16,6 +16,7 @@
 #if !__has_include(<opus/opus.h>)  // (built without Opus: voice chat off, the test says so)
 static char g_error[] = "Opus didn't start";
 void voice_tick(void) {}
+bool voice_player_name(uint32_t id, char out[33]) { (void)id, (void)out; return false; }
 void voice_aux_received(const void *data, uint32_t len) { (void)data, (void)len; }
 int voice_talking(void) { return 0; }
 int voice_speakers(uint32_t *ids, int max) { (void)ids, (void)max; return 0; }
@@ -74,7 +75,9 @@ static SDL_Mutex *g_lock;  // (opening and closing: voice_tick, voice_test, voic
 static SDL_Mutex *g_rx;    // (the speakers: the network threads add, the voice thread plays)
 static SDL_Thread *g_thread;
 static SDL_AtomicInt g_running, g_level, g_test, g_talking, g_sending, g_ptt, g_preview_mic = {-1}, g_preview_voice = {-1};
-static struct { uint32_t id; int percent; } g_volumes[SPEAKERS];  // (each player's volume, this game only; g_rx)
+static struct { uint32_t id; int percent; } g_volumes[SPEAKERS];
+#define NAME_MAGIC 0xE8u  // (F_AUX: the hunter's name, names_tick)
+static void name_received(const uint8_t *m, uint32_t len);  // (each player's volume, this game only; g_rx)
 static SDL_AudioStream *g_mic, *g_out;
 static OpusEncoder *g_enc;
 #ifdef HAVE_RNNOISE
@@ -155,6 +158,7 @@ void voice_aux_received(const void *data, uint32_t len) {
     Header h;
     if (len <= sizeof h) return;
     memcpy(&h, data, sizeof h);
+    if (h.magic == NAME_MAGIC) { name_received(data, len); return; }
     if (h.magic != VOICE_MAGIC || !SDL_GetAtomicInt(&g_running) || !config_voice_mode()) return;
     received(h.id, h.seq, (const uint8_t *)data + sizeof h, (int)(len - sizeof h));
 }
@@ -344,7 +348,60 @@ static void open_all(void) {  // (g_lock held)
             SDL_GetAudioDeviceName(SDL_GetAudioStreamDevice(g_out)));
 }
 
+// ---- names: each game sends its hunter's name (from the game's player data) every 2 s while voice chat is on in a
+// network, so the others show it beside the voice instead of the account's nickname ("Hunter")
+// (NAME_MAGIC's message: {magic, length, 0, 0, the sender's address, name})
+#define XX_G_GAMECONTROL 0x01aadcf8u  // sGameControl * (GU 1.4.0: 0x1a8ca48): +0x30 this player's slot
+#define XX_G_SPLAYER 0x01aa6fa8u      // sPlayer * (GU 0x1a85b58): +0x1c the players; a player's +0x13c4 its data, +0x514
+                                      // the hunter's name (32 bytes): as hle/presence.c reads GU's, the same in MHXX
+static struct { uint32_t id; char name[33]; } g_names[SPEAKERS];
+static bool guest_ok(uint32_t a) { return a >= 0x08000000u && a < 0xF0000000u && !(a & 3); }
+static bool own_name(char out[33]) {
+    uint32_t gc = LD32(XX_G_GAMECONTROL), sp = LD32(XX_G_SPLAYER);
+    uint32_t slot = guest_ok(gc) ? LD32(gc + 0x30) : 9;
+    uint32_t pl = guest_ok(sp) && slot < 4 ? LD32(sp + 0x1c + 4 * slot) : 0, pd = guest_ok(pl) ? LD32(pl + 0x13c4) : 0;
+    if (!guest_ok(pd)) return false;
+    memcpy(out, G2H(pd + 0x514), 32), out[32] = 0;
+    return out[0] != 0;
+}
+static void names_tick(void) {
+    static uint64_t frames;
+    if (++frames % 120 || !config_voice_mode() || !ldn_net_up()) return;  // (every 2 s at 60)
+    uint8_t msg[8 + 32] = {NAME_MAGIC};
+    char name[33];
+    if (!own_name(name)) return;
+    uint32_t id = ldn_own_ip();
+    msg[1] = (uint8_t)strlen(name);
+    memcpy(msg + 4, &id, 4), memcpy(msg + 8, name, msg[1]);
+    ldn_send_aux(msg, 8 + msg[1]);
+}
+static void name_received(const uint8_t *m, uint32_t len) {  // (from the network's thread)
+    if (len < 8 || m[1] > 32 || len < 8u + m[1]) return;
+    uint32_t id;
+    memcpy(&id, m + 4, 4);
+    if (!id) return;
+    lock();  // (g_rx made)
+    SDL_LockMutex(g_rx);
+    int at = -1;
+    for (int i = 0; i < SPEAKERS; i++) if (g_names[i].id == id) at = i;
+    for (int i = 0; i < SPEAKERS && at < 0; i++) if (!g_names[i].id) at = i;
+    if (at < 0) at = (int)(id % SPEAKERS);
+    g_names[at].id = id;
+    memcpy(g_names[at].name, m + 8, m[1]), g_names[at].name[m[1]] = 0;
+    SDL_UnlockMutex(g_rx);
+}
+bool voice_player_name(uint32_t id, char out[33]) {
+    bool found = false;
+    if (!g_rx) return false;
+    SDL_LockMutex(g_rx);
+    for (int i = 0; i < SPEAKERS; i++)
+        if (g_names[i].id == id && g_names[i].name[0]) memcpy(out, g_names[i].name, 33), found = true;
+    SDL_UnlockMutex(g_rx);
+    return found;
+}
+
 void voice_tick(void) {
+    names_tick();
     SDL_SetAtomicInt(&g_ptt, host_talk_held());  // (read here, on the game's thread, beside the game's own input)
     static bool failed;  // (an open that failed isn't tried again every frame: once more after voice chat was off)
     bool want = SDL_GetAtomicInt(&g_test) || (config_voice_mode() && ldn_net_up());

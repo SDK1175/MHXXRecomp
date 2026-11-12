@@ -66,7 +66,8 @@ typedef struct {
     int game_buttons;         // GAME_BUTTONS_*: the game's button prompts (Auto: as the controller at the start)
     int ldn_port;             // local play: the port a hosted hub listens on (TCP; UDP for LAN search)
     char ldn_join[256];       // local play: hosts to search besides the LAN (host[:port], comma separated)
-    char nickname[33];        // [Multiplayer] Nickname: the name the others see (voice chat, the room); "": "Hunter"
+    char nickname[33];        // [Multiplayer] Nickname: the account's nickname in the room ("": "Hunter"; voice chat shows the
+                              // hunters' names: voice.c)
     int sync_small_monsters;  // multiplayer: small monsters synced like large ones (runtime/net/emsync.c)
     int bonus_content;        // free downloads copied from a donor save into saves without any (runtime/services/bonus.c)
     int village_in_hub;       // L / R at the Hub's / Pub's quest counter switch to Village quests (runtime/hle/villagehub.c)

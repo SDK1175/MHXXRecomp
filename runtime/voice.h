@@ -27,6 +27,8 @@ float voice_mic_level(void);
 // How many other players' voices are playing now (0..), and which (their network addresses: ldn_players' names)
 int voice_talking(void);
 int voice_speakers(uint32_t *ids, int max);
+// A player's hunter name as their game sent it (their save's, UTF-8), false: not heard yet (ldn_players asks)
+bool voice_player_name(uint32_t id, char out[33]);
 // This player's voice is being sent now (the overlay's microphone mark)
 bool voice_sending(void);
 // A player's volume in this game only (percent, 0: muted; 100: as the rest), until the game closes

@@ -428,6 +428,7 @@ int ldn_players(uint32_t *ips, char (*names)[33], int max) {
             ips[n] = rd32(nd + NODE_IP);
             memcpy(names[n], nd + NODE_NAME, 32);
             names[n][32] = 0;
+            voice_player_name(ips[n], names[n]);  // (the hunter's name, when their game has sent it: voice.c)
             n++;
         }
     pthread_mutex_unlock(&L.mu);
