@@ -10,6 +10,7 @@ extern "C" {
 
 enum { DISPLAY_WINDOWED, DISPLAY_FULLSCREEN, DISPLAY_BORDERLESS };
 enum { FACE_POSITION, FACE_LABEL };
+enum { GAME_BUTTONS_AUTO, GAME_BUTTONS_SWITCH, GAME_BUTTONS_XBOX, GAME_BUTTONS_PS };
 enum { COMBO_LENIENT, COMBO_STRICT };  // [Controls] ComboInputWindow (runtime/hle/combowin.c)
 enum { MENU_CONFIRM_ORIGINAL, MENU_CONFIRM_SOUTH, MENU_CONFIRM_EAST };
 enum { FXAA_ORIGINAL, FXAA_311 };  // [Anti-aliasing] FXAAMode (runtime/nvn/vulkan/exec.c)
@@ -62,6 +63,7 @@ typedef struct {
     int msaa;                 // samples of the 3D scene: 1 (off), 2, 4, 8
     int fxaa;                 // the game's own FXAA pass: 1 on, 0 off
     int face_buttons;         // FACE_*: controller face buttons by position (the Switch layout) or by their labels
+    int game_buttons;         // GAME_BUTTONS_*: the game's button prompts (Auto: as the controller at the start)
     int ldn_port;             // local play: the port a hosted hub listens on (TCP; UDP for LAN search)
     char ldn_join[256];       // local play: hosts to search besides the LAN (host[:port], comma separated)
     int sync_small_monsters;  // multiplayer: small monsters synced like large ones (runtime/net/emsync.c)

@@ -158,6 +158,11 @@ TexBackend *vk_tex(NvnTexture *t, bool for_render);
 // (texpack.c) [Graphics] TextureDump: t's first upload, saved as textures/dump/<key>.png on a thread of its own
 void texpack_first_upload(NvnTexture *t, const uint8_t *mem, VkFormat vf, bool linear);
 uint64_t texpack_key(const uint8_t *level0, uint64_t size, uint32_t w, uint32_t h, uint32_t nvn_format);
+// The button prompts as the controller's (buttonicons.c): -1 the Switch's, else the sheet's row; a texture of a size
+// it paints; paint it (RGBA8, w x h: the game's size or a texture pack's)
+int buttonicons_style(void);
+bool buttonicons_size(uint32_t w, uint32_t h);
+bool buttonicons_apply(uint64_t key, uint8_t *rgba, uint32_t w, uint32_t h);
 // (texpack.c) t's first upload: true when textures/load/ has a picture for it, now in b (vk_tex_replace)
 bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat vf, bool linear);
 // b made a w x h RGBA8 image holding rgba (rows of w*4 bytes), its mip levels made by the GPU. false: no memory for it

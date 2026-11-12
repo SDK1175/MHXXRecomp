@@ -302,7 +302,8 @@ static void pack_scan(void) {
 
 bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat vf, bool linear) {
     if (pack_state < 0) pack_scan();
-    if (pack_state != 1 || linear) return false;
+    bool buttons = !linear && buttonicons_size(t->width, t->height);  // (the button prompts: buttonicons.c)
+    if ((pack_state != 1 && !buttons) || linear) return false;
     const FormatInfo *fi = t->layout.fmt;
     if (!fi || t->target != 1 || t->depth > 1 || (t->layout.layers && t->layout.layers > 1)) return false;
     if (t->width < MIN_SIDE || t->height < MIN_SIDE || t->samples > 1) return false;
@@ -317,8 +318,16 @@ bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat 
     if (!lin) return false;
     tegra_deswizzle(mem + l.offset, lin, l.wb, l.hb, 1, fi->bpb, l.block_height_log2, l.block_depth_log2);
     uint64_t key = texpack_key(lin, size, l.w, l.h, t->format);
+    const char *path = pack_state == 1 ? pack_find(key) : NULL;
+    if (!path && buttons) {  // the game's picture, decoded, with the controller's buttons painted on it
+        Job j = {.data = lin, .size = size, .w = l.w, .h = l.h, .kind = (uint32_t)kind_of(vf, &srgb), .nvn_format = t->format,
+                 .srgb = srgb};
+        uint8_t *px = j.kind != K_NONE && j.kind != K_ASTC ? decode(&j) : NULL;
+        bool ok = px && buttonicons_apply(key, px, l.w, l.h) && vk_tex_replace(b, px, l.w, l.h, srgb);
+        free(px), free(lin);
+        return ok;
+    }
     free(lin);
-    const char *path = pack_find(key);
     if (!path) return false;
     SDL_Surface *s = SDL_LoadPNG(path);
     SDL_Surface *c = s ? SDL_ConvertSurface(s, SDL_PIXELFORMAT_ABGR8888) : NULL;  // (bytes R, G, B, A)
@@ -340,6 +349,7 @@ bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat 
                 for (uint32_t y = 0; y < h; y++) memcpy(tight + (uint64_t)y * w * 4, px + (uint64_t)y * c->pitch, (size_t)w * 4);
             px = tight;
         }
+        if (px && buttons) buttonicons_apply(key, px, w, h);  // (on the pack's picture too)
         ok = px && vk_tex_replace(b, px, w, h, srgb);
         free(tight);
         if (ok && replaced_n++ < 20) LOG("[texpack] %016llx %ux%u -> %ux%u\n", (unsigned long long)key, l.w, l.h, w, h);

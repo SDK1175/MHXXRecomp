@@ -335,6 +335,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(fxaa);
     SAME(fxaa_mode);
     SAME(face_buttons);
+    SAME(game_buttons);
     SAME(ldn_port);
     SAME(sync_small_monsters);
     SAME(bonus_content);
@@ -942,6 +943,7 @@ void reset_section() {
         break;
     case 2:
         c.face_buttons = f.face_buttons;
+        c.game_buttons = f.game_buttons;
         c.background_input = f.background_input;
         c.menu_chord = f.menu_chord;
         c.combo_window = f.combo_window;
@@ -1407,6 +1409,9 @@ std::vector<Row> main_rows() {
     case 2:
         add_choice(r, "face", "Face buttons", c.face_buttons, {tr("Position"), tr("Label")},
                    [](int v) { c.face_buttons = v; }, ini("FaceButtons"));
+        add_choice(r, "gamebuttons", "Game button prompts", c.game_buttons, {tr("Auto"), "Switch", "Xbox", "PlayStation"},
+                   [](int v) { c.game_buttons = v; }, ini("GameButtons"));
+        r.back().help = tr("The buttons shown in the game's own prompts and HUD. Auto: as the controller connected when the game starts. Applied at the next start.");
         add_bool(r, "background", "Background input", &c.background_input, ini("BackgroundInput"));
         add_choice(r, "combo", "Combo input window", c.combo_window, {tr("Lenient"), tr("Strict")},
                    [](int v) { c.combo_window = v; }, ini("ComboInputWindow"));
