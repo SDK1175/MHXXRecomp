@@ -182,15 +182,46 @@ def glyph(n, style, col):
     return touchpad(n)
 
 
+# Keyboard: a blank key (24 and 32), and letters for the key's name, drawn on it by the runtime (DejaVu Sans Bold,
+# Bitstream Vera licence: its letters may be used in pictures like these). CHARS' order is the runtime's.
+CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789^v<>'
+CW, CH = 12, 16
+FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+
+
+def chars():
+    from PIL import ImageFont
+    img = Image.new('RGBA', (len(CHARS) * CW, CH), (0, 0, 0, 0))
+    f = ImageFont.truetype(FONT, 15 * SS)
+    for i, ch in enumerate(CHARS):
+        big = Image.new('RGBA', (CW * SS, CH * SS), (0, 0, 0, 0))
+        d = ImageDraw.Draw(big)
+        w2, h2 = CW * SS, CH * SS
+        if ch in '^v<>':  # (the arrow keys: a triangle)
+            c, r = w2 / 2, w2 * .36
+            pts = {'^': [(c, h2 * .25), (c + r, h2 * .7), (c - r, h2 * .7)], 'v': [(c, h2 * .75), (c + r, h2 * .3), (c - r, h2 * .3)],
+                   '<': [(c - r, h2 / 2), (c + r, h2 * .25), (c + r, h2 * .75)], '>': [(c + r, h2 / 2), (c - r, h2 * .25), (c - r, h2 * .75)]}[ch]
+            d.polygon(pts, fill=INK)
+        else:
+            box = d.textbbox((0, 0), ch, font=f)
+            d.text(((w2 - (box[2] - box[0])) / 2 - box[0], (h2 - (box[3] - box[1])) / 2 - box[1]), ch, font=f, fill=INK)
+        img.alpha_composite(big.resize((CW, CH), Image.LANCZOS), (i * CW, 0))
+    return img
+
+
 def sheet():
-    """rows: 24-pixel cells (Xbox, PlayStation), then 32-pixel ones (the same)"""
-    img = Image.new('RGBA', (len(COLUMNS) * 32, 2 * 24 + 2 * 32), (0, 0, 0, 0))
+    """rows: 24-pixel cells (Xbox, PlayStation), then 32-pixel ones (the same); then a blank key of 24 and one of 32,
+    then the letters (CW x CH each)"""
+    img = Image.new('RGBA', (len(COLUMNS) * 32, 2 * 24 + 2 * 32 + 32 + CH), (0, 0, 0, 0))
     y = 0
     for n in (24, 32):
         for style in range(2):
             for i, col in enumerate(COLUMNS):
                 img.alpha_composite(glyph(n, style, col), (i * n, y))
             y += n
+    img.alpha_composite(key(24, '', False), (0, y))
+    img.alpha_composite(key(32, '', False), (24, y))
+    img.alpha_composite(chars(), (0, y + 32))
     return img
 
 

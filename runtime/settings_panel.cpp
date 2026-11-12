@@ -1409,9 +1409,9 @@ std::vector<Row> main_rows() {
     case 2:
         add_choice(r, "face", "Face buttons", c.face_buttons, {tr("Position"), tr("Label")},
                    [](int v) { c.face_buttons = v; }, ini("FaceButtons"));
-        add_choice(r, "gamebuttons", "Game button prompts", c.game_buttons, {tr("Auto"), "Switch", "Xbox", "PlayStation"},
+        add_choice(r, "gamebuttons", "Game button prompts", c.game_buttons, {tr("Auto"), "Switch", "Xbox", "PlayStation", tr("Keyboard")},
                    [](int v) { c.game_buttons = v; }, ini("GameButtons"));
-        r.back().help = tr("The buttons shown in the game's own prompts and HUD. Each shows the controller button it is pressed with (Controller buttons). Auto: as the controller connected.");
+        r.back().help = tr("The buttons shown in the game's own prompts and HUD. Each shows the controller button it is pressed with (Controller buttons), or with Keyboard its key (Keybinds). Auto: as the controller connected, the keyboard without one.");
         add_bool(r, "background", "Background input", &c.background_input, ini("BackgroundInput"));
         add_choice(r, "combo", "Combo input window", c.combo_window, {tr("Lenient"), tr("Strict")},
                    [](int v) { c.combo_window = v; }, ini("ComboInputWindow"));
