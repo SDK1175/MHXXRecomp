@@ -16,6 +16,10 @@
 
 ## 1. Forge 켜기 (선행)
 
+> **2026-11-12: 주소 5개 모두 찾음** (addr.h의 A_FORGE_OFF_*). sApp::run 0xd7b344, cSystem 생성자·소멸자 0xa7c22c / 0xa7c268,
+> sSavedata mount 0xa6d7bc, job safe 0x234241c. 코드 구간은 GU − 0xb5e4~0xb5e8, 전역 데이터는 GU + 0x22000.
+> 남은 것: 덥크용 플러그인 하나로 실제 동작 확인.
+
 - 남은 주소 5개를 덥크에서 찾는다: sApp::run(GU 0xb8692c), cSystem 생성자·소멸자(0x887810 / 0x88784c), sSavedata
   mount(0x878da0), job safe(0x212041c). 오늘 fastload처럼 GU 주변 코드 모양과 구간 간격으로 찾고 코드로 확인.
 - FORGE_PORTED가 켜지면 **덥크용으로 만든 플러그인**은 그대로 돈다(아직 거의 없지만 기반).

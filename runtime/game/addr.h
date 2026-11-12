@@ -171,12 +171,12 @@
 #define EMSYNC_PORTED (A_G_GAMECONTROL && A_G_SENEMY && A_G_SPLAYER)
 
 // ---- runtime/forge.c (offsets from main's .text, not runtime addresses: + MAIN_BASE 0x200000 gives the address)
-#define A_FORGE_OFF_APP_RUN                  0x0u  // GU 1.4.0: 0xb8692c  sApp::run
+#define A_FORGE_OFF_APP_RUN                  0xb7b344u  // MHXX 1.5.1: 0xd7b344 (the main loop: until +0x2420's +0x34, the frame start 0xdb2b6c then vtable[7] of the two system objects; GU - 0xb5e8, 2026-11-12). GU 1.4.0: 0xb8692c  sApp::run
 #define A_FORGE_OFF_UPDATE                   0x3d6be0u  // MHXX 1.5.1: 0x5d6be0, the system object's vtable[7], once a frame from 0xd7b388 (fntrace, 2026-11-06). GU 1.4.0: 0x3da8fc  the frame update (this: dt at +0x68)
-#define A_FORGE_OFF_SYSTEM_CTOR              0x0u  // GU 1.4.0: 0x887810  cSystem::cSystem / ~cSystem: every singleton
-#define A_FORGE_OFF_SYSTEM_DTOR              0x0u  // GU 1.4.0: 0x88784c
-#define A_FORGE_OFF_MOUNT_SAVE               0x0u  // GU 1.4.0: 0x878da0  sSavedata's mount
-#define A_FORGE_OFF_JOB_SAFE                 0x0u  // GU 1.4.0: 0x212041c
+#define A_FORGE_OFF_SYSTEM_CTOR              0x87c22cu  // MHXX 1.5.1: 0xa7c22c (vtable, the mutex at +4, +0x18 = 0; 0x3c before the destructor as in GU, each called from every singleton; GU - 0xb5e4). GU 1.4.0: 0x887810  cSystem::cSystem / ~cSystem: every singleton
+#define A_FORGE_OFF_SYSTEM_DTOR              0x87c268u  // MHXX 1.5.1: 0xa7c268. GU 1.4.0: 0x88784c
+#define A_FORGE_OFF_MOUNT_SAVE               0x86d7bcu  // MHXX 1.5.1: 0xa6d7bc (locks +4 when +0x18 or the job-safe byte, the mount count at +0xf1c, 0 when mounted: the layout forge.c uses; GU - 0xb5e4). GU 1.4.0: 0x878da0  sSavedata's mount
+#define A_FORGE_OFF_JOB_SAFE                 0x214241cu  // MHXX 1.5.1: 0x234241c (the byte the mount reads with +0x18, set by 0xa7c2dc; GU + 0x22000 as the system object). GU 1.4.0: 0x212041c
 #define FORGE_PORTED (A_FORGE_OFF_APP_RUN && A_FORGE_OFF_UPDATE && A_FORGE_OFF_SYSTEM_CTOR && A_FORGE_OFF_SYSTEM_DTOR && A_FORGE_OFF_MOUNT_SAVE && A_FORGE_OFF_JOB_SAFE)
 
 // ---- runtime/hle/kbdtrace.c (MHXX's own; found in MHXX 1.5.1's main, 2026-11-06)
