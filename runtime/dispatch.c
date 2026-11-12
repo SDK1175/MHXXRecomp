@@ -256,6 +256,11 @@ int fnhook_enter(Cpu *c, uint32_t addr) {
     }
     uint32_t detour = fnhook_get(addr);
     if (!detour) return 0;
+    if (plugin_trace > 0 && detour >= PLUGIN_BASE && detour < PLUGIN_END) {
+        static uint16_t calls[64];
+        unsigned k = (detour >> 4) & 63;
+        if (calls[k] < 4 && ++calls[k]) LOG("[plugin] hook at %x -> %x (r0=%x r1=%x r2=%x r3=%x)\n", addr, detour, c->r[0], c->r[1], c->r[2], c->r[3]);
+    }
     c->pc = detour;  // (in the function's place: the detour returns to the function's caller)
     rt_dispatch(c);
     return 1;
@@ -325,12 +330,26 @@ static void interp_entry(Cpu *c) { interp_run(c); }
 #define DCACHE 4096
 static __thread struct { uint32_t addr; GuestFn fn; } dcache[DCACHE];
 
+// (debug) MHGU_PLUGIN_TRACE: the first calls a plugin makes of each host function, and of each of its hooks' detours
+static int plugin_trace = -1;
+static uint16_t trace_counts[MAX_HLE];
+static void hle_traced(Cpu *c) {
+    int i = (int)((c->pc - HLE_BASE) / 16);
+    uint32_t lr = c->r[14];
+    bool log = lr >= PLUGIN_BASE && lr < PLUGIN_END && trace_counts[i] < 6 && ++trace_counts[i];
+    uint32_t a0 = c->r[0], a1 = c->r[1], a2 = c->r[2], a3 = c->r[3];
+    hle_slots[i].fn(c);
+    if (log) LOG("[plugin] %s(%x, %x, %x, %x) = %x (from %x)\n", hle_slots[i].name, a0, a1, a2, a3, c->r[0], lr);
+}
+
 static GuestFn dispatch_slow(Cpu *c) {
     uint32_t pc = c->pc;
+    if (plugin_trace < 0) plugin_trace = getenv("MHGU_PLUGIN_TRACE") != NULL;
     if (pc >= HLE_BASE && pc < HLE_BASE + HLE_SIZE) {
         rt_unwind_point();
         int i = (int)((pc - HLE_BASE) / 16);
         if (i < hle_count) {
+            if (hle_slots[i].fn && plugin_trace) return hle_traced;
             if (hle_slots[i].fn) return hle_slots[i].fn;
             unimpl_pc = pc;
             return hle_unimplemented;
