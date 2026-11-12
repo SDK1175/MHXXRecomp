@@ -17,6 +17,7 @@ void forge_format(char *out, size_t n, const char *fmt, struct Cpu *c, int reg, 
 // forge_onImGuiRender() (in Forge's window), FORGE_IMGUI_FREE_RENDER forge_onImGuiFreeRender() (every frame)
 enum { FORGE_IMGUI_INIT, FORGE_IMGUI_RENDER, FORGE_IMGUI_FREE_RENDER };
 void forge_plugins_imgui(struct Cpu *c, int which, uint32_t a0, uint32_t a1, uint32_t a2);
+bool forge_gu_plugin_code(uint32_t addr);  // addr is code of a plugin made for MHGU (gucompat.c)
 bool forge_plugins_have(int which);                  // a started plugin has that entry point
 int forge_plugin_titles(const char **out, int max);  // the started plugins' names (their own, else the file's)
 void forge_test_hook(uint32_t target);  // (debug) a plugin-style hook on target (MHGU_FORGE_TESTHOOK, "testhook")

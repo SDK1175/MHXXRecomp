@@ -8,6 +8,7 @@
 
 #include "hle.h"
 #include "kernel.h"
+#include "forge.h"
 #include "platform.h"
 
 // ------------------------------------------------------------------ results
@@ -738,7 +739,10 @@ static void svc_impl(Cpu *c, uint32_t imm, uint32_t pc) {
     case 0x27: debug_string(r[0], r[1]); r[0] = R_OK_; break;
     case 0x29: {  // GetInfo(id1 lo r0, id0 r1, handle r2, id1 hi r3) -> r1:r2
         uint32_t res;
+        bool program = r[1] == 18;
         uint64_t v = get_info(r[1], r[2], ((uint64_t)r[3] << 32) | r[0], &res);
+        // (a plugin made for MHGU asking which game this is: MHGU, as its addresses are shown to it, gucompat.c)
+        if (program && forge_gu_plugin_code(pc)) v = 0x0100770008DD8000ull;
         r[0] = res;
         r[1] = (uint32_t)v;
         r[2] = (uint32_t)(v >> 32);

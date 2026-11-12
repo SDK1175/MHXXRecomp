@@ -721,6 +721,12 @@ static bool caller_for_gu(Cpu *c) {
     }
     return any;
 }
+bool forge_gu_plugin_code(uint32_t addr) {
+    const Module *m = plugin_code(addr);
+    for (int i = 0; m && i < nplugins; i++)
+        if (plugins[i].m == m) return plugins[i].gu;
+    return false;
+}
 HLE_FUNC("forge_mem_getMainTextAddr", f_text) {
     if (caller_for_gu(c) && gucompat_build()) { RET(GU_SHADOW); return; }
     RET(g_modules[0].base + g_modules[0].text_off);
