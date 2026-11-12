@@ -77,6 +77,10 @@ static SDL_AtomicInt g_running, g_level, g_test, g_talking, g_sending, g_ptt, g_
 static struct { uint32_t id; int percent; } g_volumes[SPEAKERS];  // (each player's volume, this game only; g_rx)
 static SDL_AudioStream *g_mic, *g_out;
 static OpusEncoder *g_enc;
+#ifdef HAVE_RNNOISE
+#include <rnnoise.h>
+static DenoiseState *g_denoise;  // (RNNoise: 480 samples at 48 kHz a call, VOICE_FRAME; the voice thread's)
+#endif
 static Speaker g_spk[SPEAKERS];
 static char g_error[96];
 
@@ -233,6 +237,18 @@ static int SDLCALL run(void *unused) {
         if (g_mic && SDL_GetAudioStreamAvailable(g_mic) >= (int)sizeof pcm &&
             SDL_GetAudioStreamData(g_mic, pcm, sizeof pcm) == (int)sizeof pcm) {
             idle = false;
+#ifdef HAVE_RNNOISE
+            if (config_noise_suppression()) {  // the room's noise out first (before it is raised)
+                static float in[VOICE_FRAME], out[VOICE_FRAME];
+                if (!g_denoise) g_denoise = rnnoise_create(NULL);
+                if (g_denoise) {
+                    for (int i = 0; i < VOICE_FRAME; i++) in[i] = pcm[i];
+                    rnnoise_process_frame(g_denoise, out, in);
+                    for (int i = 0; i < VOICE_FRAME; i++)
+                        pcm[i] = (int16_t)(out[i] > 32767.f ? 32767.f : out[i] < -32768.f ? -32768.f : out[i]);
+                }
+            }
+#endif
             // the microphone's volume, then a quiet voice raised (up to AGC_MAX times, towards AGC_TARGET at its
             // loudest; slowly up, quickly down), rounded off near full scale
             float g = mic_gain(), raw_peak = 0.0f, frame_peak = 0.0f;
@@ -393,6 +409,9 @@ void voice_shutdown(void) {
     SDL_SetAtomicInt(&g_test, 0);
     close_all();
     if (g_enc) opus_encoder_destroy(g_enc), g_enc = NULL;
+#ifdef HAVE_RNNOISE
+    if (g_denoise) rnnoise_destroy(g_denoise), g_denoise = NULL;
+#endif
     SDL_UnlockMutex(g_lock);
 }
 

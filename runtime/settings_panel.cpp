@@ -352,6 +352,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(voice_mode);
     SAME(talk_button);
     SAME(mic_volume);
+    SAME(noise_suppression);
     SAME(voice_volume);
     SAME(button_icons);
     SAME(menu_theme);
@@ -1281,6 +1282,8 @@ std::vector<Row> main_rows() {
                        [](int v) { c.talk_button = v; }, ini("TalkButton"));
         }
         number(r, "voice.mic", "Mic volume (%)", &c.mic_volume, (int)lo("MicVolume"), (int)hi("MicVolume"), 5, ini("MicVolume"));
+        add_bool(r, "voice.noise", "Noise suppression", &c.noise_suppression, ini("NoiseSuppression"));
+        r.back().help = tr("Takes fans, keyboards and the room's noise out of your microphone before it is sent. Hear it with the microphone test.");
         number(r, "voice.volume", "Voice volume (%)", &c.voice_volume, (int)lo("VoiceVolume"), (int)hi("VoiceVolume"), 5,
                ini("VoiceVolume"));
         {  // what the microphone hears, packed and unpacked as it will be sent, back at once; its level as a bar
