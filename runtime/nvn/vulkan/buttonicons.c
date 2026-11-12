@@ -17,7 +17,7 @@ enum { G_A, G_B, G_X, G_Y, G_L, G_R, G_ZL, G_ZR, G_PLUS, G_MINUS, G_N };
 typedef struct { int g; uint16_t x, y; } Cell;
 typedef struct {
     uint64_t key;
-    uint16_t w, h, cell;
+    uint16_t w, h, cell;  // cell: its size in the texture (a picture of the sheet's 24 or, else, 32 drawn that size)
     int n;
     Cell cells[G_N];
     uint16_t fx, fy, fw, fh;  // the buttons' strip, and its FNV-1a of RGBA8: the same picture with other game files
@@ -35,6 +35,9 @@ static const Target targets[] = {
      {{G_L, 4, 244}, {G_Y, 36, 244}, {G_X, 68, 244}, {G_B, 100, 244}, {G_A, 132, 244}, {G_R, 164, 244},  // ones (the
       {G_ZL, 196, 244}, {G_ZR, 228, 244}, {G_MINUS, 388, 244}, {G_PLUS, 420, 244}},  // item bar's, the map's ZL)
      4, 244, 256, 32, 0x343664272dbc9285ull},
+    {0x216e71907819e692ull, 512, 512, 28, 4,  // GUI/99_texture/HD_lobby00_BM_NOMIP (resident.arc): the lobby's
+     {{G_Y, 160, 64}, {G_X, 188, 64}, {G_A, 216, 64}, {G_B, 244, 64}},
+     160, 64, 112, 28, 0xcd087e84035ec4b9ull},
 };
 
 // The sheet's row: 0 Xbox, 1 PlayStation; -1 the Switch's own pictures
@@ -79,8 +82,10 @@ static SDL_Surface *sheet(void) {
 
 // The cell's picture (n pixels, from the sheet's row for this size) at (dx, dy), scale k (a texture pack's bigger
 // picture): bilinear, over a cleared cell
-static void paint(uint8_t *px, uint32_t pw, uint32_t ph, const SDL_Surface *s, int sx, int sy, int n, float dx, float dy, float k) {
-    int x0 = (int)(dx * k), y0 = (int)(dy * k), m = (int)(n * k + .5f);
+static void paint(uint8_t *px, uint32_t pw, uint32_t ph, const SDL_Surface *s, int sx, int sy, int n, float dx, float dy, float k,
+                  float ck) {
+    int x0 = (int)(dx * k), y0 = (int)(dy * k), m = (int)(n * ck * k + .5f);
+    k *= ck;  // (from here: the sheet's pixels to the texture's)
     for (int y = 0; y < m; y++) {
         if (y0 + y < 0 || (uint32_t)(y0 + y) >= ph) continue;
         for (int x = 0; x < m; x++) {
@@ -130,11 +135,11 @@ static void paint_all(const Target *t, uint8_t *rgba, uint32_t w, uint32_t h, in
     const SDL_Surface *s = sheet();
     if (!s || style < 0) return;
     float k = (float)w / t->w;
-    int row_y = t->cell == 24 ? style * 24 : 2 * 24 + style * 32;
+    int n = t->cell == 24 ? 24 : 32, row_y = n == 24 ? style * 24 : 2 * 24 + style * 32;
     for (int i = 0; i < t->n; i++) {
         const Cell *c = &t->cells[i];
         int col = source_of(c->g, style);
-        if (col >= 0) paint(rgba, w, h, s, col * t->cell, row_y, t->cell, c->x, c->y, k);
+        if (col >= 0) paint(rgba, w, h, s, col * n, row_y, n, c->x, c->y, k, (float)t->cell / n);
     }
 }
 
