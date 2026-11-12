@@ -98,7 +98,7 @@ typedef struct {
     char talk_key[32];        // [Voice] TalkKey: push to talk on the keyboard, by SDL's key name ("": none)
     int talk_button;          // [Voice] TalkButton: push to talk on a controller (TALK_BUTTONS; 0: none)
     int mic_volume;           // [Voice] MicVolume: the microphone, 0..200 % (config_mic_gain)
-    int voice_volume;         // [Voice] VoiceVolume: the other players' voices, 0..400 % (config_voice_gain)
+    int voice_volume;         // [Voice] VoiceVolume: the other players' voices, 0..100 % (config_voice_gain)
     int combo_window;         // [Controls] ComboInputWindow: COMBO_*, how long a press waits for a second button
     char ldn_server[256];     // [Multiplayer] Server: hub server for internet hubs (host[:port]); "" the default, "Off" none
     char ldn_key[64];         // [Multiplayer] Key: matchmaking key, hubs seen only by players with the same; "" public
@@ -236,6 +236,7 @@ int config_talk_button(void);    // [Voice] TalkButton (0: none)
 // [Voice] TalkButton's choices, in order (0: none); host_input.c maps them to SDL's controller buttons
 #define TALK_BUTTONS "None,Misc,Paddle1,Paddle2,Paddle3,Paddle4,Touchpad,Back,LeftStick,RightStick"
 float config_mic_gain(void);    // [Voice] MicVolume as a factor (atomic)
+#define VOICE_BOOST 2.0f  // VoiceVolume 100 %: voices this many times as loud as they come (rounded off past full scale)
 float config_voice_gain(void);  // [Voice] VoiceVolume as a factor; 0 while muted in the background (atomic)
 const char *config_nickname(void);  // [Multiplayer] Nickname, else the computer's user name, else "Hunter"
 void config_window_focus(bool focused);  // the window got / lost the focus (runtime/host_input.c)

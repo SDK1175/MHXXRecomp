@@ -101,7 +101,7 @@ static float mic_gain(void) {
 }
 static float voice_gain(void) {
     int p = SDL_GetAtomicInt(&g_preview_voice);
-    return p >= 0 ? p / 100.0f : config_voice_gain();  // (the test: the menu is open, the window focused)
+    return p >= 0 ? p / 100.0f * VOICE_BOOST : config_voice_gain();  // (the test: the menu is open, the window focused)
 }
 static bool encoder_open(void) {
     int err = 0;

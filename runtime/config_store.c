@@ -64,7 +64,7 @@ static SDL_AtomicInt live_bonus;
 static SDL_AtomicInt volume = {100};
 static SDL_AtomicInt mute_in_background;
 // [Voice]
-static SDL_AtomicInt mic_volume = {100}, voice_volume = {100}, voice_mode, talk_key, talk_button;
+static SDL_AtomicInt mic_volume = {100}, voice_volume = {70}, voice_mode, talk_key, talk_button;
 // [Application]
 static SDL_AtomicInt confirm_exit = {1};
 static SDL_AtomicInt language = {0};
@@ -210,7 +210,7 @@ int config_talk_button(void) { return SDL_GetAtomicInt(&talk_button); }
 float config_mic_gain(void) { return SDL_GetAtomicInt(&mic_volume) / 100.0f; }
 float config_voice_gain(void) {
     if (SDL_GetAtomicInt(&mute_in_background) && !SDL_GetAtomicInt(&window_focused)) return 0.0f;
-    return SDL_GetAtomicInt(&voice_volume) / 100.0f;
+    return SDL_GetAtomicInt(&voice_volume) / 100.0f * VOICE_BOOST;
 }
 const char *config_nickname(void) {
     static char name[33];
