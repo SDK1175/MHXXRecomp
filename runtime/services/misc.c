@@ -6,6 +6,7 @@
 
 #include "../hle.h"
 #include "../hle/input.h"
+#include "../config.h"
 #include "../ipc.h"
 
 static void ok_logger(Service *s, IpcReq *req, IpcResp *resp) {
@@ -36,8 +37,7 @@ static void profile(Service *s, IpcReq *req, IpcResp *resp) {
         memset(resp->data, 0, 0x38);
         memcpy(resp->data, g_user_id, 16);
         *(uint64_t *)(resp->data + 16) = 1600000000;
-        const char *nick = getenv("MHGU_NICKNAME");
-        snprintf((char *)resp->data + 24, 0x20, "%s", nick ? nick : "Hunter");
+        snprintf((char *)resp->data + 24, 0x20, "%s", config_nickname());  // ([Multiplayer] Nickname: the room's names)
         resp_size(resp, 0x38);
         if (req->cmd == 0 && out_buf(req, 0)) memset(BUFP(out_buf(req, 0)), 0, out_buf(req, 0)->size);
         break;

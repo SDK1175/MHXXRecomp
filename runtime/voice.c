@@ -45,6 +45,8 @@ void voice_shutdown(void) {}
 #define SKIP_FRAMES 8       // buffered past this: skipped ahead
 #define QUIET_FRAMES 10     // made up this many in a row: the player stopped
 #define GATE 0.015f         // louder than this (of full scale) is sent
+#define AGC_TARGET 0.5f     // a voice's peaks are raised towards this
+#define AGC_MAX 4.0f        // at most this many times
 #define HANGOVER 30         // and this many frames after (300 ms)
 #define SELF_ID 0xFFFFFFFFu // the microphone test's own voice
 
@@ -85,13 +87,21 @@ static SDL_Mutex *lock(void) {
     SDL_UnlockSpinlock(&once);
     return g_lock;
 }
+// Up to 0.7 of full scale as it is, above it rounded off towards 1 (no hard clipping when raised)
+static float soft_clip(float x) {
+    float a = fabsf(x);
+    if (a <= 0.7f) return x;
+    float y = 0.7f + 0.3f * tanhf((a - 0.7f) / 0.3f);
+    return x < 0 ? -y : y;
+}
+static float agc = 1.0f;  // (the microphone's automatic raise: the voice thread's)
 static float mic_gain(void) {
     int p = SDL_GetAtomicInt(&g_preview_mic);
     return p >= 0 ? p / 100.0f : config_mic_gain();
 }
 static float voice_gain(void) {
     int p = SDL_GetAtomicInt(&g_preview_voice);
-    return p >= 0 ? p / 100.0f * config_audio_gain() : config_voice_gain();
+    return p >= 0 ? p / 100.0f : config_voice_gain();  // (the test: the menu is open, the window focused)
 }
 static bool encoder_open(void) {
     int err = 0;
@@ -202,10 +212,10 @@ static bool mix_frame(int16_t *out) {
     SDL_UnlockMutex(g_rx);
     SDL_SetAtomicInt(&g_talking, talking);
     bool any = false;
+    float g = voice_gain();  // (here, not the stream's gain: past full scale it is rounded off, not cut)
     for (int k = 0; k < VOICE_FRAME; k++) {
-        int32_t v = sum[k];
-        out[k] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
-        any |= v != 0;
+        any |= sum[k] != 0;
+        out[k] = (int16_t)(soft_clip(sum[k] * g / 32768.0f) * 32767.0f);
     }
     return any;
 }
@@ -223,13 +233,22 @@ static int SDLCALL run(void *unused) {
         if (g_mic && SDL_GetAudioStreamAvailable(g_mic) >= (int)sizeof pcm &&
             SDL_GetAudioStreamData(g_mic, pcm, sizeof pcm) == (int)sizeof pcm) {
             idle = false;
-            float g = mic_gain(), frame_peak = 0.0f;
+            // the microphone's volume, then a quiet voice raised (up to AGC_MAX times, towards AGC_TARGET at its
+            // loudest; slowly up, quickly down), rounded off near full scale
+            float g = mic_gain(), raw_peak = 0.0f, frame_peak = 0.0f;
             for (int i = 0; i < VOICE_FRAME; i++) {
-                float v = pcm[i] * g;
-                v = v > 32767.0f ? 32767.0f : v < -32768.0f ? -32768.0f : v;
-                pcm[i] = (int16_t)v;
-                float a = fabsf(v) / 32768.0f;
-                if (a > frame_peak) frame_peak = a;
+                float a = fabsf(pcm[i] * g) / 32768.0f;
+                if (a > raw_peak) raw_peak = a;
+            }
+            if (raw_peak > GATE) {
+                float want = AGC_TARGET / raw_peak;
+                want = want < 1.0f ? 1.0f : want > AGC_MAX ? AGC_MAX : want;
+                agc += (want - agc) * (want < agc ? 0.5f : 0.01f);
+            }
+            for (int i = 0; i < VOICE_FRAME; i++) {
+                float v = soft_clip(pcm[i] * g * agc / 32768.0f);
+                pcm[i] = (int16_t)(v * 32767.0f);
+                if (fabsf(v) > frame_peak) frame_peak = fabsf(v);
             }
             if (frame_peak > peak) peak = frame_peak;
             if (++frames == 10) {  // (100 ms)
@@ -256,7 +275,7 @@ static int SDLCALL run(void *unused) {
         }
         // the speakers: kept 20..40 ms ahead
         if (g_out && SDL_GetAudioStreamQueued(g_out) < 2 * VOICE_FRAME * (int)sizeof(int16_t)) {
-            SDL_SetAudioStreamGain(g_out, voice_gain());
+            SDL_SetAudioStreamGain(g_out, 1.0f);
             if (mix_frame(mixed)) SDL_PutAudioStreamData(g_out, mixed, sizeof mixed), idle = false;
         }
         if (idle) SDL_Delay(2);

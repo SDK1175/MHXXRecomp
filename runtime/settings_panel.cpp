@@ -372,7 +372,7 @@ bool equal(const Config &a, const Config &b) {
         return false;
     if (memcmp(a.binds, b.binds, sizeof a.binds))
         return false;
-    if (strcmp(a.ldn_join, b.ldn_join) || strcmp(a.ldn_server, b.ldn_server) || strcmp(a.ldn_key, b.ldn_key) ||
+    if (strcmp(a.ldn_join, b.ldn_join) || strcmp(a.nickname, b.nickname) || strcmp(a.ldn_server, b.ldn_server) || strcmp(a.ldn_key, b.ldn_key) ||
         strcmp(a.chat_key, b.chat_key) || strcmp(a.talk_key, b.talk_key) || strcmp(a.save_dir, b.save_dir) || strcmp(a.save_location, b.save_location) || strcmp(a.game_dir, b.game_dir))
         return false;
     for (int n = 0; n < 4; ++n)
@@ -955,6 +955,7 @@ void reset_section() {
     case 3:
         c.ldn_port = f.ldn_port;
         SDL_strlcpy(c.ldn_join, f.ldn_join, sizeof c.ldn_join);
+        SDL_strlcpy(c.nickname, f.nickname, sizeof c.nickname);
         SDL_strlcpy(c.ldn_server, f.ldn_server, sizeof c.ldn_server);
         SDL_strlcpy(c.ldn_key, f.ldn_key, sizeof c.ldn_key);
         c.discord = f.discord;
@@ -1426,6 +1427,8 @@ std::vector<Row> main_rows() {
     case 3:
         number(r, "port", "Host port (TCP / UDP)", &c.ldn_port, (int)lo("Port"), (int)hi("Port"), 1, ini("Port"));
         text(r, "hosts", "Search hosts", c.ldn_join, sizeof c.ldn_join, *c.ldn_join ? c.ldn_join : tr("LAN"), ini("Join"));
+        text(r, "nickname", "Nickname", c.nickname, sizeof c.nickname, *c.nickname ? c.nickname : config_nickname(), ini("Nickname"));
+        r.back().help = tr("The name the other players see in voice chat and the menu's player list. Empty: this computer's user name. Applied the next time you join or make a room.");
         text(r, "server", "Hub server", c.ldn_server, sizeof c.ldn_server,
              !*c.ldn_server ? std::string(tr("Default")) + (*LDN_DEFAULT_SERVER ? " (" LDN_DEFAULT_SERVER ")" : "")
                             : c.ldn_server,

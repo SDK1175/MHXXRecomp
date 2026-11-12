@@ -70,6 +70,7 @@
     /* [Multiplayer] */                                                                             \
     .ldn_port = 39500,                                                                              \
     .ldn_join = "",                                                                                 \
+    .nickname = "",                                                                                 \
     .ldn_server = "",                                                                               \
     .ldn_key = "",                                                                                  \
     .sync_small_monsters = 1,                                                                       \
@@ -447,13 +448,13 @@ static const char DEFAULT_INI[] =
     "; Default: None\n"
     "TalkButton = None\n"
     "\n"
-    "; Volume of your microphone, in percent\n"
-    "; Between 0 and 200\n"
+    "; Volume of your microphone, in percent (a quiet voice is also raised by itself, up to 4 times)\n"
+    "; Between 0 and 400\n"
     "; Default: 100\n"
     "MicVolume = 100\n"
     "\n"
-    "; Volume of the other players' voices, in percent\n"
-    "; Between 0 and 200\n"
+    "; Volume of the other players' voices, in percent (the game's volume doesn't lower them)\n"
+    "; Between 0 and 400\n"
     "; Default: 100\n"
     "VoiceVolume = 100\n"
     "\n"
@@ -667,6 +668,7 @@ const ConfigSetting g_settings[] = {
     {"Android", "SaveFolder", SET_TEXT, F(save_dir), sizeof g_config.save_dir, 0, 0, NULL, NULL, true, ERR_FOLDER},
     {"Android", "GameFolder", SET_TEXT, F(game_dir), sizeof g_config.game_dir, 0, 0, NULL, NULL, true, ERR_GAME_FOLDER},
     {"Multiplayer", "Join", SET_TEXT, F(ldn_join), sizeof g_config.ldn_join, 0, 0, NULL, NULL, false, ERR_NET},
+    {"Multiplayer", "Nickname", SET_TEXT, F(nickname), sizeof g_config.nickname, 0, 0, NULL, NULL, false, ERR_NET},
     {"Multiplayer", "Server", SET_TEXT, F(ldn_server), sizeof g_config.ldn_server, 0, 0, NULL, NULL, false, ERR_SERVER},
     {"Multiplayer", "Key", SET_TEXT, F(ldn_key), sizeof g_config.ldn_key, 0, 0, NULL, NULL, false, ERR_SERVER},
     ON_OFF("Multiplayer", "SyncSmallMonsters", sync_small_monsters, false),
@@ -685,8 +687,8 @@ const ConfigSetting g_settings[] = {
     {"Voice", "VoiceChat", SET_CHOICE, F(voice_mode), 0, 0, 0, "Off,Always,PushToTalk|ptt", NULL, false, ERR_MISC},
     {"Voice", "TalkKey", SET_TEXT, F(talk_key), sizeof g_config.talk_key, 0, 0, NULL, NULL, false, ERR_MISC},
     {"Voice", "TalkButton", SET_CHOICE, F(talk_button), 0, 0, 0, TALK_BUTTONS, NULL, false, ERR_MISC},
-    {"Voice", "MicVolume", SET_INT, F(mic_volume), 0, 0, 200, NULL, NULL, false, ERR_MISC},
-    {"Voice", "VoiceVolume", SET_INT, F(voice_volume), 0, 0, 200, NULL, NULL, false, ERR_MISC},
+    {"Voice", "MicVolume", SET_INT, F(mic_volume), 0, 0, 400, NULL, NULL, false, ERR_MISC},
+    {"Voice", "VoiceVolume", SET_INT, F(voice_volume), 0, 0, 400, NULL, NULL, false, ERR_MISC},
     ON_OFF("Application", "ConfirmExit", confirm_exit, false),
     {"Application", "Language", SET_CHOICE, F(language), 0, 0, 0, "English|en,Spanish|es,Korean|ko|한국어", NULL, false, ERR_LANGUAGE},
     {"Application", "ButtonIcons", SET_CHOICE, F(button_icons), 0, 0, 0, "Xbox,Switch,PlayStation", NULL, false, ERR_ICONS},

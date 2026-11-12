@@ -66,6 +66,7 @@ typedef struct {
     int game_buttons;         // GAME_BUTTONS_*: the game's button prompts (Auto: as the controller at the start)
     int ldn_port;             // local play: the port a hosted hub listens on (TCP; UDP for LAN search)
     char ldn_join[256];       // local play: hosts to search besides the LAN (host[:port], comma separated)
+    char nickname[33];        // [Multiplayer] Nickname: the name the others see (voice chat, the room); "": the computer's user
     int sync_small_monsters;  // multiplayer: small monsters synced like large ones (runtime/net/emsync.c)
     int bonus_content;        // free downloads copied from a donor save into saves without any (runtime/services/bonus.c)
     int village_in_hub;       // L / R at the Hub's / Pub's quest counter switch to Village quests (runtime/hle/villagehub.c)
@@ -97,7 +98,7 @@ typedef struct {
     char talk_key[32];        // [Voice] TalkKey: push to talk on the keyboard, by SDL's key name ("": none)
     int talk_button;          // [Voice] TalkButton: push to talk on a controller (TALK_BUTTONS; 0: none)
     int mic_volume;           // [Voice] MicVolume: the microphone, 0..200 % (config_mic_gain)
-    int voice_volume;         // [Voice] VoiceVolume: the other players' voices, 0..200 % (config_voice_gain)
+    int voice_volume;         // [Voice] VoiceVolume: the other players' voices, 0..400 % (config_voice_gain)
     int combo_window;         // [Controls] ComboInputWindow: COMBO_*, how long a press waits for a second button
     char ldn_server[256];     // [Multiplayer] Server: hub server for internet hubs (host[:port]); "" the default, "Off" none
     char ldn_key[64];         // [Multiplayer] Key: matchmaking key, hubs seen only by players with the same; "" public
@@ -235,7 +236,8 @@ int config_talk_button(void);    // [Voice] TalkButton (0: none)
 // [Voice] TalkButton's choices, in order (0: none); host_input.c maps them to SDL's controller buttons
 #define TALK_BUTTONS "None,Misc,Paddle1,Paddle2,Paddle3,Paddle4,Touchpad,Back,LeftStick,RightStick"
 float config_mic_gain(void);    // [Voice] MicVolume as a factor (atomic)
-float config_voice_gain(void);  // [Voice] VoiceVolume as a factor, times config_audio_gain (atomic)
+float config_voice_gain(void);  // [Voice] VoiceVolume as a factor; 0 while muted in the background (atomic)
+const char *config_nickname(void);  // [Multiplayer] Nickname, else the computer's user name, else "Hunter"
 void config_window_focus(bool focused);  // the window got / lost the focus (runtime/host_input.c)
 int config_language(void);     // last saved UI language, atomic across host threads
 bool config_confirm_exit(void); // atomic, safe on the host main thread

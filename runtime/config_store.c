@@ -208,7 +208,21 @@ int config_voice_mode(void) { return SDL_GetAtomicInt(&voice_mode); }
 int config_live_talk_key(void) { return SDL_GetAtomicInt(&talk_key); }
 int config_talk_button(void) { return SDL_GetAtomicInt(&talk_button); }
 float config_mic_gain(void) { return SDL_GetAtomicInt(&mic_volume) / 100.0f; }
-float config_voice_gain(void) { return SDL_GetAtomicInt(&voice_volume) / 100.0f * config_audio_gain(); }
+float config_voice_gain(void) {
+    if (SDL_GetAtomicInt(&mute_in_background) && !SDL_GetAtomicInt(&window_focused)) return 0.0f;
+    return SDL_GetAtomicInt(&voice_volume) / 100.0f;
+}
+const char *config_nickname(void) {
+    static char name[33];
+    if (*g_config.nickname) return g_config.nickname;
+    if (!*name) {
+        const char *u = getenv("MHGU_NICKNAME");
+        if (!u || !*u) u = getenv("USERNAME");
+        if (!u || !*u) u = getenv("USER");
+        SDL_strlcpy(name, u && *u ? u : "Hunter", sizeof name);
+    }
+    return name;
+}
 void config_window_focus(bool focused) { SDL_SetAtomicInt(&window_focused, focused); }
 bool config_confirm_exit(void) { return SDL_GetAtomicInt(&confirm_exit) != 0; }
 bool config_menu_chord(void) { return SDL_GetAtomicInt(&menu_chord) != 0; }
