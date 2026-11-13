@@ -96,4 +96,4 @@ MHXX Recomp는 [MHGU Recomp](https://github.com/morerokk/MHGURecomp)를 포크�
 
 ---
 
-<sub>개발자용: 소스에서 빌드하는 방법은 [docs/BUILD.md](docs/BUILD.md), 개발 기록은 [docs/MHXX.md](docs/MHXX.md).</sub>
+<sub>개발자용: 소스에서 빌드하는 방법은 [docs/BUILD.md](docs/BUILD.md), 개발 기록은 [docs/devlog.md](docs/devlog.md).</sub>

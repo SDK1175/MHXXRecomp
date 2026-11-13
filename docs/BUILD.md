@@ -51,4 +51,4 @@ make dist VERSION=0.10.0 ANDROID_DIST=
 ## 참고
 
 - 원본 MHGU Recomp의 자세한 빌드 설명(리눅스, 안드로이드, 테스트 등): [README.MHGU.md](README.MHGU.md#building-from-source)
-- MHXX 포팅 기록과 주소: [MHXX.md](MHXX.md), `runtime/game/addr.h`, `tools/gen.py`
+- MHXX 포팅 기록과 주소: [devlog.md](devlog.md), `runtime/game/addr.h`, `tools/gen.py`
