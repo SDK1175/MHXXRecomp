@@ -79,7 +79,22 @@ int ldn_players(uint32_t *, char (*)[33], int) { return 0; }
 // or didn't close shows where it stopped (Tools > Problem report takes it)
 static SDL_IOStream *g_launcher_log;
 static std::mutex g_launcher_log_lock;
-static void launcher_log_open() { g_launcher_log = SDL_IOFromFile("launcher.log", "w"); }
+static void launcher_log(const char *fmt, ...);
+static SDL_LogOutputFunction g_sdl_log_default;
+// SDL_Log (the texture upscaler's steps, its failures) into launcher.log too
+static void launcher_sdl_log(void *ud, int cat, SDL_LogPriority pri, const char *msg) {
+    if (g_sdl_log_default) g_sdl_log_default(ud, cat, pri, msg);
+    launcher_log("%s\n", msg);
+}
+// (the last start's kept as launcher.prev.log: after a crash or a driver reset the player starts it again to make a
+// problem report, and the run that went wrong would be written over)
+static void launcher_log_open() {
+    SDL_RemovePath("launcher.prev.log");
+    SDL_RenamePath("launcher.log", "launcher.prev.log");
+    g_launcher_log = SDL_IOFromFile("launcher.log", "w");
+    g_sdl_log_default = SDL_GetDefaultLogOutputFunction();
+    SDL_SetLogOutputFunction(launcher_sdl_log, nullptr);
+}
 static void launcher_log(const char *fmt, ...) {
     char msg[512];
     va_list ap;

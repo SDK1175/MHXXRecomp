@@ -356,6 +356,9 @@ bool upscale(TexJob *job, const std::vector<Tex> &v, const std::string &tooldir)
                 save_png(win + "/" + v[i].key + ".png", src.px.data(), src.w, src.h, 3);
         }
         auto tick = [&]() { job->done = c0 + list(wout).size(); };
+        SDL_Log("[texmake] upscaling %zu-%zu of %zu (%s, largest %dx%d)", c0 + 1, c1, v.size(), v[c0].sub,
+                [&] { int m = 0; for (size_t i = c0; i < c1; i++) m = std::max(m, v[i].w); return m; }(),
+                [&] { int m = 0; for (size_t i = c0; i < c1; i++) m = std::max(m, v[i].h); return m; }());
         std::string exe = absolute(tooldir + "/realesrgan-ncnn-vulkan" + EXE);
         // (-t 128: small tiles, each a short piece of graphics card work. Its own choice by the card's memory let one
         // large monster texture run longer than Windows waits for the card (about 2 s) and the driver was reset -

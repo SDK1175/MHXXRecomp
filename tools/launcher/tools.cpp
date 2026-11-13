@@ -636,7 +636,7 @@ bool report_make(const Spec &spec, const std::string &version, std::string &made
     if (!z.ok) return err = "can't write " + path + ": " + SDL_GetError(), false;
     z.add("system.txt", hide_private(t));
     static const char *const logs[][2] = {{"log.txt", "log.txt"}, {"install.log", "install.log"},
-                                          {"update/update.log", "update.log"}, {"launcher.log", "launcher.log"},
+                                          {"update/update.log", "update.log"}, {"launcher.log", "launcher.log"}, {"launcher.prev.log", "launcher.prev.log"},
                                           {"launcher.ini", "launcher.ini"}};
     for (auto &l : logs)
         if (exists(l[0])) z.add(l[1], hide_private(log_part(l[0])));
