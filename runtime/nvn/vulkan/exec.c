@@ -920,7 +920,7 @@ static int ui_float_cmp(const void *a, const void *b) {
 static struct { float z, x0, x1, y0, y1, cut; uint8_t h, h2; } ui_boxes[UI_BOXES];  // (z: its layer, the one it holds)
 static int ui_nboxes;
 // A window across the middle keeps the side it was given while it stays (same layer, right edge and height, seen within
-// a second): MHXX's Palico skill / support move list (x 461..845) with its description beside it (from x 25) leaned
+// 1000 frames): MHXX's Palico skill / support move list (x 468..844) with its description beside it (from x 26) leaned
 // Left, and alone (the cursor on an empty slot, the description gone) leaned Right - the list jumped across the screen.
 // (Centring it instead moved the Guild Card's frame off its card.)
 #define UI_STICKY 16
@@ -928,13 +928,18 @@ static struct { float z, x1, y0, y1; uint64_t frame; uint8_t h; } ui_sticky[UI_S
 static uint32_t ui_nsticky;
 static int ui_group_sticky(float x1, int h) {
     for (int i = 0; i < UI_STICKY; i++)
-        if (ui_sticky[i].frame && ui_sticky[i].z == ui_group.z && ui_sticky[i].x1 == x1 && ui_sticky[i].y0 == ui_group.ymin &&
-            ui_sticky[i].y1 == ui_group.ymax) {
-            if (g_present_count - ui_sticky[i].frame <= 60) h = ui_sticky[i].h;
+        // (within 2: the same edge drawn by the description's pieces and by the list's own differs in its fraction)
+        if (ui_sticky[i].frame && fabsf(ui_sticky[i].z - ui_group.z) < 0.5f && fabsf(ui_sticky[i].x1 - x1) < 2.0f &&
+            fabsf(ui_sticky[i].y0 - ui_group.ymin) < 2.0f && fabsf(ui_sticky[i].y1 - ui_group.ymax) < 2.0f) {
+            if (g_hudtrace_active)
+                LOG("[hud] sticky %d: kept %c (it got %c, seen %llu frame(s) ago)\n", i, "LRC"[ui_sticky[i].h], "LRC"[h],
+                    (unsigned long long)(g_present_count - ui_sticky[i].frame));
+            if (g_present_count - ui_sticky[i].frame <= 1000) h = ui_sticky[i].h;
             ui_sticky[i].h = (uint8_t)h, ui_sticky[i].frame = g_present_count;
             return h;
         }
     int i = (int)(ui_nsticky++ % UI_STICKY);
+    if (g_hudtrace_active) LOG("[hud] sticky %d: new, %c\n", i, "LRC"[h]);
     ui_sticky[i].z = ui_group.z, ui_sticky[i].x1 = x1, ui_sticky[i].y0 = ui_group.ymin, ui_sticky[i].y1 = ui_group.ymax;
     ui_sticky[i].h = (uint8_t)h, ui_sticky[i].frame = g_present_count;
     return h;
