@@ -357,7 +357,11 @@ bool upscale(TexJob *job, const std::vector<Tex> &v, const std::string &tooldir)
         }
         auto tick = [&]() { job->done = c0 + list(wout).size(); };
         std::string exe = absolute(tooldir + "/realesrgan-ncnn-vulkan" + EXE);
-        if (!run(job, {exe, "-i", absolute(win), "-o", absolute(wout), "-n", MODEL, "-s", "4", "-f", "png"}, absolute(tooldir), tick))
+        // (-t 128: small tiles, each a short piece of graphics card work. Its own choice by the card's memory let one
+        // large monster texture run longer than Windows waits for the card (about 2 s) and the driver was reset -
+        // a black screen, and the launcher left without its buttons)
+        if (!run(job, {exe, "-i", absolute(win), "-o", absolute(wout), "-n", MODEL, "-s", "4", "-t", "128", "-f", "png"},
+                 absolute(tooldir), tick))
             return false;
         size_t made = 0;
         for (size_t i = c0; i < c1; i++) {

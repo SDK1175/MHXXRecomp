@@ -1370,6 +1370,16 @@ int main(int argc, char **argv) {
                 else if (!ask_shortcut && !running && settings_panel_dirty()) confirm_quit = true;  // (unsaved: ask)
                 else quit = true;
             }
+            if (e.type == SDL_EVENT_RENDER_DEVICE_RESET || e.type == SDL_EVENT_RENDER_TARGETS_RESET) {
+                // (the graphics driver was reset - another program, or the texture upscaler, overloaded the card: the
+                // pictures are gone from it. Made again, so the buttons come back instead of the bare background)
+                launcher_log("graphics device reset: the launcher's pictures made again\n");
+                ImGui_ImplSDLRenderer3_DestroyDeviceObjects();
+                ImGui_ImplSDLRenderer3_CreateDeviceObjects();
+                for (SDL_Texture *t : {art.background, art.logo, art.emblem})
+                    if (t) SDL_DestroyTexture(t);
+                title_art_load(rd, g_game_dir, &art);
+            }
             if (e.type == SDL_EVENT_KEY_DOWN && !ask_shortcut && !confirm_quit && !running && !in_setup && !in_tex && !in_tools)
                 settings_panel_key(e.key.scancode);
         }
