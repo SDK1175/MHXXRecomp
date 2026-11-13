@@ -326,7 +326,7 @@ bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat 
         uint8_t *px = j.kind != K_NONE && j.kind != K_ASTC ? decode(&j) : NULL;
         button_target = buttonicons_target(key, px, l.w, l.h);
         if (button_target >= 0 && !path) {
-            bool ok = buttonicons_apply(b, button_target, px, l.w, l.h, srgb);
+            bool ok = buttonicons_apply(b, button_target, px, l.w, l.h, srgb, t->levels ? t->levels : 1);  // (its own levels)
             free(px), free(lin);
             return ok;
         }
@@ -354,7 +354,7 @@ bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat 
                 for (uint32_t y = 0; y < h; y++) memcpy(tight + (uint64_t)y * w * 4, px + (uint64_t)y * c->pitch, (size_t)w * 4);
             px = tight;
         }
-        ok = px && ((button_target >= 0 && buttonicons_apply(b, button_target, px, w, h, srgb)) || vk_tex_replace(b, px, w, h, srgb));  // (the
+        ok = px && ((button_target >= 0 && buttonicons_apply(b, button_target, px, w, h, srgb, 0)) || vk_tex_replace(b, px, w, h, srgb, 0));  // (the
         // button prompts are painted on a pack's picture too)
         free(tight);
         if (ok && replaced_n++ < 20) LOG("[texpack] %016llx %ux%u -> %ux%u\n", (unsigned long long)key, l.w, l.h, w, h);

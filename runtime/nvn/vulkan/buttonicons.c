@@ -192,6 +192,8 @@ typedef struct {
     uint8_t *base;
     uint32_t w, h;
     bool srgb;
+    uint32_t levels;  // (the game's own count for its picture: a HUD atlas has one, and made-up ones blur its pieces
+                      // into their neighbours - a line beside the map, the clock, the item bar)
     uint64_t sig;  // what it was painted for (0: not yet)
 } Live;
 static Live live[sizeof targets / sizeof *targets];
@@ -238,16 +240,16 @@ int buttonicons_target(uint64_t key, const uint8_t *rgba, uint32_t w, uint32_t h
     return -1;
 }
 
-bool buttonicons_apply(TexBackend *b, int ti, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb) {
+bool buttonicons_apply(TexBackend *b, int ti, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb, uint32_t max_levels) {
     if (ti < 0 || ti >= (int)(sizeof targets / sizeof *targets)) return false;
     Live *l = &live[ti];
     uint8_t *base = malloc((size_t)w * h * 4), *px = malloc((size_t)w * h * 4);
     if (!base || !px) { free(base), free(px); return false; }
     memcpy(base, rgba, (size_t)w * h * 4), memcpy(px, rgba, (size_t)w * h * 4);
     free(l->base);
-    *l = (Live){b, base, w, h, srgb, signature()};
+    *l = (Live){b, base, w, h, srgb, max_levels, signature()};
     paint_all(&targets[ti], px, w, h, buttonicons_style());
-    bool ok = vk_tex_replace(b, px, w, h, srgb);
+    bool ok = vk_tex_replace(b, px, w, h, srgb, max_levels);
     free(px);
     LOG("[buttons] texture %d (%ux%u): the button pictures as %s\n", ti, w, h,
         buttonicons_style() == 0 ? "Xbox" : buttonicons_style() == 1 ? "PlayStation" : buttonicons_style() == 2 ? "keys" : "Switch");
@@ -272,7 +274,7 @@ void buttonicons_frame(void) {
         if (!px) continue;
         memcpy(px, l->base, (size_t)l->w * l->h * 4);
         paint_all(&targets[i], px, l->w, l->h, buttonicons_style());
-        if (vk_tex_replace(l->b, px, l->w, l->h, l->srgb)) l->sig = sig;
+        if (vk_tex_replace(l->b, px, l->w, l->h, l->srgb, l->levels)) l->sig = sig;
         free(px);
         LOG("[buttons] the button pictures painted again (setting or binding changed)\n");
     }

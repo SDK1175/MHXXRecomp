@@ -611,9 +611,10 @@ static void upload_texture(NvnTexture *t, TexBackend *b) {
     }
 }
 
-bool vk_tex_replace(TexBackend *b, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb) {
+bool vk_tex_replace(TexBackend *b, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb, uint32_t max_levels) {
     uint32_t levels = 1;
     for (uint32_t s = w > h ? w : h; s > 1; s >>= 1) levels++;
+    if (max_levels && levels > max_levels) levels = max_levels;
     VkFormat vf = srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
     VkImageCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT,
                             .imageType = VK_IMAGE_TYPE_2D, .format = vf, .extent = {w, h, 1}, .mipLevels = levels,
