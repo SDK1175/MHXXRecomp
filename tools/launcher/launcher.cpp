@@ -1698,8 +1698,8 @@ int main(int argc, char **argv) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .62f, .45f, 1));
             ImGui::TextWrapped("%s", tr("The game closed unexpectedly. A problem report (nothing is sent by itself) on GitHub Issues helps find why."));
             ImGui::PopStyleColor();
-            float b2 = (cw - 8 * scale) * .5f, bh2 = ImGui::GetFrameHeight() * 1.3f;
-            if (hunter_button("crash.report", tr("Make a problem report"), ImVec2(b2, bh2), true, !confirm_quit, scale)) {
+            float b2 = (cw - 8 * scale) * .64f, b3 = cw - 8 * scale - b2, bh2 = ImGui::GetFrameHeight() * 1.3f;
+            if (hunter_button("crash.report", tr("Problem report"), ImVec2(b2, bh2), true, !confirm_quit, scale)) {
                 SDL_RemovePath("running.flag");
                 crashed = false;
                 if (settings_panel_dirty()) settings_panel_save_now();
@@ -1708,7 +1708,7 @@ int main(int argc, char **argv) {
                 tools.tab = 4;
             }
             ImGui::SameLine(0, 8 * scale);
-            if (hunter_button("crash.close", tr("Close"), ImVec2(b2, bh2), false, !confirm_quit, scale))
+            if (hunter_button("crash.close", tr("Close"), ImVec2(b3, bh2), false, !confirm_quit, scale))
                 SDL_RemovePath("running.flag"), crashed = false;
         } else {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.88f, .9f, .95f, 1));
