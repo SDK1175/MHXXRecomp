@@ -837,23 +837,6 @@ bool install_mod_zip(const std::string &zip, const std::string &mods, std::strin
     return false;
 }
 
-std::string install_find_keys() {
-    const char *appdata = SDL_getenv("APPDATA");
-    std::vector<std::string> c;
-    if (appdata)
-        for (const char *d : {"eden", "yuzu", "suyu", "citron", "sudachi", "torzu"})
-            c.push_back(std::string(appdata) + "/" + d + "/keys/prod.keys");
-    if (appdata) c.push_back(std::string(appdata) + "/Ryujinx/system/prod.keys");
-    if (const char *home = SDL_getenv("HOME")) {
-        c.push_back(std::string(home) + "/.local/share/eden/keys/prod.keys");
-        c.push_back(std::string(home) + "/.local/share/yuzu/keys/prod.keys");
-        c.push_back(std::string(home) + "/.switch/prod.keys");
-    }
-    for (const std::string &p : c)
-        if (SDL_GetPathInfo(p.c_str(), nullptr)) return p;
-    return "";
-}
-
 void install_run(InstallJob *job) {
     g_log = SDL_IOFromFile("install.log", "w");
     std::string err;

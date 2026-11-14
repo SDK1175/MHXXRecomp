@@ -347,21 +347,18 @@ static void SDLCALL file_picked(void *slot, const char *const *list, int) {
 }
 struct Setup {
     std::string path[4];  // the game, the update, the keys, the Korean patch
-    bool keys_found = false;
     InstallJob *job = nullptr;
     std::thread th;
     std::string error;
     bool installed = false;
     void begin() {
-        if (path[2].empty()) path[2] = install_find_keys(), keys_found = !path[2].empty();
-        error.clear(), installed = false;
+        error.clear(), installed = false;  // (the keys: picked by the player; not looked for in other programs' folders)
     }
     void poll() {
         std::lock_guard<std::mutex> g(g_pick_lock);
         for (int i = 0; i < 4; i++)
             if (!g_picked_file[i].empty()) {
                 path[i] = g_picked_file[i], g_picked_file[i].clear();
-                if (i == 2) keys_found = false;
             }
         if (job && job->finished) {
             th.join();
@@ -470,7 +467,6 @@ static int setup_screen(Setup &st, SDL_Window *win, int w, int h, float s, bool 
             ImGui::TextColored(GOLD_TEXT, "%s", tr(labels[i]));
             ImGui::SetCursorScreenPos(ImVec2(row.x + 22 * s, ImGui::GetCursorScreenPos().y));
             std::string shown = st.path[i].empty() ? tr("Not chosen") : file_name(st.path[i]);
-            if (i == 2 && st.keys_found) shown += std::string("  (") + tr("found in an emulator's folder") + ")";
             ImGui::PushTextWrapPos(row.x + cw - bw - 16 * s);
             ImGui::TextColored(st.path[i].empty() ? ImVec4(.6f, .64f, .72f, 1) : ImVec4(.92f, .93f, .96f, 1), "%s", shown.c_str());
             ImGui::PopTextWrapPos();

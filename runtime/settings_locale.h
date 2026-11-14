@@ -409,7 +409,6 @@ static inline const char *settings_text_ko(const char *english) {
         {"Keys (prod.keys)", "키 파일 (prod.keys)"},
         {"Korean patch (zip, optional)", "한글패치 (zip, 선택)"},
         {"Not chosen", "선택 안 함"},
-        {"found in an emulator's folder", "에뮬레이터 폴더에서 찾음"},
         {"Browse", "찾아보기"},
         {"Install", "설치"},
         {"Later", "나중에"},
