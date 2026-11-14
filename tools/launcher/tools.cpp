@@ -322,6 +322,60 @@ bool backup_delete(const std::string &file) {
 }
 
 namespace {
+const size_t SAVE_3DS = 4726152, SAVE_HEAD = 36;
+// The Switch save's header (the same in every MHXX Switch save looked at; this port's own save's when there is one)
+const uint8_t SAVE_SWITCH_HEAD[SAVE_HEAD] = {0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0x14, 0, 0, 0,
+                                             0x74, 0xee, 0xb2, 0x36, 0x0c, 0, 0, 0, 0x88, 0x1d, 0x48, 0, 0, 0, 0, 0};
+uint32_t le32(const uint8_t *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
+// MHXX's save: its table of the parts' places (the common data, then the three hunters)
+bool mhxx_save_body(const uint8_t *p) {
+    return le32(p + 12) == 0xb280 && le32(p + 16) == 0x126474 && le32(p + 20) == 0x244c34 && le32(p + 24) == 0x3633f4;
+}
+}  // namespace
+
+bool save_import(const std::string &file, bool &was_3ds, std::string &err) {
+    size_t n = 0;
+    uint8_t *d = (uint8_t *)SDL_LoadFile(file.c_str(), &n);
+    if (!d) return err = "can't read " + file + ": " + SDL_GetError(), false;
+    std::string out;
+    if (n == SAVE_3DS && mhxx_save_body(d)) {
+        was_3ds = true;
+        uint8_t head[SAVE_HEAD];
+        memcpy(head, SAVE_SWITCH_HEAD, SAVE_HEAD);
+        size_t m = 0;  // (this port's own save's header, when there is one)
+        uint8_t *own = (uint8_t *)SDL_LoadFile((save_dir() + "/save_0/system").c_str(), &m);
+        if (own && m == SAVE_3DS + SAVE_HEAD && mhxx_save_body(own + SAVE_HEAD)) memcpy(head, own, SAVE_HEAD);
+        SDL_free(own);
+        out.assign((const char *)head, SAVE_HEAD);
+        out.append((const char *)d, n);
+    } else if (n == SAVE_3DS + SAVE_HEAD && mhxx_save_body(d + SAVE_HEAD)) {
+        was_3ds = false;
+        out.assign((const char *)d, n);
+    } else {
+        SDL_free(d);
+        return err = n == SAVE_3DS || n == SAVE_3DS + SAVE_HEAD ? "this file isn't a Monster Hunter XX save"
+                                                               : "not a Monster Hunter XX save (pick the file named system)",
+               false;
+    }
+    SDL_free(d);
+    std::string made;  // (the save as it is now: a backup first)
+    if (save_exists() && !backup_make("import", made, err)) return false;
+    std::string dir = save_dir() + "/save_0";
+    SDL_CreateDirectory(save_dir().c_str());
+    SDL_CreateDirectory(dir.c_str());
+    for (const char *name : {"system", "system_backup"}) {
+        std::string at = dir + "/" + name, tmp = at + ".part";
+        if (!SDL_SaveFile(tmp.c_str(), out.data(), out.size())) {
+            SDL_RemovePath(tmp.c_str());
+            return err = "can't write " + tmp + ": " + SDL_GetError(), false;
+        }
+        SDL_RemovePath(at.c_str());
+        if (!SDL_RenamePath(tmp.c_str(), at.c_str())) return err = "can't write " + at + ": " + SDL_GetError(), false;
+    }
+    return true;
+}
+
+namespace {
 struct Unpack {
     std::string root;
     int files = 0, saves = 0;

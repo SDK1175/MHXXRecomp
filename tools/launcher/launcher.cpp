@@ -899,6 +899,11 @@ static void SDLCALL mods_picked(void *, const char *const *list, int) {
     std::lock_guard<std::mutex> g(g_mods_lock);
     for (int i = 0; list && list[i]; i++) g_picked_mods.push_back(list[i]);
 }
+static std::string g_picked_save;  // (g_mods_lock) a save file picked to put in (Tools > Save backup)
+static void SDLCALL save_picked(void *, const char *const *list, int) {
+    std::lock_guard<std::mutex> g(g_mods_lock);
+    if (list && list[0]) g_picked_save = list[0];
+}
 struct Tools {
     Spec spec, vk;                    // (vk: filled by its thread, copied in when vk_ready)
     std::atomic<bool> vk_ready{false};
@@ -1002,7 +1007,7 @@ static void launcher_end_watchdog(int seconds) {
 }
 static const char *backup_kind(const std::string &k) {
     return tr(k == "manual" ? "Manual" : k == "start" ? "Before the game" : k == "update" ? "Before an update"
-                                       : k == "restore" ? "Before a restore" : "Automatic");
+                                       : k == "restore" ? "Before a restore" : k == "import" ? "Before a save was put in" : "Automatic");
 }
 // The Tools screen: 0 still on it, 1 closed
 static int tools_screen(Tools &t, SDL_Window *win, int w, int h, float s, bool running, const std::string &version) {
@@ -1011,6 +1016,7 @@ static int tools_screen(Tools &t, SDL_Window *win, int w, int h, float s, bool r
         {
             std::lock_guard<std::mutex> g(g_mods_lock);
             zips.swap(g_picked_mods);
+            if (!g_picked_save.empty()) t.tab = 0, t.confirm = "import", t.confirm_file = g_picked_save, g_picked_save.clear();
         }
         if (!zips.empty() && !t.busy && !running)
             t.run([&t, zips]() {
@@ -1095,8 +1101,24 @@ static int tools_screen(Tools &t, SDL_Window *win, int w, int h, float s, bool r
             SDL_CreateDirectory("backups");
             open_folder("backups");
         }
+        // (a 3DS save, its "system" file: made a Switch save and put in; a Switch save as it is)
+        if (hunter_button("bk.import", tr("Put in a save from the 3DS / Switch"), ImVec2(bw, bh), false, can, s))
+            SDL_ShowOpenFileDialog(save_picked, nullptr, win, nullptr, 0, nullptr, false);
         ImGui::Dummy(ImVec2(0, 4 * s));
-        if (t.confirm == "restore" || t.confirm == "delete") {
+        if (t.confirm == "import") {
+            char q[600];
+            SDL_snprintf(q, sizeof q, tr("Put %s in as this port's save? The save as it is now is backed up first. A 3DS save is made a Switch one; the 3DS file itself isn't changed."), t.confirm_file.c_str());
+            int r = ask(q, tr("Put it in"));
+            if (r == 1) {
+                std::string err;
+                bool was_3ds = false;
+                if (running) t.set(tr("Close the game first."), false);
+                else if (save_import(t.confirm_file, was_3ds, err))
+                    t.set(tr(was_3ds ? "The 3DS save is in. Start the game to play it." : "The save is in. Start the game to play it."), true);
+                else t.set(std::string(tr("Could not put the save in: ")) + err, false);
+                t.confirm.clear(), t.refresh();
+            } else if (r == 2) t.confirm.clear();
+        } else if (t.confirm == "restore" || t.confirm == "delete") {
             char q[300];
             const char *when = t.confirm_file.c_str();
             for (const Backup &b : t.backups)

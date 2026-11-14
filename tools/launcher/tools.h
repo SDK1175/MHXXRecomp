@@ -30,6 +30,10 @@ bool backup_make(const char *kind, std::string &made, std::string &err);
 // runs (the launcher checks).
 bool backup_restore(const std::string &file, std::string &err);
 bool backup_delete(const std::string &file);
+// A save from the 3DS (Monster Hunter XX, its "system" file) put in as this port's save: the Switch's is the 3DS's
+// with a 36-byte header in front (as MHXX Switch save editors convert them). A Switch save picked is put in as it is.
+// The save as it was is backed up first ("import"). Not while the game runs (the launcher checks).
+bool save_import(const std::string &file, bool &was_3ds, std::string &err);
 bool auto_backup_on();  // launcher.ini AutoBackup (on unless 0)
 
 // ---- the PC
