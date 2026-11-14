@@ -1355,6 +1355,7 @@ int main(int argc, char **argv) {
     std::string error;
     bool open = true, quit = false, start = false;
     bool confirm_quit = SDL_getenv("MHXX_LAUNCHER_SHOT") && SDL_getenv("MHXX_LAUNCHER_SHOT_QUIT"), running = false;
+    bool crashed = false;  // (the game ended without quitting: a problem report offered)
     uint64_t running_checked = 0;
     std::string mods_text, pack_text;  // (the left column's summary: counted at the start and after the setup)
     auto count = [&]() {
@@ -1431,6 +1432,8 @@ int main(int argc, char **argv) {
         if (SDL_GetTicks() - running_checked > 1000 || !running_checked) {  // (once a second)
             running_checked = SDL_GetTicks();
             running = game_running();
+            // (the game left running.flag behind: it crashed or was killed - runtime/main.c)
+            crashed = !running && SDL_GetPathInfo("running.flag", nullptr);
         }
         if (!ask_shortcut && !confirm_quit && !spec_warn && !running && !in_setup && !in_tex && !in_tools)
             settings_panel_before_frame(open);
@@ -1446,6 +1449,36 @@ int main(int argc, char **argv) {
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
+
+        if (crashed && !running && !ask_shortcut && !in_setup && !in_tex && !in_tools) {  // the game crashed: a report?
+            float bw2 = std::min(760 * scale, (float)w - pad * 2);
+            ImGui::SetNextWindowPos(ImVec2(w * .5f, 14 * scale), ImGuiCond_Always, ImVec2(.5f, 0));
+            ImGui::SetNextWindowSize(ImVec2(bw2, 0));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18 * scale, 12 * scale));
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(.25f, .07f, .05f, .95f));
+            ImGui::Begin("##crashed", nullptr,
+                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .85f, .6f, 1));
+            ImGui::TextWrapped("%s", tr("The game closed unexpectedly. A problem report helps find why: it has the logs of that run (nothing is sent anywhere; post it yourself on the GitHub Issues page)."));
+            ImGui::PopStyleColor();
+            float b2 = (ImGui::GetContentRegionAvail().x - 8 * scale) * .5f, bh2 = ImGui::GetFrameHeight() * 1.3f;
+            if (hunter_button("crash.report", tr("Make a problem report"), ImVec2(b2, bh2), true, true, scale)) {
+                SDL_RemovePath("running.flag");
+                crashed = false;
+                if (settings_panel_dirty()) settings_panel_save_now();
+                in_tools = true;
+                tools.begin();
+                tools.tab = 4;
+            }
+            ImGui::SameLine(0, 8 * scale);
+            if (hunter_button("crash.close", tr("Close"), ImVec2(b2, bh2), false, true, scale))
+                SDL_RemovePath("running.flag"), crashed = false;
+            ImGui::End();
+            ImGui::PopStyleColor();
+            ImGui::PopStyleVar();
+        }
 
         if (ask_shortcut) {  // the first start: a desktop shortcut? (its name can be changed)
             float dw = std::min(620 * scale, (float)w - pad * 2);

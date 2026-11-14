@@ -548,6 +548,7 @@ static inline const char *settings_text_ko(const char *english) {
         {"Makes one .zip with what is needed to find a problem: the logs, the settings and this PC's details. The multiplayer address and key and your Windows user name are left out. Attach it to an issue on GitHub.",
          "문제를 찾는 데 필요한 것(로그, 설정, 이 PC의 사양)을 .zip 하나로 만듭니다. 멀티플레이 주소와 매칭 키, Windows 사용자 이름은 빠집니다. GitHub Issues에 첨부해 주세요."},
         {"Make a problem report", "문제 보고 파일 만들기"},
+        {"The game closed unexpectedly. A problem report helps find why: it has the logs of that run (nothing is sent anywhere; post it yourself on the GitHub Issues page).", "게임이 비정상적으로 종료됐습니다. 문제 보고 파일을 만들면 원인을 찾는 데 도움이 됩니다. 방금 실행의 기록이 들어가며, 어디로도 자동으로 보내지 않습니다. 깃허브 이슈에 직접 올려 주세요."},
         {"Made: ", "만들었습니다: "},
         {"Could not make the report: ", "보고 파일을 만들지 못했습니다: "},
         {"Open the reports folder", "보고 폴더 열기"},

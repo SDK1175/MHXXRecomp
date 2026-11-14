@@ -205,6 +205,8 @@ bool android_offer_import(const char *msg, char *data, size_t size);  // (runtim
 void android_game_folder(char *out, size_t size);
 #endif
 
+static void remove_running_flag(void) { remove("running.flag"); }
+
 int main(int argc, char **argv) {
     for (int i = 1; i < argc; ++i) {
         if (!strncmp(argv[i], "--recomp-wait=", 14)) {
@@ -260,6 +262,13 @@ int main(int argc, char **argv) {
     crash_handler_install();
     ui_init();
 #ifndef __ANDROID__
+    // running.flag beside the game while it runs, gone when it quits as it should (exit, the menu, closing the window):
+    // left there, the launcher knows the game crashed or was killed and offers a problem report
+    {
+        FILE *f = fopen("running.flag", "w");
+        if (f) fprintf(f, "%s\n", MHGU_VERSION), fclose(f);
+        atexit(remove_running_flag);
+    }
     engine_modules_init(MHGU_VERSION);  // (the ones engine_modules/enabled.txt lists: runtime/engine_module.c)
     update_check_start();  // (a newer release noted in the game: updatecheck.c)
 #endif
