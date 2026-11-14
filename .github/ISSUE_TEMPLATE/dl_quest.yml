@@ -1,0 +1,46 @@
+name: DL(이벤트) 퀘스트 한글 깨짐
+description: 다운로드 퀘스트가 깨지거나 번역이 안 되어 보일 때
+labels: ["dl-quest"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        스위치판 한글패치에는 DL 퀘스트 번역이 들어 있어서, **어디가** 깨지는지 알아야 고칠 수 있습니다.
+        **사진과 첨부 파일은 누구나 볼 수 있습니다.** 헌터 이름이나 길드 카드는 가려 주세요.
+  - type: dropdown
+    id: where
+    attributes:
+      label: 어디가 깨지나요?
+      multiple: true
+      options:
+        - 퀘스트 목록 (이름)
+        - 퀘스트 상세 설명 (의뢰 내용, 목표)
+        - 퀘스트 안 대사·메시지
+        - 다운로드 메뉴
+        - 기타
+    validations:
+      required: true
+  - type: textarea
+    id: shots
+    attributes:
+      label: 스크린샷과 퀘스트 이름
+      description: 깨진 화면 스크린샷을 이 칸에 끌어다 놓아 주세요. 퀘스트 이름을 알면 같이 적어 주세요.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 포팅 버전
+      placeholder: "0.10.2"
+    validations:
+      required: true
+  - type: textarea
+    id: save
+    attributes:
+      label: 세이브 (선택)
+      description: |
+        DL 퀘스트가 들어 있는 스위치판 세이브가 있으면 원인을 훨씬 빨리 찾을 수 있습니다.
+        `%APPDATA%\MHXXRecomp\save\save_0` 폴더의 system, system_backup을 zip으로 묶어 끌어다 놓아 주세요.
+        누구나 받을 수 있으니 괜찮으신 분만 올려 주세요. 받은 세이브는 확인에만 쓰고 지웁니다.
+    validations:
+      required: false

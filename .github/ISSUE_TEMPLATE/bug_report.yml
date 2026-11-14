@@ -1,67 +1,58 @@
-name: Bug report
-description: Something in MHGU Recomp doesn't work as it should.
+name: 버그 제보
+description: MHXX Recomp에서 무언가 제대로 동작하지 않을 때
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting! Mods can sometimes cause problems that look like recomp bugs, so it helps to say whether you were using any.
-        If a mod looks like the cause, you're welcome to also share it in the [mod directory](https://github.com/Oddity-git/MHGURecomp-mods/issues/new?template=report-mod-issue.yml), which keeps track of mod issues. That's entirely optional, and you can report it here either way.
-  - type: dropdown
-    id: mods
-    attributes:
-      label: Were any mods installed?
-      description: Turning them all off in the Mods tab of the settings menu (F1), or moving your `mods` folder away, and trying again is the quickest way to find out.
-      options:
-        - "No, it happens with no mods installed"
-        - "Yes, but it also happens with all mods turned off"
-        - "Yes, and it only happens with mods on"
-        - "Yes, haven't tried without them / not sure"
-    validations:
-      required: true
+        제보 감사합니다. 게임 파일, 키, 한글패치 파일은 올리지 마세요. 구하는 방법 질문에는 답하지 않습니다.
+        **사진과 첨부 파일은 누구나 볼 수 있습니다.** 헌터 이름이나 길드 카드는 가려 주세요.
   - type: textarea
     id: problem
     attributes:
-      label: What goes wrong?
-      description: What you expected and what happened instead.
+      label: 무엇이 잘못되나요?
+      description: 기대한 것과 실제로 일어난 것. 스크린샷은 이 칸에 끌어다 놓으면 올라갑니다.
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
-      label: Steps to reproduce
+      label: 어떻게 하면 생기나요?
+      placeholder: "예: 21:9로 놓고 동반자 보드 → 서포트 행동 장착에서 빈 칸을 고르면"
     validations:
       required: false
   - type: input
     id: version
     attributes:
-      label: MHGU Recomp version
-      placeholder: "0.10.7"
+      label: 포팅 버전
+      description: 런처 왼쪽의 버전 칸
+      placeholder: "0.10.2"
     validations:
       required: true
   - type: dropdown
-    id: platform
+    id: mods
     attributes:
-      label: Platform
+      label: 모드·플러그인을 쓰고 있나요? (한글패치 제외)
       options:
-        - Windows
-        - Linux
-        - Steam Deck
+        - "아니요"
+        - "예, 하지만 모두 꺼도 생깁니다"
+        - "예, 켰을 때만 생깁니다"
+        - "예, 꺼 보지는 않았습니다"
     validations:
       required: true
   - type: input
     id: hardware
     attributes:
-      label: Hardware
-      description: CPU and GPU, and on Linux the distribution.
-      placeholder: "Ryzen 5 5600, RX 6700 XT, Fedora 44"
+      label: 그래픽카드 (선택)
+      placeholder: "RTX 3070 Ti / RX 9070 XT"
     validations:
       required: false
   - type: textarea
-    id: logs
+    id: report
     attributes:
-      label: Log
+      label: 문제 보고 파일
       description: |
-        Attach `log.txt` by dragging it into this box. It's next to `mhgurecomp.exe` (on Linux, next to `mhgurecomp`).
-        The game replaces it every time it starts, so copy it right after the problem, before starting the game again.
+        런처 → **도구 → 문제 보고**로 만든 zip을 이 칸에 끌어다 놓아 주세요. 로그, 설정, PC 사양이 들어 있습니다(멀티 주소와 윈도우 사용자 이름은 빠짐).
+        게임 로그는 게임을 켤 때마다 새로 쓰이니, 문제가 생긴 직후 게임을 다시 켜기 전에 만들어 주세요.
     validations:
       required: false
