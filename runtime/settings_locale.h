@@ -11,6 +11,8 @@ static inline const char *settings_text_ko(const char *english) {
         {"Graphics & Audio", "그래픽 및 오디오"},
         {"Controls", "조작"},
         {"Network", "네트워크"},
+        {"Gyro", "자이로"},
+        {"The controller's motion sensors (DualShock 4, DualSense, Switch Pro Controller) go to the game, for its own gyro aiming: turn that on in the game's options too.", "패드의 모션 센서(듀얼쇼크 4, 듀얼센스, 스위치 프로 컨트롤러)를 게임에 넘겨, 게임의 자이로 조준에 씁니다. 게임 안 옵션에서도 자이로를 켜 주세요."},
         {"Misc", "기타"},
         {"Menu Options", "메뉴 옵션"},
         {"Mods", "모드"},

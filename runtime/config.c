@@ -65,6 +65,7 @@
     .combo_window = COMBO_LENIENT,                                                                  \
     .chat_key = "/",                                                                                \
     .menu_chord = 1,                                                                                \
+    .gyro = 1,                                                                                \
     /* [Mouse] */                                                                                   \
     .mouse_sensitivity = 1.0f,                                                                      \
     /* [Keybinds] */                                                                                \
@@ -294,6 +295,11 @@ static const char DEFAULT_INI[] =
     "; the settings menu. Turn it off to keep that combination for the game or a cheat: F1 still opens the menu\n"
     "; Default: On\n"
     "MenuChord = On\n"
+    "\n"
+    "; The controller's motion sensors (gyro) to the game, for its own gyro aiming (turn it on in the game's options).\n"
+    "; A controller that has them: DualShock 4, DualSense, Switch Pro Controller\n"
+    "; Default: On\n"
+    "Gyro = On\n"
     "\n"
     "; The key that opens a line of chat, anywhere (in a quest too): a key's name as the settings menu shows it, or\n"
     "; nothing for none\n"
@@ -672,6 +678,7 @@ const ConfigSetting g_settings[] = {
     {"Controls", "MenuConfirm", SET_CHOICE, F(menu_confirm), 0, 0, 0, "Original,South,East", NULL, false, ERR_CONFIRM},
     ON_OFF("Controls", "BackgroundInput", background_input, false),
     ON_OFF("Controls", "MenuChord", menu_chord, false),
+    ON_OFF("Controls", "Gyro", gyro, false),
     {"Controls", "ComboInputWindow", SET_CHOICE, F(combo_window), 0, 0, 0, "Lenient,Strict", NULL, false, ERR_MISC},
     {"Controls", "ChatKey", SET_TEXT, F(chat_key), sizeof g_config.chat_key, 0, 0, NULL, NULL, false, ERR_MISC},
     {"Mouse", "MouseSensitivity", SET_FLOAT, F(mouse_sensitivity), 0, 0.1f, 10.0f, NULL, NULL, false, ERR_VIEW},

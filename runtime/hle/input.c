@@ -126,7 +126,9 @@ HLE_FUNC("_ZN2nn3hid21ShowControllerSupportEPNS0_27ControllerSupportResultInfoER
     RET(0);
 }
 
-// ---- six-axis sensors: present, always at rest
+// ---- six-axis sensors: the controller's gyro and accelerometer when it has them (runtime/motion.c), else at rest
+void motion_state(uint8_t *s, int64_t sampling);
+bool motion_at_rest(void);
 HLE_FUNC("_ZN2nn3hid23GetSixAxisSensorHandlesEPNS0_19SixAxisSensorHandleEiRKjNS_4util10BitFlagSetILi32ENS0_12NpadStyleTagEEE", hid_sixaxis_handles) {
     int n = (int)ARG(1) < 2 ? (int)ARG(1) : 2;
     uint32_t id = LD32(ARG(2));
@@ -135,14 +137,10 @@ HLE_FUNC("_ZN2nn3hid23GetSixAxisSensorHandlesEPNS0_19SixAxisSensorHandleEiRKjNS_
 }
 HLE_FUNC("_ZN2nn3hid18StartSixAxisSensorERKNS0_19SixAxisSensorHandleE", hid_sixaxis_start) { (void)c; }
 HLE_FUNC("_ZN2nn3hid17StopSixAxisSensorERKNS0_19SixAxisSensorHandleE", hid_sixaxis_stop) { (void)c; }
-HLE_FUNC("_ZN2nn3hid21IsSixAxisSensorAtRestERKNS0_19SixAxisSensorHandleE", hid_sixaxis_rest) { RET(1); }
+HLE_FUNC("_ZN2nn3hid21IsSixAxisSensorAtRestERKNS0_19SixAxisSensorHandleE", hid_sixaxis_rest) { RET(motion_at_rest()); }
 HLE_FUNC("_ZN2nn3hid21GetSixAxisSensorStateEPNS0_18SixAxisSensorStateERKNS0_19SixAxisSensorHandleE", hid_sixaxis_state) {
-    uint8_t *s = ARGP(0);
-    memset(s, 0, 0x60);
     int64_t n = __atomic_add_fetch(&sampling, 1, __ATOMIC_RELAXED);
-    memcpy(s + 8, &n, 8);
-    float one = 1.0f;  // acceleration 1 g down, identity orientation
-    memcpy(s + 0x18 + 8, &one, 4);
+    motion_state(ARGP(0), n);
 }
 
 // ---- vibration: the SDK's vibration player / mixer graph stays recompiled and sends its values every 5 ms through

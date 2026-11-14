@@ -366,6 +366,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(confirm_exit);
     SAME(show_fps);
     SAME(menu_chord);
+    SAME(gyro);
     SAME(show_battery);
     SAME(updates);
     SAME(hp.village);
@@ -950,6 +951,7 @@ void reset_section() {
         c.game_buttons = f.game_buttons;
         c.background_input = f.background_input;
         c.menu_chord = f.menu_chord;
+        c.gyro = f.gyro;
         c.combo_window = f.combo_window;
         c.mouse_sensitivity = f.mouse_sensitivity;
         SDL_strlcpy(c.chat_key, f.chat_key, sizeof c.chat_key);
@@ -1422,6 +1424,8 @@ std::vector<Row> main_rows() {
         add_choice(r, "gamebuttons", "Game button prompts", c.game_buttons, {tr("Auto"), "Switch", "Xbox", "PlayStation", tr("Keyboard")},
                    [](int v) { c.game_buttons = v; }, ini("GameButtons"));
         r.back().help = tr("The buttons shown in the game's own prompts and HUD. Each shows the controller button it is pressed with (Controller buttons), or with Keyboard its key (Keybinds). Auto: as the controller connected, the keyboard without one.");
+        add_bool(r, "gyro", "Gyro", &c.gyro, ini("Gyro"));
+        r.back().help = tr("The controller's motion sensors (DualShock 4, DualSense, Switch Pro Controller) go to the game, for its own gyro aiming: turn that on in the game's options too.");
         add_bool(r, "background", "Background input", &c.background_input, ini("BackgroundInput"));
         add_choice(r, "combo", "Combo input window", c.combo_window, {tr("Lenient"), tr("Strict")},
                    [](int v) { c.combo_window = v; }, ini("ComboInputWindow"));

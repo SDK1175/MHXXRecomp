@@ -820,6 +820,7 @@ static bool pad_capture_update(void) {
 void host_input_update(void) {
     if (nscript < 0) script_parse();
     rumble_update();
+    { void motion_update(SDL_Gamepad *); motion_update(pad); }  // (the gyro: runtime/motion.c)
     control_poll();
     quickhunt_poll();  // (debug, MHGU_QUICKHUNT: runtime/hle/quickhunt.c)
     textinput_update();

@@ -64,6 +64,7 @@ typedef struct {
     int msaa;                 // samples of the 3D scene: 1 (off), 2, 4, 8
     int fxaa;                 // the game's own FXAA pass: 1 on, 0 off
     int face_buttons;         // FACE_*: controller face buttons by position (the Switch layout) or by their labels
+    int gyro;                 // [Controls] Gyro: the controller's motion sensors to the game (runtime/motion.c)
     int game_buttons;         // GAME_BUTTONS_*: the game's button prompts (Auto: as the controller at the start)
     int ldn_port;             // local play: the port a hosted hub listens on (TCP; UDP for LAN search)
     char ldn_join[256];       // local play: hosts to search besides the LAN (host[:port], comma separated)
