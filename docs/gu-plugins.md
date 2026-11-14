@@ -16,8 +16,8 @@
 | MapAssist | Katt404 | ✅ 동작 | KatLib 필요 |
 | UIScale | | ✅ 동작 (사용자 제보) | HUD·UI 크기 조절 |
 | Confirm on X | | ✅ 동작 (사용자 제보) | 메뉴의 결정/취소 버튼 바꾸기 |
-| MHGU DPS Meter | | 🔵 사용 중인 사용자 있음 | 자세한 동작은 아직 확인 전 |
-| Better Skill Info | | 🔵 사용 중인 사용자 있음 | 자세한 동작은 아직 확인 전 |
+| MHGU DPS Meter | | ✅ 동작 (사용자 제보) | |
+| Better Skill Info | | ✅ 동작 (사용자 제보) | |
 | Faster Field Hunter | Ellipse1638 | 🟡 대부분 동작 | 전투 중에만 스태미나 소모 등 동작. **모두 채집**(설정은 켜지지만 효과 없음)과 **아이템 아이콘**(스스로 꺼짐)은 덥크에서 안 됨 |
 
 확인 전: FF14-style Damage Text, Key Quest Markers, Armor Fusion(세이브 관련)
