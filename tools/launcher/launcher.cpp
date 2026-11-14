@@ -1301,7 +1301,16 @@ int main(int argc, char **argv) {
     SDL_Window *win = nullptr;
     SDL_Renderer *rd = nullptr;
     std::string title = std::string("MHXX Recomp - ") + tr("Launcher");
-    if (!SDL_CreateWindowAndRenderer(title.c_str(), (int)(1280 * scale), (int)(800 * scale),
+    // (900 tall: the left panel's notes - a crash, the game files - have room above Start game; less on a smaller
+    // screen, its usable area's 90%)
+    int win_w = (int)(1280 * scale), win_h = (int)(900 * scale);
+    {
+        SDL_Rect use;
+        if (SDL_GetDisplayUsableBounds(SDL_GetPrimaryDisplay(), &use)) {
+            win_w = std::min(win_w, use.w * 9 / 10), win_h = std::min(win_h, use.h * 9 / 10);
+        }
+    }
+    if (!SDL_CreateWindowAndRenderer(title.c_str(), win_w, win_h,
                                      SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY, &win, &rd)) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "MHXX Recomp", SDL_GetError(), nullptr);
         return 1;
@@ -1687,7 +1696,7 @@ int main(int argc, char **argv) {
         divider(dl, cw, scale);
         if (crashed && !running) {  // the game crashed (it left running.flag: runtime/main.c): a problem report?
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .62f, .45f, 1));
-            ImGui::TextWrapped("%s", tr("The game closed unexpectedly. A problem report helps find why: it has the logs of that run (nothing is sent anywhere; post it yourself on the GitHub Issues page)."));
+            ImGui::TextWrapped("%s", tr("The game closed unexpectedly. A problem report (nothing is sent by itself) on GitHub Issues helps find why."));
             ImGui::PopStyleColor();
             float b2 = (cw - 8 * scale) * .5f, bh2 = ImGui::GetFrameHeight() * 1.3f;
             if (hunter_button("crash.report", tr("Make a problem report"), ImVec2(b2, bh2), true, !confirm_quit, scale)) {
