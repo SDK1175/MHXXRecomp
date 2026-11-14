@@ -1450,36 +1450,6 @@ int main(int argc, char **argv) {
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
 
-        if (crashed && !running && !ask_shortcut && !in_setup && !in_tex && !in_tools) {  // the game crashed: a report?
-            float bw2 = std::min(760 * scale, (float)w - pad * 2);
-            ImGui::SetNextWindowPos(ImVec2(w * .5f, 14 * scale), ImGuiCond_Always, ImVec2(.5f, 0));
-            ImGui::SetNextWindowSize(ImVec2(bw2, 0));
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18 * scale, 12 * scale));
-            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(.25f, .07f, .05f, .95f));
-            ImGui::Begin("##crashed", nullptr,
-                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                             ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-                             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing);
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .85f, .6f, 1));
-            ImGui::TextWrapped("%s", tr("The game closed unexpectedly. A problem report helps find why: it has the logs of that run (nothing is sent anywhere; post it yourself on the GitHub Issues page)."));
-            ImGui::PopStyleColor();
-            float b2 = (ImGui::GetContentRegionAvail().x - 8 * scale) * .5f, bh2 = ImGui::GetFrameHeight() * 1.3f;
-            if (hunter_button("crash.report", tr("Make a problem report"), ImVec2(b2, bh2), true, true, scale)) {
-                SDL_RemovePath("running.flag");
-                crashed = false;
-                if (settings_panel_dirty()) settings_panel_save_now();
-                in_tools = true;
-                tools.begin();
-                tools.tab = 4;
-            }
-            ImGui::SameLine(0, 8 * scale);
-            if (hunter_button("crash.close", tr("Close"), ImVec2(b2, bh2), false, true, scale))
-                SDL_RemovePath("running.flag"), crashed = false;
-            ImGui::End();
-            ImGui::PopStyleColor();
-            ImGui::PopStyleVar();
-        }
-
         if (ask_shortcut) {  // the first start: a desktop shortcut? (its name can be changed)
             float dw = std::min(620 * scale, (float)w - pad * 2);
             ImGui::SetNextWindowPos(ImVec2(w * .5f, h * .5f), ImGuiCond_Always, ImVec2(.5f, .5f));
@@ -1715,9 +1685,27 @@ int main(int argc, char **argv) {
             }
         }
         divider(dl, cw, scale);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.88f, .9f, .95f, 1));
-        ImGui::TextWrapped("%s", tr("Settings applied when the game starts. Everything else is in the game's settings menu (F1)."));
-        ImGui::PopStyleColor();
+        if (crashed && !running) {  // the game crashed (it left running.flag: runtime/main.c): a problem report?
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .62f, .45f, 1));
+            ImGui::TextWrapped("%s", tr("The game closed unexpectedly. A problem report helps find why: it has the logs of that run (nothing is sent anywhere; post it yourself on the GitHub Issues page)."));
+            ImGui::PopStyleColor();
+            float b2 = (cw - 8 * scale) * .5f, bh2 = ImGui::GetFrameHeight() * 1.3f;
+            if (hunter_button("crash.report", tr("Make a problem report"), ImVec2(b2, bh2), true, !confirm_quit, scale)) {
+                SDL_RemovePath("running.flag");
+                crashed = false;
+                if (settings_panel_dirty()) settings_panel_save_now();
+                in_tools = true;
+                tools.begin();
+                tools.tab = 4;
+            }
+            ImGui::SameLine(0, 8 * scale);
+            if (hunter_button("crash.close", tr("Close"), ImVec2(b2, bh2), false, !confirm_quit, scale))
+                SDL_RemovePath("running.flag"), crashed = false;
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.88f, .9f, .95f, 1));
+            ImGui::TextWrapped("%s", tr("Settings applied when the game starts. Everything else is in the game's settings menu (F1)."));
+            ImGui::PopStyleColor();
+        }
         if (!have_game) {
             ImGui::Spacing();
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, .55f, .4f, 1));
