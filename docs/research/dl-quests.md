@@ -1,6 +1,6 @@
 # Download (event / challenge) quests and the Korean patch
 
-Status: open. Notes so far (2026-11-14).
+Status: fixed in runtime/services/dlquest.c (0.10.3). Layout from a player's save (issue #1, 2026-11-14).
 
 ## What the reports are
 Players say DL quests show "broken" or untranslated text with the Korean patch.
@@ -29,3 +29,10 @@ Players say DL quests show "broken" or untranslated text with the Korean patch.
   in each download slot that has one, so a save's Japanese copies show the patch's text. Nothing is added.
 - Needs the slot layout: a Switch save with downloads (issue template "DL(이벤트) 퀘스트 한글 깨짐"), or following
   the code from main+0x151ce0 / the BCAT handler to where the ARC is copied into the save.
+
+## Found (issue #1's save: 133 event + 40 challenge downloads)
+- 200 slots from file offset 0xf898, 0x1400 apart (160 event, then 40 challenge), `[u32 id][u32 size][ARC]`,
+  an empty slot's id 0. After them (0x109898..) other records.
+- All 173 copies differ from the patch's: Japanese. So the save's copies are the cause.
+- runtime/services/dlquest.c puts the RomFS (mod) file of the same id in each slot as the game reads `system`, when
+  it fits a slot (the game's own RomFS quest files are ~34 KB: without a mod nothing changes).

@@ -225,6 +225,10 @@ static void file(Service *s, IpcReq *req, IpcResp *resp) {
             resp->result = errno_result();
         }
         OUT(int64_t, 0) = n < 0 ? 0 : n;
+        if (n > 0 && strstr(f->path, "/save_")) {  // (dlquest.c: download quests with the mods' files)
+            void dlquest_patch(const char *, int, int64_t, uint8_t *, size_t);
+            dlquest_patch(f->path, f->fd, off, BUFP(b), (size_t)n);
+        }
         if (ENV("MHGU_LOG_FILES"))
             LOG("[fs] read %s +%llx %llx -> guest %08x\n", f->path, (unsigned long long)off, (unsigned long long)size,
                 (uint32_t)b->addr);
