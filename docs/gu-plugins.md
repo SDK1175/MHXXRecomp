@@ -14,9 +14,13 @@
 | Better Inputs | Fexty12573 | ✅ 동작 | 아이템 바·보상 상자·교역 상자 연속 입력, 메뉴 닫기 대기 |
 | KatLib | Katt404 | ✅ 동작 | 다른 플러그인이 쓰는 라이브러리(폴더 이름 `00_KatLib` 그대로) |
 | MapAssist | Katt404 | ✅ 동작 | KatLib 필요 |
+| UIScale | | ✅ 동작 (사용자 제보) | HUD·UI 크기 조절 |
+| Confirm on X | | ✅ 동작 (사용자 제보) | 메뉴의 결정/취소 버튼 바꾸기 |
+| MHGU DPS Meter | | 🔵 사용 중인 사용자 있음 | 자세한 동작은 아직 확인 전 |
+| Better Skill Info | | 🔵 사용 중인 사용자 있음 | 자세한 동작은 아직 확인 전 |
 | Faster Field Hunter | Ellipse1638 | 🟡 대부분 동작 | 전투 중에만 스태미나 소모 등 동작. **모두 채집**(설정은 켜지지만 효과 없음)과 **아이템 아이콘**(스스로 꺼짐)은 덥크에서 안 됨 |
 
-확인 전: FF14-style Damage Text, MHGU DPS Meter, Key Quest Markers, UIScale, Armor Fusion(세이브 관련)
+확인 전: FF14-style Damage Text, Key Quest Markers, Armor Fusion(세이브 관련)
 
 데이터 모드(텍스처·arc 파일, 예: Xbox Controller Layout)는 아직 지원하지 않습니다. 영문판과 덥크의 파일 위치가 달라
 넣어도 적용되지 않습니다.
