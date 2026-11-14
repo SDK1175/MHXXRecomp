@@ -20,7 +20,7 @@
 | Better Skill Info | | ✅ 동작 (사용자 제보) | |
 | Faster Field Hunter | Ellipse1638 | 🟡 대부분 동작 | 전투 중에만 스태미나 소모 등 동작. **모두 채집**(설정은 켜지지만 효과 없음)과 **아이템 아이콘**(스스로 꺼짐)은 덥크에서 안 됨 |
 
-확인 전: FF14-style Damage Text, Key Quest Markers, Armor Fusion(세이브 관련)
+확인 전: Sprint/Weapon Trigger Split(Katt404, KatLib 필요: 달리기와 무기 조작을 다른 트리거로 나눔, 월드식 조작), FF14-style Damage Text, Key Quest Markers, Armor Fusion(세이브 관련)
 
 데이터 모드(텍스처·arc 파일, 예: Xbox Controller Layout)는 아직 지원하지 않습니다. 영문판과 덥크의 파일 위치가 달라
 넣어도 적용되지 않습니다.
