@@ -205,7 +205,9 @@ static void *exit_watchdog(void *code) {
     fprintf(stderr, "[exit] teardown still running after 5 s: ending the process\n");
     plat_hard_exit((int)(intptr_t)code);
 }
+void running_flag_clear(void);  // (main.c: the game quits as it should)
 _Noreturn void plat_exit(int code) {
+    running_flag_clear();
     pthread_t t;
     if (!pthread_create(&t, NULL, exit_watchdog, (void *)(intptr_t)code)) pthread_detach(t);
     exit(code);

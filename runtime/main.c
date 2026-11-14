@@ -2,7 +2,9 @@
 // main thread.
 #include "game/game.h"
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -205,7 +207,13 @@ bool android_offer_import(const char *msg, char *data, size_t size);  // (runtim
 void android_game_folder(char *out, size_t size);
 #endif
 
-static void remove_running_flag(void) { remove("running.flag"); }
+// running.flag (below): its full path, so it goes even if the folder changes; cleared from plat_exit too, before the
+// teardown (exit's other handlers can hang until the 5 s watchdog ends the process, and this one then never runs)
+static char g_running_flag[1200];
+void running_flag_clear(void) {
+    if (g_running_flag[0]) remove(g_running_flag), g_running_flag[0] = 0;
+}
+static void remove_running_flag(void) { running_flag_clear(); }
 
 int main(int argc, char **argv) {
     for (int i = 1; i < argc; ++i) {
@@ -265,7 +273,10 @@ int main(int argc, char **argv) {
     // running.flag beside the game while it runs, gone when it quits as it should (exit, the menu, closing the window):
     // left there, the launcher knows the game crashed or was killed and offers a problem report
     {
-        FILE *f = fopen("running.flag", "w");
+        char cwd[1100];
+        if (getcwd(cwd, sizeof cwd)) snprintf(g_running_flag, sizeof g_running_flag, "%s/running.flag", cwd);
+        else snprintf(g_running_flag, sizeof g_running_flag, "running.flag");
+        FILE *f = fopen(g_running_flag, "w");
         if (f) fprintf(f, "%s\n", MHGU_VERSION), fclose(f);
         atexit(remove_running_flag);
     }
