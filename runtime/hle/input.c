@@ -135,12 +135,16 @@ HLE_FUNC("_ZN2nn3hid23GetSixAxisSensorHandlesEPNS0_19SixAxisSensorHandleEiRKjNS_
     for (int i = 0; i < n; i++) ST32(ARG(0) + 4u * (uint32_t)i, (id & 0xFF) << 8 | (uint32_t)i | 0x03000000u);
     RET(n);
 }
-HLE_FUNC("_ZN2nn3hid18StartSixAxisSensorERKNS0_19SixAxisSensorHandleE", hid_sixaxis_start) { (void)c; }
+static int sixaxis_logged;
+HLE_FUNC("_ZN2nn3hid18StartSixAxisSensorERKNS0_19SixAxisSensorHandleE", hid_sixaxis_start) {
+    if (!(__atomic_fetch_or(&sixaxis_logged, 1, __ATOMIC_RELAXED) & 1)) LOG("[input] the game starts its motion sensor (%08x)\n", LD32(ARG(0)));
+}
 HLE_FUNC("_ZN2nn3hid17StopSixAxisSensorERKNS0_19SixAxisSensorHandleE", hid_sixaxis_stop) { (void)c; }
 HLE_FUNC("_ZN2nn3hid21IsSixAxisSensorAtRestERKNS0_19SixAxisSensorHandleE", hid_sixaxis_rest) { RET(motion_at_rest()); }
 HLE_FUNC("_ZN2nn3hid21GetSixAxisSensorStateEPNS0_18SixAxisSensorStateERKNS0_19SixAxisSensorHandleE", hid_sixaxis_state) {
     int64_t n = __atomic_add_fetch(&sampling, 1, __ATOMIC_RELAXED);
     motion_state(ARGP(0), n);
+    if (!(__atomic_fetch_or(&sixaxis_logged, 2, __ATOMIC_RELAXED) & 2)) LOG("[input] the game reads its motion sensor\n");
 }
 
 // ---- vibration: the SDK's vibration player / mixer graph stays recompiled and sends its values every 5 ms through
