@@ -1,6 +1,7 @@
 // The controller's motion sensors (gyro, accelerometer) for the game's six-axis sensor (hid GetSixAxisSensorState:
 // runtime/hle/input.c), from a controller that has them (DualShock 4, DualSense, Switch Pro, Joy-Con: SDL3 reads
-// them over USB and Bluetooth). MHXX aims the bowguns and the bow with it when its own Gyro option is on.
+// them over USB and Bluetooth). MHXX starts and reads the sensor but has no gyro aiming of its own (that came with
+// Rise): this is the Switch's sensor as it would be, for mods (Forge plugins) that read nn::hid six-axis.
 //
 // Read on the window thread each frame (host_input_update), the orientation integrated there, the state the game
 // reads copied out under a lock. Without such a controller (an Xbox one, a keyboard), or [Controls] Gyro = Off, the

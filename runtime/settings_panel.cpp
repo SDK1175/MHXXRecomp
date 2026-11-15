@@ -1424,8 +1424,6 @@ std::vector<Row> main_rows() {
         add_choice(r, "gamebuttons", "Game button prompts", c.game_buttons, {tr("Auto"), "Switch", "Xbox", "PlayStation", tr("Keyboard")},
                    [](int v) { c.game_buttons = v; }, ini("GameButtons"));
         r.back().help = tr("The buttons shown in the game's own prompts and HUD. Each shows the controller button it is pressed with (Controller buttons), or with Keyboard its key (Keybinds). Auto: as the controller connected, the keyboard without one.");
-        add_bool(r, "gyro", "Gyro", &c.gyro, ini("Gyro"));
-        r.back().help = tr("The controller's motion sensors (DualShock 4, DualSense, Switch Pro Controller) go to the game, for its own gyro aiming: turn that on in the game's options too.");
         add_bool(r, "background", "Background input", &c.background_input, ini("BackgroundInput"));
         add_choice(r, "combo", "Combo input window", c.combo_window, {tr("Lenient"), tr("Strict")},
                    [](int v) { c.combo_window = v; }, ini("ComboInputWindow"));
