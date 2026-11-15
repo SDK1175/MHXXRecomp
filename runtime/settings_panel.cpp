@@ -9,6 +9,7 @@
 #include "keymap.h"
 #include "modorder.h"
 #include "net/net.h"
+#include "game/addr.h"
 #include "voice.h"
 #include "imgui_internal.h"
 #include <SDL3/SDL.h>
@@ -1455,10 +1456,16 @@ std::vector<Row> main_rows() {
     case 4: {
         const char *per_quest =
             tr("HP multipliers for single quests, by their quest ID: in those quests they are used instead of the ones above.");
-        header(r, "hub.header", tr("Hub"));
-        add_bool(r, "sync", "Sync small monsters", &c.sync_small_monsters, ini("SyncSmallMonsters"));
-        add_bool(r, "village", "Village quests in Hub", &c.village_in_hub, ini("VillageQuestsInHub"));
-        add_bool(r, "urgent", "Urgent quests count for all", &c.share_urgent, ini("ShareUrgentCredit"));
+        // (MHGU Recomp's features: a row only once MHXX has the feature's addresses, runtime/game/addr.h)
+        if (!EMSYNC_PORTED && !VILLAGEHUB_PORTED && !URGENTCREDIT_PORTED && !HPSCALE_PORTED) {
+            header(r, "misc.none", tr("Nothing here yet: these features of the MHGU port are not in MHXX yet."));
+            break;
+        }
+        if (EMSYNC_PORTED || VILLAGEHUB_PORTED || URGENTCREDIT_PORTED) header(r, "hub.header", tr("Hub"));
+        if (EMSYNC_PORTED) add_bool(r, "sync", "Sync small monsters", &c.sync_small_monsters, ini("SyncSmallMonsters"));
+        if (VILLAGEHUB_PORTED) add_bool(r, "village", "Village quests in Hub", &c.village_in_hub, ini("VillageQuestsInHub"));
+        if (URGENTCREDIT_PORTED) add_bool(r, "urgent", "Urgent quests count for all", &c.share_urgent, ini("ShareUrgentCredit"));
+        if (!HPSCALE_PORTED) break;
         header(r, "hp.header", tr("Monster HP Scaling"));
         for (int i = 0; i < 4; i++)
             number(r, "hp." + std::to_string(i), std::to_string(i + 1) + " " + tr(i == 0 ? "Hunter" : "Hunters"), &c.hp.scale[i],

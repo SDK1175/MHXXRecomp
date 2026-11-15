@@ -292,6 +292,7 @@ static inline const char *settings_text_ko(const char *english) {
         {"The host did not answer through the hub server.", "호스트가 허브 서버를 통해 응답하지 않았습니다."},
         {"Sync small monsters", "소형 몬스터 동기화"},
         {"Village quests in Hub", "집회소에서 마을 퀘스트"},
+        {"Nothing here yet: these features of the MHGU port are not in MHXX yet.", "아직 없음: 영문판 포팅의 이 기능들은 아직 XX에 들어오지 않았습니다."},
         {"Urgent quests count for all", "긴급 퀘스트 클리어 공유"},
         {"Discord Rich Presence", "디스코드 상태 표시"},
         {"Show hunter name and HR", "헌터 이름과 HR 표시"},
