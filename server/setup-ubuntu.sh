@@ -18,7 +18,7 @@ echo "== build"
 SRC=/opt/mhxx-hubserver-src
 if [ -d "$SRC/.git" ]; then git -C "$SRC" fetch -q --depth 1 origin "$BRANCH" && git -C "$SRC" reset -q --hard FETCH_HEAD
 else rm -rf "$SRC" && git clone -q --depth 1 -b "$BRANCH" "$REPO" "$SRC"; fi
-(cd "$SRC/server" && GOFLAGS=-mod=mod go build -o /usr/local/bin/mhxx-hubserver .)
+(cd "$SRC/server" && CGO_ENABLED=0 GOFLAGS=-mod=mod go build -o /usr/local/bin/mhxx-hubserver .)
 
 echo "== service"
 cat > /etc/systemd/system/mhxx-hubserver.service <<UNIT
