@@ -127,14 +127,14 @@ typedef struct {
     char save_dir[256];       // [Android] SaveFolder: the folder holding the save (save_0/), "" the app's own (fs.c)
     char game_dir[256];       // [Android] GameFolder: the folder holding exefs/ and romfs/, "" the app's own (main.c)
 } Config;
-// The hub server used when ini Server is empty (runtime/net/ldn.c, server/): the project's public one (an Oracle
-// Cloud VM; a DuckDNS name, so it can move without a release). "" = no default.
+// The hub server used when ini Server is empty (runtime/net/ldn.c, server/): the project's public one (a VM; a DuckDNS
+// name, so it can move without a release). "" = no default.
 // Note: the below server address should ideally only be used by MHGURecomp, or any forks that intend to be fully network-compatible with it.
 // If you are going to use the below server address on Android or iOS (mobile), please ensure that the "default" matchmaking key for public play is passed as `public-phone` and not empty.
 // This is to ensure gameplay remains stable on PC, while still allowing players to opt into crossplay by specifying a matchmaking key themselves.
-// No default hub server yet (MHGU Recomp's is its author's, for MHGU): internet hubs need [Multiplayer] Server =
-// <host[:port]> (anyone can run server/), LAN and Join = work without one.
-#define LDN_DEFAULT_SERVER ""
+// MHXX Recomp's own (a VM in Seoul, docs/hub-server.md; MHGU Recomp's server is its author's, for MHGU). Server = Off:
+// none, LAN and Join = only.
+#define LDN_DEFAULT_SERVER "mhxx-kr.duckdns.org"
 enum { UPDATES_ASK, UPDATES_AUTO, UPDATES_OFF };
 enum { BATTERY_OFF, BATTERY_WITH_FPS, BATTERY_ALONE };
 enum { THEME_GOLD, THEME_BLUE, THEME_HUNTER, THEME_XX };  // [Application] Theme
