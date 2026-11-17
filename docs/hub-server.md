@@ -48,9 +48,21 @@ curl -fsSL https://raw.githubusercontent.com/SDK1175/MHXXRecomp/mhxx/server/setu
 
 확인: `systemctl status mhxx-hubserver` (active (running)이면 정상)
 
+## 1-A. iwinv (서울, 월 5,600원) — 지금 공식 서버
+
+- 콘솔 → 컴퓨트 → 가상 서버 → 생성하기: ZONE **KR1-Lite-Z01**(KR1-ZONE은 1GB 상품이 자주 품절), 하드웨어 **vgna_1_n**,
+  운영체제 **Ubuntu 26.04**, 네트워크 **Direct IP 방식**, 블록스토리지·NAT GATEWAY·SSH Key·Script 없음
+- 트래픽 하루 20GB(월 620GB) 포함. 실제 사용량은 2명이 1시간에 약 14MB였습니다.
+- 접속 정보(IP, 계정, 비밀번호)는 메일과 문자로 옵니다. 처음 접속하면 `passwd`로 **비밀번호부터 바꿉니다.**
+- Lite 존에는 iwinv 방화벽(ELCAP)이 없어서, 설치할 때 서버 안의 방화벽으로 나머지 포트를 닫습니다:
+  ```
+  curl -fsSL https://raw.githubusercontent.com/SDK1175/MHXXRecomp/mhxx/server/setup-ubuntu.sh | CLOSE_OTHERS=1 sh
+  ```
+  (root로 접속했을 때. 다른 계정이면 `| sudo CLOSE_OTHERS=1 sh`)
+
 ## 1-B. AWS 무료 플랜으로 만들기 (오라클 대신)
 
-지금 공식 서버(`mhxx-kr.duckdns.org`)는 이 방법으로 돌아갑니다.
+처음 테스트 서버(시드니)를 이 방법으로 만들었습니다.
 
 - AWS **무료 플랜**은 가입할 때 정해진 지역(이 계정은 **시드니**)에서만 쓸 수 있습니다. 서울을 쓰려면 유료 플랜으로 바꿔야 합니다.
 - 기간은 6개월 또는 크레딧(100달러 + 활동 보너스)을 다 쓸 때까지입니다. 크레딧이 떨어져도 자동으로 유료로 바뀌지 않고 계정이 멈춥니다. **5개월쯤에는 오라클로 옮기세요.**

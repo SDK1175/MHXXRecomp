@@ -44,6 +44,25 @@ echo "== firewall (the VM's own; Oracle's Security List is set in the console)"
 for proto in tcp udp; do
     iptables -C INPUT -p $proto --dport $PORT -j ACCEPT 2>/dev/null || iptables -I INPUT 5 -p $proto --dport $PORT -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -p $proto --dport $PORT -j ACCEPT
 done
+# CLOSE_OTHERS=1: a server with no firewall of its provider in front (iwinv's Lite zones): everything else in is
+# dropped, SSH (22) and the hub's port kept, for IPv4 and IPv6
+if [ "${CLOSE_OTHERS:-0}" = 1 ]; then
+    for t in iptables ip6tables; do
+        command -v $t >/dev/null || continue
+        $t -C INPUT -i lo -j ACCEPT 2>/dev/null || $t -I INPUT 1 -i lo -j ACCEPT
+        $t -C INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null ||
+            $t -I INPUT 2 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+        $t -C INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || $t -A INPUT -p tcp --dport 22 -j ACCEPT
+        for proto in tcp udp; do
+            $t -C INPUT -p $proto --dport $PORT -j ACCEPT 2>/dev/null || $t -A INPUT -p $proto --dport $PORT -j ACCEPT
+        done
+    done
+    iptables -C INPUT -p icmp -j ACCEPT 2>/dev/null || iptables -A INPUT -p icmp -j ACCEPT
+    command -v ip6tables >/dev/null && { ip6tables -C INPUT -p ipv6-icmp -j ACCEPT 2>/dev/null || ip6tables -A INPUT -p ipv6-icmp -j ACCEPT; }
+    iptables -P INPUT DROP
+    command -v ip6tables >/dev/null && ip6tables -P INPUT DROP
+    echo "   everything else in: dropped (SSH 22 and $PORT open)"
+fi
 netfilter-persistent save >/dev/null 2>&1 || true
 
 sleep 1
