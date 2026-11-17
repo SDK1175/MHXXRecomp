@@ -61,6 +61,20 @@ curl -fsSL https://raw.githubusercontent.com/SDK1175/MHXXRecomp/mhxx/server/setu
   (root로 접속했을 때. 다른 계정이면 `| sudo CLOSE_OTHERS=1 sh`)
 - SSH(22) 비밀번호 대입 공격 막기: `apt-get install -y fail2ban && systemctl enable --now fail2ban`
   (확인: `fail2ban-client status sshd`. 서버를 연 지 몇 시간 만에도 차단된 IP가 생깁니다.)
+- 비밀번호 대신 **열쇠 로그인**(권장): 내 PC PowerShell에서
+  ```
+  ssh-keygen -t ed25519 -f F:\MHXX_port\server\mhxx-hub-key
+  type F:\MHXX_port\server\mhxx-hub-key.pub | ssh root@<IP> "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+  ```
+  PowerShell 5는 보낼 때 줄 앞에 BOM, 끝에 CR을 붙여서 서버가 열쇠를 못 알아봅니다. 서버에서 지웁니다:
+  ```
+  sed -i '1s/^\xEF\xBB\xBF//; s/\r$//' /root/.ssh/authorized_keys
+  ```
+  `ssh -i F:\MHXX_port\server\mhxx-hub-key root@<IP>`로 비밀번호 없이 들어가지는 걸 확인한 **다음에** 비밀번호 로그인을 끕니다:
+  ```
+  printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin prohibit-password\n' > /etc/ssh/sshd_config.d/00-keys-only.conf && sshd -t && systemctl reload ssh
+  ```
+  열쇠 파일을 잃어버리면 iwinv 콘솔의 VNC VIEWER로 (비밀번호로) 들어갑니다.
 
 ## 1-B. AWS 무료 플랜으로 만들기 (오라클 대신)
 
