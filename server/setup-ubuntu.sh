@@ -11,7 +11,9 @@ BRANCH=mhxx
 
 echo "== packages"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
+# a mirror in the middle of its sync fails some index files (seen on mirror.kakao.com): try again, then go on with
+# what came; the install below says it if a package is really missing
+apt-get update -qq || { sleep 20; apt-get update -qq; } || echo "   (some package lists failed: going on)"
 apt-get install -y -qq golang-go git iptables-persistent >/dev/null
 
 echo "== build"
