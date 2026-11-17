@@ -59,6 +59,8 @@ curl -fsSL https://raw.githubusercontent.com/SDK1175/MHXXRecomp/mhxx/server/setu
   curl -fsSL https://raw.githubusercontent.com/SDK1175/MHXXRecomp/mhxx/server/setup-ubuntu.sh | CLOSE_OTHERS=1 sh
   ```
   (root로 접속했을 때. 다른 계정이면 `| sudo CLOSE_OTHERS=1 sh`)
+- SSH(22) 비밀번호 대입 공격 막기: `apt-get install -y fail2ban && systemctl enable --now fail2ban`
+  (확인: `fail2ban-client status sshd`. 서버를 연 지 몇 시간 만에도 차단된 IP가 생깁니다.)
 
 ## 1-B. AWS 무료 플랜으로 만들기 (오라클 대신)
 
