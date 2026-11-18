@@ -1,6 +1,6 @@
 # 허브 서버 관리 앱 설계
 
-> 상태: **1단계 구현됨**(`server/admin.go`, `server/admin/index.html`; 서버에는 아직 안 올림), 2단계부터 구현 전. 포팅 릴리즈와 별개인 운영 도구입니다(사용자는 아무것도 바꿀 필요 없음).
+> 상태: **1·2단계 구현됨**(`server/admin.go`, `admin_store.go`, `admin/index.html`; 서버에는 아직 안 올림), 3단계부터 구현 전. 포팅 릴리즈와 별개인 운영 도구입니다(사용자는 아무것도 바꿀 필요 없음).
 > 관련: [허브 서버 운영](hub-server.md), `server/` (허브 서버 코드), `runtime/net/ldn.c` (포팅 쪽 통신)
 
 ## 1. 목적

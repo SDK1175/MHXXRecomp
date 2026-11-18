@@ -24,6 +24,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	mrand "math/rand/v2"
@@ -132,6 +133,7 @@ type pair struct {
 	ip     string
 	joined time.Time
 	node   int
+	conns  [2]*net.TCPConn // host side, player side (closing either ends the link)
 }
 
 type ipState struct {
@@ -151,11 +153,26 @@ type Server struct {
 	ln      *net.TCPListener
 	udp     *net.UDPConn
 	changes changes // hubs, players or links changed (the admin view's live updates)
+
+	// the admin view: every open connection and its address (guarded by mu), and hooks it sets before Serve
+	live     map[*net.TCPConn]string
+	banned   func(ip string) bool // (the hooks are set and read with mu held) // a new connection from this address is closed at once
+	onRecord func(JoinRecord)     // a host opened a hub, or a player became a node (called with mu held: don't block)
+}
+
+// JoinRecord: who came in, for the admin view's records (kept 3 days, docs/hub-admin.md).
+type JoinRecord struct {
+	At   time.Time `json:"at"`
+	Name string    `json:"name"`
+	IP   string    `json:"ip"`
+	Room string    `json:"room"`
+	Host string    `json:"host"` // the room's host's name
+	Role string    `json:"role"` // host, player
 }
 
 func NewServer(cfg Config) *Server {
 	return &Server{cfg: cfg, hubs: map[uint64]*hub{}, pending: map[uint64]*pending{}, pairs: map[uint32]*pair{},
-		ips: map[string]*ipState{}}
+		ips: map[string]*ipState{}, live: map[*net.TCPConn]string{}}
 }
 
 func (s *Server) vlog(format string, args ...any) {
@@ -314,12 +331,27 @@ func (s *Server) allowRequest(ip string) bool {
 
 func (s *Server) handle(c *net.TCPConn) {
 	ip := c.RemoteAddr().(*net.TCPAddr).IP.String()
+	s.mu.Lock()
+	banned := s.banned
+	s.mu.Unlock()
+	if banned != nil && banned(ip) {
+		c.Close()
+		return
+	}
 	if !s.admit(ip) {
 		c.Close()
 		return
 	}
 	defer s.release(ip)
 	defer c.Close()
+	s.mu.Lock()
+	s.live[c] = ip
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		delete(s.live, c)
+		s.mu.Unlock()
+	}()
 	c.SetNoDelay(true)
 	c.SetKeepAlive(true)
 	c.SetKeepAlivePeriod(30 * time.Second)
@@ -426,6 +458,10 @@ func (s *Server) host(c *net.TCPConn, ip string, proto uint16, room [16]byte, in
 	s.hubs[h.id] = h
 	st.hubs++
 	s.linkNodes(h)
+	if s.onRecord != nil {
+		s.onRecord(JoinRecord{At: h.created, Name: nodeName(h.info[:], 0), IP: ip, Room: fmt.Sprintf("%016x", h.id),
+			Host: nodeName(h.info[:], 0), Role: "host"})
+	}
 	s.mu.Unlock()
 	s.changes.notify()
 	s.vlog("hub %016x up (%d players)", h.id, h.info[niNodeCount])
@@ -539,7 +575,7 @@ func (s *Server) join(c *net.TCPConn, proto uint16, room [16]byte, id uint64) {
 		hc = <-pj.host
 	}
 	p := &pair{secret: [2]uint64{rand64(), rand64()}, lim: newBucket(s.cfg.Bandwidth, s.cfg.Bandwidth), hub: h,
-		ip: c.RemoteAddr().(*net.TCPAddr).IP.String(), joined: time.Now(), node: -1}
+		ip: c.RemoteAddr().(*net.TCPAddr).IP.String(), joined: time.Now(), node: -1, conns: [2]*net.TCPConn{hc, c}}
 	s.mu.Lock()
 	for p.id == 0 || s.pairs[p.id] != nil {
 		p.id = uint32(rand64())
@@ -684,6 +720,10 @@ func (s *Server) linkNodes(h *hub) {
 		}
 		if best != nil {
 			best.node = i
+			if s.onRecord != nil {
+				s.onRecord(JoinRecord{At: best.joined, Name: nodeName(h.info[:], i), IP: best.ip,
+					Room: fmt.Sprintf("%016x", h.id), Host: nodeName(h.info[:], 0), Role: "player"})
+			}
 		}
 	}
 	h.linked = now
@@ -711,4 +751,58 @@ func (c *changes) notify() {
 		c.ch = nil
 	}
 	c.mu.Unlock()
+}
+
+// ---- the admin view's actions (they close connections; the games see them drop)
+
+// KickIP closes every connection from this address; it can come back unless banned.
+func (s *Server) KickIP(ip string) int {
+	s.mu.Lock()
+	var cs []*net.TCPConn
+	for c, a := range s.live {
+		if a == ip {
+			cs = append(cs, c)
+		}
+	}
+	s.mu.Unlock()
+	for _, c := range cs {
+		c.Close()
+	}
+	if len(cs) > 0 {
+		s.changes.notify()
+	}
+	return len(cs)
+}
+
+// KickPair ends one player's link (the host's room stays).
+func (s *Server) KickPair(id uint32) bool {
+	s.mu.Lock()
+	p := s.pairs[id]
+	s.mu.Unlock()
+	if p == nil {
+		return false
+	}
+	p.conns[0].Close()
+	p.conns[1].Close()
+	return true
+}
+
+// CloseHub takes a room down: its host's hub connection and every player's link.
+func (s *Server) CloseHub(id uint64) bool {
+	s.mu.Lock()
+	h := s.hubs[id]
+	var cs []*net.TCPConn
+	if h != nil {
+		cs = append(cs, h.conn)
+		for _, p := range s.pairs {
+			if p.hub == h {
+				cs = append(cs, p.conns[0], p.conns[1])
+			}
+		}
+	}
+	s.mu.Unlock()
+	for _, c := range cs {
+		c.Close()
+	}
+	return h != nil
 }

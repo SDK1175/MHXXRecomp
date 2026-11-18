@@ -28,6 +28,7 @@ var adminFiles embed.FS
 
 type Admin struct {
 	s       *Server
+	st      *store
 	token   string
 	started time.Time
 	version string
@@ -51,7 +52,13 @@ func NewAdmin(s *Server, dir, version string) (*Admin, error) {
 			return nil, err
 		}
 	}
-	return &Admin{s: s, token: tok, started: time.Now(), version: version}, nil
+	a := &Admin{s: s, st: openStore(dir), token: tok, started: time.Now(), version: version}
+	s.mu.Lock()
+	s.banned = a.st.banned
+	s.onRecord = a.st.record
+	s.mu.Unlock()
+	go a.st.janitor()
+	return a, nil
 }
 
 // ListenAndServe: only on a loopback address (the page is reached through SSH, never from the internet).
@@ -116,6 +123,13 @@ func (a *Admin) Handler() http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		json.NewEncoder(w).Encode(a.Snapshot())
 	})
+	mux.HandleFunc("/api/bans", a.get(func(r *http.Request) any { return a.st.banList() }))
+	mux.HandleFunc("/api/joins", a.get(func(r *http.Request) any { return a.st.findJoins(r.URL.Query().Get("q"), 500) }))
+	mux.HandleFunc("/api/actions", a.get(func(r *http.Request) any { return a.st.actionList(300) }))
+	mux.HandleFunc("/api/kick", a.post(a.kick))
+	mux.HandleFunc("/api/close", a.post(a.closeRoom))
+	mux.HandleFunc("/api/ban", a.post(a.ban))
+	mux.HandleFunc("/api/unban", a.post(a.unban))
 	mux.HandleFunc("/api/events", func(w http.ResponseWriter, r *http.Request) {
 		if !a.authed(r) {
 			http.Error(w, "forbidden", http.StatusForbidden)
@@ -170,6 +184,7 @@ func (a *Admin) Handler() http.Handler {
 type AdminState struct {
 	Server AdminServer `json:"server"`
 	Rooms  []AdminRoom `json:"rooms"`
+	Bans   []Ban       `json:"bans"`
 }
 
 type AdminServer struct {
@@ -213,7 +228,8 @@ func nodeName(info []byte, i int) string {
 
 func (a *Admin) Snapshot() AdminState {
 	s := a.s
-	st := AdminState{Server: AdminServer{Started: a.started, Now: time.Now(), Version: a.version}, Rooms: []AdminRoom{}}
+	st := AdminState{Server: AdminServer{Started: a.started, Now: time.Now(), Version: a.version}, Rooms: []AdminRoom{},
+		Bans: a.st.banList()}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st.Server.Conns, st.Server.Hubs, st.Server.Links = s.conns, len(s.hubs), len(s.pairs)
@@ -262,4 +278,134 @@ func (p *pair) link() string {
 		return "udp"
 	}
 	return "tcp"
+}
+
+// ---- actions
+
+type actionReq struct {
+	IP     string `json:"ip"`
+	Pair   string `json:"pair"`
+	Room   string `json:"room"`
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+	Days   int    `json:"days"` // 0: for good
+}
+
+type actionResp struct {
+	OK      bool   `json:"ok"`
+	Message string `json:"message,omitempty"`
+	Closed  int    `json:"closed,omitempty"`
+}
+
+func (a *Admin) get(f func(*http.Request) any) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !a.authed(r) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		json.NewEncoder(w).Encode(f(r))
+	}
+}
+
+// post: JSON in and out; the token, and (from a browser) the page's own origin.
+func (a *Admin) post(f func(*http.Request, actionReq) actionResp) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "POST", http.StatusMethodNotAllowed)
+			return
+		}
+		if !a.authed(r) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		if o := r.Header.Get("Origin"); o != "" && o != "http://"+r.Host {
+			http.Error(w, "origin", http.StatusForbidden)
+			return
+		}
+		var req actionReq
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		req.Reason = strings.TrimSpace(req.Reason)
+		if len([]rune(req.Reason)) > 200 {
+			req.Reason = string([]rune(req.Reason)[:200])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(f(r, req))
+	}
+}
+
+func device(r *http.Request) string {
+	d := r.Header.Get("X-Admin-Device")
+	if d == "" {
+		return "web"
+	}
+	if len(d) > 32 {
+		d = d[:32]
+	}
+	return d
+}
+
+func validIP(ip string) bool { return net.ParseIP(ip) != nil }
+
+func (a *Admin) kick(r *http.Request, q actionReq) actionResp {
+	if q.Pair != "" {
+		var id uint32
+		if _, err := fmt.Sscanf(q.Pair, "%08x", &id); err != nil || !a.s.KickPair(id) {
+			return actionResp{Message: "그 연결은 이미 끝났습니다"}
+		}
+		a.st.act(Action{At: time.Now(), Kind: "kick", Target: q.IP, Name: q.Name, Reason: q.Reason, Device: device(r)})
+		return actionResp{OK: true, Closed: 1}
+	}
+	if !validIP(q.IP) {
+		return actionResp{Message: "IP가 없습니다"}
+	}
+	n := a.s.KickIP(q.IP)
+	a.st.act(Action{At: time.Now(), Kind: "kick", Target: q.IP, Name: q.Name, Reason: q.Reason, Device: device(r)})
+	return actionResp{OK: true, Closed: n}
+}
+
+func (a *Admin) closeRoom(r *http.Request, q actionReq) actionResp {
+	var id uint64
+	if _, err := fmt.Sscanf(q.Room, "%016x", &id); err != nil || !a.s.CloseHub(id) {
+		return actionResp{Message: "그 방은 이미 닫혔습니다"}
+	}
+	a.st.act(Action{At: time.Now(), Kind: "close", Target: q.Room, Name: q.Name, Reason: q.Reason, Device: device(r)})
+	return actionResp{OK: true}
+}
+
+func (a *Admin) ban(r *http.Request, q actionReq) actionResp {
+	if !validIP(q.IP) {
+		return actionResp{Message: "IP가 없는 사람(LAN·직접)은 밴할 수 없습니다"}
+	}
+	b := Ban{IP: q.IP, Name: q.Name, Reason: q.Reason, At: time.Now()}
+	if q.Days > 0 {
+		u := b.At.Add(time.Duration(q.Days) * 24 * time.Hour)
+		b.Until = &u
+	}
+	a.st.ban(b)
+	n := a.s.KickIP(q.IP)
+	a.st.act(Action{At: b.At, Kind: "ban", Target: q.IP, Name: q.Name,
+		Reason: strings.TrimSpace(fmt.Sprintf("%s (%s)", q.Reason, banSpan(q.Days))), Device: device(r)})
+	a.s.changes.notify()
+	return actionResp{OK: true, Closed: n}
+}
+
+func banSpan(days int) string {
+	if days <= 0 {
+		return "영구"
+	}
+	return fmt.Sprintf("%d일", days)
+}
+
+func (a *Admin) unban(r *http.Request, q actionReq) actionResp {
+	if !a.st.unban(q.IP) {
+		return actionResp{Message: "밴 목록에 없습니다"}
+	}
+	a.st.act(Action{At: time.Now(), Kind: "unban", Target: q.IP, Name: q.Name, Reason: q.Reason, Device: device(r)})
+	a.s.changes.notify()
+	return actionResp{OK: true}
 }
