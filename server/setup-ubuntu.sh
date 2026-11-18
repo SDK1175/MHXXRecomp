@@ -32,6 +32,7 @@ Wants=network-online.target
 [Service]
 ExecStart=/usr/local/bin/mhxx-hubserver -addr :$PORT
 DynamicUser=yes
+StateDirectory=mhxx-hubserver
 Restart=always
 RestartSec=3
 
