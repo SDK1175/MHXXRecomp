@@ -69,7 +69,11 @@ const (
 	niNetType   = 0x4B
 	niNodeMax   = 0x66
 	niNodeCount = 0x67
+	niNodes     = 0x68 // maxNodes x NodeInfo
 	niAdvSize   = 0x26A
+	nodeSize    = 0x40
+	nodeLinked  = 0x0B // NodeInfo: u8 connected
+	nodeNameOff = 0x0C // NodeInfo: user name[0x20] (the port's nickname)
 	advMax      = 0x180
 	maxNodes    = 8
 )
@@ -106,6 +110,8 @@ type hub struct {
 	out     chan []byte // frames to the host
 	done    chan struct{}
 	joins   int // pending and spliced players (guarded by Server.mu)
+	conn    *net.TCPConn
+	linked  [maxNodes]bool // the nodes connected in the last NetworkInfo (guarded by Server.mu; admin view)
 }
 
 type pending struct {
@@ -120,6 +126,12 @@ type pair struct {
 	mu     sync.Mutex
 	addr   [2]*net.UDPAddr
 	lim    *bucket
+	// for the admin view (guarded by Server.mu): the hub, the player's address, when, and which node of the hub's
+	// NetworkInfo the player became (-1: not yet / unknown)
+	hub    *hub
+	ip     string
+	joined time.Time
+	node   int
 }
 
 type ipState struct {
@@ -138,6 +150,7 @@ type Server struct {
 	conns   int
 	ln      *net.TCPListener
 	udp     *net.UDPConn
+	changes changes // hubs, players or links changed (the admin view's live updates)
 }
 
 func NewServer(cfg Config) *Server {
@@ -409,9 +422,12 @@ func (s *Server) host(c *net.TCPConn, ip string, proto uint16, room [16]byte, in
 	for h.id == 0 || s.hubs[h.id] != nil {
 		h.id = rand64()
 	}
+	h.conn = c
 	s.hubs[h.id] = h
 	st.hubs++
+	s.linkNodes(h)
 	s.mu.Unlock()
+	s.changes.notify()
 	s.vlog("hub %016x up (%d players)", h.id, h.info[niNodeCount])
 	defer func() {
 		s.mu.Lock()
@@ -421,6 +437,7 @@ func (s *Server) host(c *net.TCPConn, ip string, proto uint16, room [16]byte, in
 		}
 		s.mu.Unlock()
 		close(h.done)
+		s.changes.notify()
 		s.vlog("hub %016x down", h.id)
 	}()
 	if writeFrame(c, frame(tHosted, u64(h.id))) != nil {
@@ -458,7 +475,9 @@ func (s *Server) host(c *net.TCPConn, ip string, proto uint16, room [16]byte, in
 			}
 			s.mu.Lock()
 			copy(h.info[:], p)
+			s.linkNodes(h)
 			s.mu.Unlock()
+			s.changes.notify()
 		case tPing:
 		default:
 			return
@@ -519,17 +538,20 @@ func (s *Server) join(c *net.TCPConn, proto uint16, room [16]byte, id uint64) {
 		}
 		hc = <-pj.host
 	}
-	p := &pair{secret: [2]uint64{rand64(), rand64()}, lim: newBucket(s.cfg.Bandwidth, s.cfg.Bandwidth)}
+	p := &pair{secret: [2]uint64{rand64(), rand64()}, lim: newBucket(s.cfg.Bandwidth, s.cfg.Bandwidth), hub: h,
+		ip: c.RemoteAddr().(*net.TCPAddr).IP.String(), joined: time.Now(), node: -1}
 	s.mu.Lock()
 	for p.id == 0 || s.pairs[p.id] != nil {
 		p.id = uint32(rand64())
 	}
 	s.pairs[p.id] = p
 	s.mu.Unlock()
+	s.changes.notify()
 	defer func() {
 		s.mu.Lock()
 		delete(s.pairs, p.id)
 		s.mu.Unlock()
+		s.changes.notify()
 	}()
 	if writeFrame(hc, frame(tSpliced, u32(p.id), u64(p.secret[0]))) != nil ||
 		writeFrame(c, frame(tSpliced, u32(p.id), u64(p.secret[1]))) != nil {
@@ -620,12 +642,73 @@ func (s *Server) serveUDP() {
 			continue
 		}
 		p.mu.Lock()
+		first := p.addr[side] == nil
 		p.addr[side] = from // (NAT may change it: the latest wins)
 		to := p.addr[1-side]
 		p.mu.Unlock()
+		if first {
+			s.changes.notify() // (the admin view shows UDP once both ends are known)
+		}
 		// (an empty datagram only tells where its sender is)
 		if n > udpHeader && to != nil && p.lim.take(float64(n)) {
 			s.udp.WriteToUDP(buf[udpHeader:n], to)
 		}
 	}
+}
+
+// ---- the admin view's bookkeeping
+
+// linkNodes: which player is which node. A node that appears in the hub's NetworkInfo after a player was spliced is
+// that player (the newest unplaced one first); a node that goes away frees its player. Players who came over the LAN
+// or by address have no pair: their nodes stay without an address. Called with s.mu held.
+func (s *Server) linkNodes(h *hub) {
+	var now [maxNodes]bool
+	n := int(h.info[niNodeMax])
+	for i := 0; i < n && i < maxNodes; i++ {
+		now[i] = i == 0 || h.info[niNodes+i*nodeSize+nodeLinked] != 0
+	}
+	for _, p := range s.pairs {
+		if p.hub == h && p.node > 0 && !now[p.node] {
+			p.node = -1
+		}
+	}
+	for i := 1; i < maxNodes; i++ {
+		if !now[i] || h.linked[i] {
+			continue
+		}
+		var best *pair
+		for _, p := range s.pairs {
+			if p.hub == h && p.node < 0 && (best == nil || p.joined.After(best.joined)) {
+				best = p
+			}
+		}
+		if best != nil {
+			best.node = i
+		}
+	}
+	h.linked = now
+}
+
+// changes: a channel closed (and replaced) on each change, for the admin view's live updates.
+type changes struct {
+	mu sync.Mutex
+	ch chan struct{}
+}
+
+func (c *changes) wait() <-chan struct{} {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.ch == nil {
+		c.ch = make(chan struct{})
+	}
+	return c.ch
+}
+
+func (c *changes) notify() {
+	c.mu.Lock()
+	if c.ch != nil {
+		close(c.ch)
+		c.ch = nil
+	}
+	c.mu.Unlock()
 }
