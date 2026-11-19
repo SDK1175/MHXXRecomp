@@ -1262,6 +1262,9 @@ std::vector<Row> main_rows() {
         add_choice(
             r, "anchor", "HUD anchor", c.ui_anchor - 1, {"16:9", "21:9", "32:9", tr("Edges")},
             [](int v) { c.ui_anchor = v + 1; }, ini("UIAnchor"));
+        // (XX has too many screens to fix one by one: the wider anchors are offered as they are)
+        if (c.ui_anchor != UI_CENTER)
+            header(r, "anchor.note", tr("Experimental: some screens (the Palico expedition map, for one) break. Set 16:9 if a screen looks wrong."));
         break;
     case 1:
         header(r, "audio.header", tr("Audio"));
