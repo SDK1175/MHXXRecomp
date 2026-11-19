@@ -303,7 +303,8 @@ static void pack_scan(void) {
 bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat vf, bool linear) {
     if (pack_state < 0) pack_scan();
     bool buttons = !linear && buttonicons_size(t->width, t->height);  // (the button prompts: buttonicons.c)
-    if ((pack_state != 1 && !buttons) || linear) return false;
+    bool hangul = !linear && hangulfont_size(t->width, t->height);    // (the Korean patch's font: hangulfont.c)
+    if ((pack_state != 1 && !buttons && !hangul) || linear) return false;
     const FormatInfo *fi = t->layout.fmt;
     if (!fi || t->target != 1 || t->depth > 1 || (t->layout.layers && t->layout.layers > 1)) return false;
     if (t->width < MIN_SIDE || t->height < MIN_SIDE || t->samples > 1) return false;
@@ -331,6 +332,14 @@ bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat 
             return ok;
         }
         free(px);
+    }
+    if (hangul && !path && kind_of(vf, &srgb) == K_RGBA8 && fi->bpb == 4) {  // (a pack's own picture of it comes first)
+        int page = hangulfont_page(key);
+        if (page >= 0) {
+            bool ok = hangulfont_apply(b, page, lin, l.w, l.h, srgb);
+            free(lin);
+            return ok;
+        }
     }
     free(lin);
     if (!path) return false;

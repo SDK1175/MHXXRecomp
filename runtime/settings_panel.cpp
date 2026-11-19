@@ -348,6 +348,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(aspect_ratio);
     SAME(fov);
     SAME(ui_anchor);
+    SAME(korean_font);
     SAME(background_input);
     SAME(combo_window);
     SAME(volume);
@@ -922,6 +923,7 @@ void reset_section() {
         c.aspect_ratio = f.aspect_ratio;
         c.fov = f.fov;
         c.ui_anchor = f.ui_anchor;
+        c.korean_font = f.korean_font;
         break;
     case 1:
         c.fsr = f.fsr;
@@ -1265,6 +1267,10 @@ std::vector<Row> main_rows() {
         // (XX has too many screens to fix one by one: the wider anchors are offered as they are)
         if (c.ui_anchor != UI_CENTER)
             header(r, "anchor.note", tr("Experimental: some screens (the Palico expedition map, for one) break. Set 16:9 if a screen looks wrong."));
+        add_choice(
+            r, "koreanfont", "Korean font", c.korean_font, {"Paperlogy", tr("Korean patch's")},
+            [](int v) { c.korean_font = v; }, ini("KoreanFont"));
+        r.back().help = tr("With the Korean patch: its Hangul drawn again, sharp, from the font Paperlogy (the MHGU Korean patch's). Takes effect at the next start.");
         break;
     case 1:
         header(r, "audio.header", tr("Audio"));

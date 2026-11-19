@@ -14,6 +14,11 @@ below.
   github.com/FireBurn/FSR-Vulkan): MIT License, see third_party/fsr-vulkan/LICENSE.txt, NOTICE.md and UPSTREAM.md
   (the files changed against AMD's originals are listed there).
 - VulkanMemoryAllocator (header-only, compiled into the executable): MIT License.
+- Paperlogy 5 Medium 1.001 (third_party/paperlogy; PT&, Lee Juim; github.com/Freesentation/paperlogy): the font, built
+  in unmodified, the Korean patch's Hangul is drawn from (runtime/nvn/vulkan/hangulfont.c). SIL Open Font License 1.1:
+  third_party/paperlogy/OFL.txt, shipped as licenses/Paperlogy.txt.
+- stb_truetype (Sean Barrett; Dear ImGui's copy, third_party/cimgui/imgui/imstb_truetype.h, also compiled into
+  hangulfont.c): public domain / MIT License.
 - RNNoise 0.1.1 (third_party/rnnoise, github.com/xiph/rnnoise): voice chat's noise suppression, with its trained
   model. BSD 3-Clause License, reproduced below (third_party/rnnoise/COPYING).
 - DejaVu Sans Bold: letters of it are drawn into the keyboard's button pictures (tools/buttonicons.py ->

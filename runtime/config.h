@@ -80,6 +80,7 @@ typedef struct {
     float aspect_ratio;       // the picture's shape (width / height), 0: the window's; never below 16:10 (config.c)
     float fov;                // 3D camera field of view factor (1: the game's)
     int ui_anchor;            // where the HUD goes on a picture wider than 16:9: UI_*
+    int korean_font;          // the Korean patch's Hangul: KOREAN_FONT_* (runtime/nvn/vulkan/hangulfont.c)
     int background_input;     // the controller keeps working while the window is in the background (runtime/ui.c)
     int volume;               // host master volume, 0..100; independent of the game's music / SFX settings
     int button_icons;         // 0: Xbox, 1: Switch, 2: PlayStation (visual guides only)
@@ -138,7 +139,8 @@ typedef struct {
 enum { UPDATES_ASK, UPDATES_AUTO, UPDATES_OFF };
 enum { BATTERY_OFF, BATTERY_WITH_FPS, BATTERY_ALONE };
 enum { THEME_GOLD, THEME_BLUE, THEME_HUNTER, THEME_XX };  // [Application] Theme
-enum { UI_CENTER = 1, UI_21_9, UI_32_9, UI_EDGES };  // the middle 16:9, 21:9, 32:9, the picture's sides
+enum { UI_CENTER = 1, UI_21_9, UI_32_9, UI_EDGES };
+enum { KOREAN_FONT_PAPERLOGY, KOREAN_FONT_PATCH };  // [Display] KoreanFont: drawn again from Paperlogy, or the patch's own  // the middle 16:9, 21:9, 32:9, the picture's sides
 enum { FSR_NATIVE, FSR_QUALITY, FSR_BALANCED, FSR_PERFORMANCE, FSR_ULTRA_PERFORMANCE };  // output / render: 1, 1.5, 1.7, 2, 3
 
 extern Config g_config;

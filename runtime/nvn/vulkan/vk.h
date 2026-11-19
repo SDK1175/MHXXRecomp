@@ -167,6 +167,11 @@ int buttonicons_target(uint64_t key, const uint8_t *rgba, uint32_t w, uint32_t h
 bool buttonicons_apply(struct TexBackend *b, int target, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb, uint32_t max_levels);
 void buttonicons_forget(struct TexBackend *b);
 void buttonicons_frame(void);
+// The Korean patch's Hangul drawn again from Paperlogy (hangulfont.c, [Display] KoreanFont): a texture of the size of
+// its font's pages (and the patch's font found); which page a key is (-1: none); the page's picture made and put in b
+bool hangulfont_size(uint32_t w, uint32_t h);
+int hangulfont_page(uint64_t key);
+bool hangulfont_apply(struct TexBackend *b, int page, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb);
 // (texpack.c) t's first upload: true when textures/load/ has a picture for it, now in b (vk_tex_replace)
 bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat vf, bool linear);
 // b made a w x h RGBA8 image holding rgba (rows of w*4 bytes), its mip levels made by the GPU. false: no memory for it

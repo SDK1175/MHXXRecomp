@@ -126,7 +126,7 @@ ifneq ($(shell pkg-config --exists opus 2>/dev/null && echo y),)
 OPUS_LIBS := -Wl,-Bstatic -lopus -Wl,-Bdynamic
 endif
 LDFLAGS  := -fuse-ld=lld -Wl,--stack,268435456 $(SDL_LIBS) $(AV_LIBS) $(OPUS_LIBS) -lvulkan-1 $(SHADERC_LIBS) -lwinmm -lversion -lole32 -lshell32 -luuid -lws2_32 \
-            -lbcrypt -lwinhttp -static-libgcc -static-libstdc++ -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic \
+            -lbcrypt -lwinhttp -static-libgcc -static-libstdc++ -Wl,-Bstatic -lwinpthread -lz -Wl,-Bdynamic \
             -Wl,--export-all-symbols -Wl,--out-implib,$(O)/mhgurecomp.dll.a
 GAMELIB  := $(B)/mhgugame.dll
 GAMELIB_LDFLAGS := -shared -fuse-ld=lld -static-libgcc $(O)/mhgurecomp.dll.a
@@ -146,7 +146,7 @@ FFMPEG_CONF += --enable-pic
 # own functions are exported, for the game code library. A Vulkan layer or overlay with its own glslang or SDL then
 # doesn't bind to ours, as happened with ImGui: see IMGUIFLAGS.)
 OPUS_LIBS := $(if $(shell pkg-config --exists opus 2>/dev/null && echo y),-lopus)  # (voice chat: libopus-dev)
-LDFLAGS  := -fuse-ld=lld -rdynamic -Wl,--exclude-libs,ALL $(SDL_LIBS) $(AV_LIBS) $(OPUS_LIBS) -lvulkan $(SHADERC_LIBS) -lpthread -ldl -lm
+LDFLAGS  := -fuse-ld=lld -rdynamic -Wl,--exclude-libs,ALL $(SDL_LIBS) $(AV_LIBS) $(OPUS_LIBS) -lvulkan $(SHADERC_LIBS) -lpthread -ldl -lm -lz
 # The programs start with glibc GLIBC_MAX or later (Ubuntu 24.04, Linux Mint 22, Debian 13, SteamOS): calls to the
 # functions newer glibc versions gave a new symbol version go to the old one (runtime/platform/linux_glibc.c), and the
 # link checks that nothing newer is left.
@@ -293,6 +293,8 @@ $(O)/rt/nvn/vulkan/exec.o: RTFLAGS += -DSHADER_ID='"$(SHADER_ID)"'
 $(O)/version.id: FORCE
 	@mkdir -p $(O); [ "$$(cat $@ 2>/dev/null)" = '$(VERSION)' ] || echo '$(VERSION)' > $@
 $(O)/rt/ui.o: extras/icon/mhgurecomp-128.png
+# (the font the Korean patch's Hangul is drawn again from, built in: .incbin, the path relative to the repository)
+$(O)/rt/nvn/vulkan/hangulfont.o: third_party/paperlogy/Paperlogy-5Medium.ttf runtime/nvn/vulkan/hangulfont_ks.h
 $(O)/rt/main.o: $(O)/version.id
 $(O)/rt/main.o: RTFLAGS += -DMHGU_VERSION='"$(VERSION)"'
 
@@ -439,11 +441,18 @@ $(B)/pipelines.list: extras/pipelines.list
 	cp $< $@
 
 LICENSE_TXT = $(B)/licenses/LICENSE.txt $(B)/licenses/THIRD_PARTY_NOTICES.txt $(if $(AV_DEPS),$(B)/licenses/FFmpeg.txt) \
-              $(if $(SDL_DEPS),$(B)/licenses/SDL3.txt) $(if $(SHADERC_DEPS),$(B)/licenses/shaderc.txt)
+              $(if $(SDL_DEPS),$(B)/licenses/SDL3.txt) $(if $(SHADERC_DEPS),$(B)/licenses/shaderc.txt) \
+              $(if $(filter 1,$(NULL_GPU)),,$(B)/licenses/Paperlogy.txt)
 licenses: $(LICENSE_TXT)
 $(B)/licenses/%.txt: %
 	@mkdir -p $(dir $@)
 	cp $< $@
+$(B)/licenses/Paperlogy.txt: third_party/paperlogy/OFL.txt
+	@mkdir -p $(dir $@)
+	@{ echo "This program contains the font Paperlogy 5 Medium 1.001 (Copyright 2024 The PAPERLOGY Authors, PT& / Lee Juim,"; \
+	   echo "https://freesentation.blog/paperlogy, https://github.com/Freesentation/paperlogy), unmodified, built in: the"; \
+	   echo "Korean patch's Hangul is drawn from it (runtime/nvn/vulkan/hangulfont.c). It is under the SIL Open Font License 1.1 (below)."; \
+	   echo; cat $<; } > $@
 $(B)/licenses/FFmpeg.txt: $(FFMPEG_DIR)/.built
 	@mkdir -p $(dir $@)
 	@{ echo "This program contains FFmpeg $(FFMPEG_VER) (libavformat, libavcodec, libavutil), linked statically, under the"; \

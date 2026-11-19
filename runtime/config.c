@@ -35,6 +35,7 @@
     .aspect_ratio = 0.0f,                                                                           \
     .fov = 1.0f,                                                                                    \
     .ui_anchor = UI_CENTER,                                                                         \
+    .korean_font = KOREAN_FONT_PAPERLOGY,                                                           \
     /* [Anti-aliasing] */                                                                           \
     .msaa = 1,                                                                                      \
     .fxaa = 1,                                                                                      \
@@ -159,6 +160,11 @@ static const char DEFAULT_INI[] =
     "; Center, Edges\n"
     "; Default: Center\n"
     "UIAnchor = Center\n"
+    "\n"
+    "; The Korean patch's Hangul: drawn again, sharp, from the font Paperlogy, or the patch's own (restart to change)\n"
+    "; Paperlogy, Patch\n"
+    "; Default: Paperlogy\n"
+    "KoreanFont = Paperlogy\n"
     "\n"
     "[Anti-aliasing]\n"
     "; Multi-Sample Anti Aliasing, cycle modes with F7 key\n"
@@ -649,6 +655,7 @@ const ConfigSetting g_settings[] = {
     {"Display", "FOV", SET_FLOAT, F(fov), 0, 0.5f, 2.0f, NULL, NULL, false, ERR_VIEW},
     {"Display", "UIAnchor", SET_CHOICE, F(ui_anchor), 0, 0, 0, "Center|1|16:9,21:9|2,32:9|3,Edges", anchor_values, true,
      ERR_MISC},
+    {"Display", "KoreanFont", SET_CHOICE, F(korean_font), 0, 0, 0, "Paperlogy|on,Patch|original|off", NULL, true, ERR_MISC},
     {"Anti-aliasing", "MSAA", SET_CHOICE, F(msaa), 0, 0, 0, "Off|none|0|1|1x,2x|2,4x|4,8x|8", msaa_values, false, ERR_MISC},
     ON_OFF("Anti-aliasing", "FXAA", fxaa, false),
     {"Anti-aliasing", "FXAAMode", SET_CHOICE, F(fxaa_mode), 0, 0, 0, "Original,3_11", NULL, false, ERR_MISC},
