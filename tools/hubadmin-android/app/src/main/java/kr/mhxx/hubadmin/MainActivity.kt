@@ -19,6 +19,7 @@ import android.text.InputType
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.WindowInsets
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.webkit.WebResourceRequest
@@ -102,7 +103,24 @@ class MainActivity : Activity() {
             setPadding(dp(22), dp(28), dp(22), dp(28))
             build()
         }
-        setContentView(ScrollView(this).apply { addView(col); isFillViewport = true; setBackgroundColor(color(R.color.bg)) })
+        show(ScrollView(this).apply { addView(col); isFillViewport = true }, color(R.color.bg))
+    }
+
+    /**
+     * Android 15+ draws apps under the status and navigation bars: keep the content clear of them (the bar areas
+     * take [top]'s color, so the status bar runs into the app's own top bar).
+     */
+    private fun show(content: View, top: Int) {
+        val frame = FrameLayout(this).apply {
+            setBackgroundColor(top)
+            addView(content.apply { if (background == null) setBackgroundColor(color(R.color.bg)) })
+            setOnApplyWindowInsetsListener { v, insets ->
+                val b = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout() or WindowInsets.Type.ime())
+                v.setPadding(b.left, b.top, b.right, b.bottom)
+                insets
+            }
+        }
+        setContentView(frame)
     }
 
     private fun LinearLayout.title(s: String) = addView(TextView(context).apply {
@@ -318,7 +336,7 @@ class MainActivity : Activity() {
         }
         web = w
         root.addView(FrameLayout(this).apply { addView(w) }, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
-        setContentView(root)
+        show(root, color(R.color.panel))
         loadPage(t)
     }
 
