@@ -1,0 +1,51 @@
+# The hub server's admin app for Android (tools/hubadmin-android, docs/hub-admin.md). A private tool for the server
+# admin, not part of the port's releases: the APK is a build artifact only.
+name: Hub admin app (Android)
+
+on:
+  push:
+    branches: [mhxx]
+    paths: [tools/hubadmin-android/**, .github/workflows/hubadmin-android.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/hubadmin-android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14"
+      - name: Signing key
+        env:
+          KS: ${{ secrets.HUBADMIN_KEYSTORE_B64 }}
+          PASS: ${{ secrets.HUBADMIN_KEYSTORE_PASS }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/hubadmin.jks"
+            echo "SIGN_KEYSTORE=$RUNNER_TEMP/hubadmin.jks" >> "$GITHUB_ENV"
+            echo "::add-mask::$PASS"
+            echo "SIGN_PASSWORD=$PASS" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No signing secret: the APK is signed with a throwaway debug key."
+          fi
+      - name: Build
+        env:
+          APP_VERSION_CODE: ${{ github.run_number }}
+          APP_VERSION_NAME: 0.1.${{ github.run_number }}
+        run: gradle --no-daemon :app:assembleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MHXX-hubadmin-0.1.${{ github.run_number }}
+          path: tools/hubadmin-android/app/build/outputs/apk/release/*.apk
+          retention-days: 30

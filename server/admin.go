@@ -74,7 +74,23 @@ func (a *Admin) ListenAndServe(addr string) error {
 	return srv.ListenAndServe()
 }
 
-const adminCookie = "mhxx_admin"
+const (
+	adminCookie  = "mhxx_admin"
+	deviceCookie = "mhxx_device"
+)
+
+func cleanDevice(d string) string {
+	d = strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' {
+			return r
+		}
+		return -1
+	}, strings.ToLower(d))
+	if len(d) > 16 {
+		d = d[:16]
+	}
+	return d
+}
 
 func (a *Admin) authed(r *http.Request) bool {
 	ok := func(t string) bool { return subtle.ConstantTimeCompare([]byte(t), []byte(a.token)) == 1 }
@@ -99,6 +115,10 @@ func (a *Admin) Handler() http.Handler {
 			}
 			http.SetCookie(w, &http.Cookie{Name: adminCookie, Value: a.token, Path: "/", HttpOnly: true,
 				SameSite: http.SameSiteStrictMode})
+			if d := r.URL.Query().Get("device"); d != "" { // (the admin apps say which they are: the action records show it)
+				http.SetCookie(w, &http.Cookie{Name: deviceCookie, Value: cleanDevice(d), Path: "/", HttpOnly: true,
+					SameSite: http.SameSiteStrictMode})
+			}
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
@@ -341,10 +361,12 @@ func (a *Admin) post(f func(*http.Request, actionReq) actionResp) http.HandlerFu
 func device(r *http.Request) string {
 	d := r.Header.Get("X-Admin-Device")
 	if d == "" {
-		return "web"
+		if c, err := r.Cookie(deviceCookie); err == nil {
+			d = c.Value
+		}
 	}
-	if len(d) > 32 {
-		d = d[:32]
+	if d = cleanDevice(d); d == "" {
+		return "web"
 	}
 	return d
 }

@@ -296,6 +296,12 @@ function select(id) {
   $("#detail").classList.add("open");
   renderRooms(); renderDetail(true);
 }
+// the Android app's back button: close an open room or dialog first
+window.adminBack = () => {
+  const sc = document.querySelector(".scrim"); if (sc) { sc.remove(); return true; }
+  if ($("#detail").classList.contains("open")) { closeDetail(); return true; }
+  return false;
+};
 function closeDetail() { selected = null; $("#detail").classList.remove("open"); renderRooms(); renderDetail(true); }
 
 function renderDetail(full) {
@@ -432,8 +438,9 @@ async function loadLog() {
     for (const b of $("#joins").querySelectorAll("[data-b]")) b.onclick = () => { const j = joins[+b.dataset.b]; banBox(j.ip, j.name); };
     for (const b of $("#joins").querySelectorAll("[data-i]")) b.onclick = () => { const j = joins[+b.dataset.i]; navigator.clipboard?.writeText(j.ip).then(() => toast("IP 복사: " + j.ip), () => {}); };
     const kind = { kick: "강퇴", close: "방 닫기", ban: "밴", unban: "밴 해제" };
+    const dev = { phone: "폰", pc: "PC", web: "브라우저" };
     $("#actions").innerHTML = acts.length ? acts.map((a) => `<div class="rowc"><div><b>${kind[a.kind] || esc(a.kind)}</b> ${esc(a.name || "")}
-        <div class="m"><span>${when(a.at)}</span><span class="mono">${esc(a.target)}</span><span>${esc(a.reason || "")}</span><span>${esc(a.device || "")}</span></div></div></div>`).join("")
+        <div class="m"><span>${when(a.at)}</span><span class="mono">${esc(a.target)}</span><span>${esc(a.reason || "")}</span><span>${esc(dev[a.device] || a.device || "")}</span></div></div></div>`).join("")
       : '<div class="empty">아직 관리 조치가 없습니다.</div>';
   } catch (e) { toast(e.message); }
 }
