@@ -16,7 +16,7 @@
 //
 // A menu texture holds icons and text together: a mod that drew new button icons still carries GU's English words
 // in the same picture ("Sale!" over the Korean patch's "할인중!"). For those (names under GUI\, which the
-// fingerprints have tile signatures of: runtime/nvn/textex.h) only the 32 x 32 tiles the mod drew over (its
+// fingerprints have tile signatures of: runtime/nvn/textex.h) only the 16 x 16 squares the mod drew over (its
 // signature off GU's) are taken: XX's picture as it is in the files now (the Korean patch's, say) with those tiles of
 // the mod's over it, made here and given to the GPU in place of XX's when the game loads it, like a texture pack's
 // picture (gumods_picture, texpack.c). A picture of another shape than GU's or XX's goes over whole.
@@ -373,13 +373,40 @@ static bool tile_merge(Changes *cs, const uint8_t *sig, uint32_t sw, uint32_t sh
     if (!ok) { free(xpx); return false; }
     uint32_t tx = (sw + TEX_TILE - 1) / TEX_TILE, ty = (sh + TEX_TILE - 1) / TEX_TILE;
     uint8_t *spx = resize(mpx, mw, mh, sw, sh), *msig = malloc((size_t)tx * ty * TEX_SIG + 1);
-    uint8_t *changed = calloc((size_t)tx * ty + 1, 1);
+    // (by quarter: each 16 x 16 quarter of a tile has its own two bytes, so a changed icon takes no more of the text
+    // beside it than its own quarters)
+    uint8_t *changed = calloc((size_t)tx * ty + 1, 1);  // bit q: quarter q (x half q & 1, y half q >> 1)
     int n = 0;
     if (spx && msig && changed) {
         tex_signatures(spx, sw, sh, msig);
         for (uint32_t i = 0; i < tx * ty; i++)
-            for (uint32_t b = 0; b < TEX_SIG && !changed[i]; b++)
-                if (abs((int)msig[i * TEX_SIG + b] - (int)sig[i * TEX_SIG + b]) > TEX_SIG_SLACK) changed[i] = 1, n++;
+            for (uint32_t q = 0; q < 4; q++) {
+                const uint8_t *m = msig + i * TEX_SIG, *g = sig + i * TEX_SIG;
+                if (abs((int)m[q] - (int)g[q]) > TEX_SIG_SLACK || abs((int)m[4 + q] - (int)g[4 + q]) > TEX_SIG_SLACK)
+                    changed[i] |= (uint8_t)(1u << q), n++;
+            }
+        // A changed square's neighbours that differ even a little go with it (TEX_SIG_NEAR): an icon drawn over two
+        // squares, one of them a close match, would come out half and half
+        uint32_t qw = tx * 2, qh = ty * 2;
+        for (bool grew = true; grew;) {
+            grew = false;
+            for (uint32_t y = 0; y < qh; y++)
+                for (uint32_t x = 0; x < qw; x++) {
+                    uint32_t t = (y / 2) * tx + x / 2, q = (y & 1) * 2 + (x & 1);
+                    if (changed[t] >> q & 1) continue;
+                    bool near = false;
+                    for (int dy = -1; dy <= 1 && !near; dy++)
+                        for (int dx = -1; dx <= 1 && !near; dx++) {
+                            int nx = (int)x + dx, ny = (int)y + dy;
+                            if ((!dx && !dy) || nx < 0 || ny < 0 || nx >= (int)qw || ny >= (int)qh) continue;
+                            uint32_t nt = (uint32_t)(ny / 2) * tx + (uint32_t)nx / 2, nq = (uint32_t)(ny & 1) * 2 + (uint32_t)(nx & 1);
+                            near = changed[nt] >> nq & 1;
+                        }
+                    const uint8_t *m = msig + t * TEX_SIG, *g = sig + t * TEX_SIG;
+                    if (near && (abs((int)m[q] - (int)g[q]) > TEX_SIG_NEAR || abs((int)m[4 + q] - (int)g[4 + q]) > TEX_SIG_NEAR))
+                        changed[t] |= (uint8_t)(1u << q), n++, grew = true;
+                }
+        }
     }
     free(spx), free(msig);
     if (!n) {  // (the mod's picture is GU's: re-encoded, perhaps)
@@ -391,15 +418,19 @@ static bool tile_merge(Changes *cs, const uint8_t *sig, uint32_t sw, uint32_t sh
     uint8_t *opx = resize(xpx, xi.w, xi.h, ow, oh), *mo = resize(mpx, mw, mh, ow, oh);
     free(xpx);
     if (!opx || !mo) { free(opx), free(mo), free(changed); return false; }
+    const uint32_t half = TEX_TILE / 2;
     for (uint32_t j = 0; j < ty; j++)
-        for (uint32_t i = 0; i < tx; i++) {
-            if (!changed[j * tx + i]) continue;
-            uint32_t x0 = (uint32_t)((uint64_t)i * TEX_TILE * ow / sw), x1 = (uint32_t)((uint64_t)(i + 1) * TEX_TILE * ow / sw);
-            uint32_t y0 = (uint32_t)((uint64_t)j * TEX_TILE * oh / sh), y1 = (uint32_t)((uint64_t)(j + 1) * TEX_TILE * oh / sh);
-            if (x1 > ow) x1 = ow;
-            if (y1 > oh) y1 = oh;
-            for (uint32_t y = y0; y < y1; y++) memcpy(opx + ((size_t)y * ow + x0) * 4, mo + ((size_t)y * ow + x0) * 4, (size_t)(x1 - x0) * 4);
-        }
+        for (uint32_t i = 0; i < tx; i++)
+            for (uint32_t q = 0; q < 4; q++) {
+                if (!(changed[j * tx + i] >> q & 1)) continue;
+                uint64_t gx = (uint64_t)i * TEX_TILE + (q & 1) * half, gy = (uint64_t)j * TEX_TILE + (q >> 1) * half;
+                uint32_t x0 = (uint32_t)(gx * ow / sw), x1 = (uint32_t)((gx + half) * ow / sw);
+                uint32_t y0 = (uint32_t)(gy * oh / sh), y1 = (uint32_t)((gy + half) * oh / sh);
+                if (x1 > ow) x1 = ow;
+                if (y1 > oh) y1 = oh;
+                for (uint32_t y = y0; y < y1; y++)
+                    memcpy(opx + ((size_t)y * ow + x0) * 4, mo + ((size_t)y * ow + x0) * 4, (size_t)(x1 - x0) * 4);
+            }
     free(mo), free(changed);
     char file[MAX_PATH_LEN];
     snprintf(file, sizeof file, "%s/tex/%016llx.rgba", cs->out, (unsigned long long)xi.key);
@@ -413,8 +444,8 @@ static bool tile_merge(Changes *cs, const uint8_t *sig, uint32_t sw, uint32_t sh
     if (!w) return false;
     pic_add(xi.key, file);
     if (cs->done) fprintf(cs->done, "tex %016llx %s\n", (unsigned long long)xi.key, file);
-    cs->merged++, cs->merged_tiles += n, cs->tiles += (int)(tx * ty);
-    LOG("[gumods] %s (%s): %d of %u tiles the mod's, over XX's picture\n", x->name, g_xarcs[x->arc], n, tx * ty);
+    cs->merged++, cs->merged_tiles += n, cs->tiles += (int)(tx * ty * 4);
+    LOG("[gumods] %s (%s): %d of %u 16 x 16 squares the mod's, over XX's picture\n", x->name, g_xarcs[x->arc], n, tx * ty * 4);
     return true;
 }
 
@@ -674,7 +705,7 @@ bool gumods_build(const char *mod_romfs, const char *game_romfs, const char *(*c
     }
     free(by);
     LOG("[gumods] %s: GU files: %d texture(s) the mod changed put in whole into %d of XX's archives, %d menu "
-        "picture(s) of its tiles over XX's (%d of %d tiles); left out: %d as GU's own, %d not textures (a GU menu or "
+        "picture(s) of its squares over XX's (%d of %d 16 x 16 squares); left out: %d as GU's own, %d not textures (a GU menu or "
         "text could break XX's), %d not in XX, %d unreadable%s\n",
         mod_romfs, cs.n, written, cs.merged, cs.merged_tiles, cs.tiles, cs.same, cs.other_type, cs.not_in_xx, cs.bad,
         cs.unknown ? " (archives not read: this build has no GU fingerprints, extras/gu140.idx)" : "");

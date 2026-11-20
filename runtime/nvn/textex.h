@@ -23,4 +23,5 @@ uint64_t tex_pack_key(const uint8_t *p, uint64_t n, uint32_t w, uint32_t h, uint
 #define TEX_TILE 32u
 #define TEX_SIG 8u
 #define TEX_SIG_SLACK 12  // (a tile whose bytes all differ by no more than this: unchanged; BCn re-encoding moves them ~3)
+#define TEX_SIG_NEAR 3    // (beside a changed one: more than this goes with it)
 void tex_signatures(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_t *sig);
