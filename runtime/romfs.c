@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include "arcmerge.h"
+#include "gumods.h"
 #include "rt.h"
 
 #define EMPTY 0xFFFFFFFFu
@@ -190,6 +191,29 @@ static char *rel_path(File *f) {
     return s;
 }
 
+// The host file a path in the image is so far ("nativeNX/arc/resident.arc"): for gumods.c, while mods are laid over
+static Dir *g_building;
+static const char *current_file(const char *rel) {
+    Dir *d = g_building;
+    char part[256];
+    while (d && *rel) {
+        const char *slash = strchr(rel, '/');
+        size_t n = slash ? (size_t)(slash - rel) : strlen(rel);
+        if (n >= sizeof part) return NULL;
+        memcpy(part, rel, n), part[n] = 0;
+        if (!slash) {
+            for (int i = 0; i < d->nfiles; i++)
+                if (!strcasecmp(d->files[i]->name, part)) return d->files[i]->path;
+            return NULL;
+        }
+        Dir *next = NULL;
+        for (int i = 0; i < d->ndirs && !next; i++)
+            if (!strcasecmp(d->dirs[i]->name, part)) next = d->dirs[i];
+        d = next, rel = slash + 1;
+    }
+    return NULL;
+}
+
 bool romfs_open(const char *base_dir, const char *const *overlays, int noverlays) {
     uint64_t t0 = plat_now_ns();
     Dir *root = scan(base_dir, "", 0);
@@ -215,6 +239,13 @@ bool romfs_open(const char *base_dir, const char *const *overlays, int noverlays
         arc_partial_stats(&h1, &r1);
         LOG("[romfs] mod %s: %d files (listed in %.2f s, put over the game's in %.2f s; archives compared %d, "
             "from the cache %d)\n", overlays[i], n, (t2 - t1) / 1e9, (plat_now_ns() - t2) / 1e9, r1 - r0, h1 - h0);
+        // (a data mod made for MHGU: the textures it changed, in XX's archives: gumods.c)
+        char gu[1100];
+        g_building = root;
+        if (gumods_build(overlays[i], base_dir, current_file, gu, sizeof gu)) {
+            Dir *g = scan(gu, "", 0);
+            if (g) LOG("[romfs] mod %s: %d archive(s) made from its MHGU files\n", overlays[i], merge(root, g));
+        }
     }
     uint64_t t3 = plat_now_ns();
     sort_tree(root);

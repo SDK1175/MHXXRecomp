@@ -32,7 +32,7 @@ GEN_SRC  := $(wildcard $(GEN)/main/*.c) $(wildcard $(GEN)/sdk/*.c)
 GEN_OBJ  := $(patsubst $(GEN)/%.c,$(O)/gen/%.o,$(GEN_SRC)) $(O)/gen/tools/gamelib_entry.o
 RT_SRC   := $(wildcard runtime/*.c) $(wildcard runtime/hle/*.c) $(wildcard runtime/services/*.c) $(wildcard runtime/net/*.c) \
             runtime/nvn/objects.c runtime/nvn/cmdbuf.c runtime/nvn/nvn_args.c runtime/nvn/tegra.c runtime/nvn/formats.c \
-            runtime/nvn/backend_null.c runtime/nvn/astc.c runtime/nvn/bcn.c runtime/nvn/maxwell/translate.c $(wildcard runtime/nvn/vulkan/*.c) \
+            runtime/nvn/backend_null.c runtime/nvn/astc.c runtime/nvn/bcn.c runtime/nvn/textex.c runtime/nvn/maxwell/translate.c $(wildcard runtime/nvn/vulkan/*.c) \
             runtime/platform/$(PLATFORM).c
 # (simd_int.c / neon.c, helpers of the recompiled code, live in the executable: the game code library imports them,
 # and runtime/interp.c uses them too)
@@ -295,6 +295,8 @@ $(O)/version.id: FORCE
 $(O)/rt/ui.o: extras/icon/mhgurecomp-128.png
 # (the font the Korean patch's Hangul is drawn again from, built in: .incbin, the path relative to the repository)
 $(O)/rt/nvn/vulkan/hangulfont.o: third_party/paperlogy/Paperlogy-5Medium.ttf runtime/nvn/vulkan/hangulfont_ks.h
+# (MHGU's fingerprints for GU data mods, built in: tools/gumanifest)
+$(O)/rt/gumods.o: extras/gu140.idx
 $(O)/rt/main.o: $(O)/version.id
 $(O)/rt/main.o: RTFLAGS += -DMHGU_VERSION='"$(VERSION)"'
 
@@ -551,6 +553,16 @@ texextract: $(TEXEXTRACT)
 $(TEXEXTRACT): $(TEXEXTRACT_SRC) runtime/nvn/tegra.h runtime/nvn/bcn.h runtime/nvn/astc.h
 	@mkdir -p $(dir $@)
 	$(CC) -O2 -pthread -o $@ $(TEXEXTRACT_SRC) $(if $(filter windows,$(PLATFORM)),-fuse-ld=lld -static-libgcc -Wl$(comma)-Bstatic -lz -lwinpthread -Wl$(comma)-Bdynamic,-lz)
+
+# mhxx-gumanifest: MHGU 1.4.0's fingerprints for GU data mods (runtime/gumods.c), from your own MHGU game files:
+#   make gumanifest, then build/mhxx-gumanifest <MHGU romfs folder>   (writes extras/gu140.idx; numbers only)
+GUMANIFEST := $(B)/mhxx-gumanifest$(if $(filter windows,$(PLATFORM)),.exe)
+GUMANIFEST_SRC := tools/gumanifest/gumanifest.c runtime/nvn/textex.c runtime/nvn/tegra.c runtime/nvn/formats.c runtime/nvn/bcn.c runtime/nvn/astc.c
+.PHONY: gumanifest
+gumanifest: $(GUMANIFEST)
+$(GUMANIFEST): $(GUMANIFEST_SRC) runtime/nvn/textex.h runtime/nvn/tegra.h runtime/nvn/bcn.h
+	@mkdir -p $(dir $@)
+	$(CC) -O2 -o $@ $(GUMANIFEST_SRC) $(if $(filter windows,$(PLATFORM)),-fuse-ld=lld -static-libgcc -Wl$(comma)-Bstatic -lz -Wl$(comma)-Bdynamic,-lz)
 
 # mhxx-launcher: the launcher (tools/launcher: settings before the game, game file setup, high-resolution textures,
 # the update), built by its own script (incremental; its objects in $(O)/launcher)

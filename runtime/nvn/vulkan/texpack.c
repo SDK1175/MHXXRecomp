@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include "vk.h"
+#include "../../gumods.h"
 #include "../astc.h"
 #include "../bcn.h"
 #include "../tegra.h"
@@ -304,7 +305,8 @@ bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat 
     if (pack_state < 0) pack_scan();
     bool buttons = !linear && buttonicons_size(t->width, t->height);  // (the button prompts: buttonicons.c)
     bool hangul = !linear && hangulfont_size(t->width, t->height);    // (the Korean patch's font: hangulfont.c)
-    if ((pack_state != 1 && !buttons && !hangul) || linear) return false;
+    bool gu = !linear && gumods_pictures();                           // (GU data mods' menu pictures: gumods.c)
+    if ((pack_state != 1 && !buttons && !hangul && !gu) || linear) return false;
     const FormatInfo *fi = t->layout.fmt;
     if (!fi || t->target != 1 || t->depth > 1 || (t->layout.layers && t->layout.layers > 1)) return false;
     if (t->width < MIN_SIDE || t->height < MIN_SIDE || t->samples > 1) return false;
@@ -320,6 +322,15 @@ bool texpack_replace(NvnTexture *t, TexBackend *b, const uint8_t *mem, VkFormat 
     tegra_deswizzle(mem + l.offset, lin, l.wb, l.hb, 1, fi->bpb, l.block_height_log2, l.block_depth_log2);
     uint64_t key = texpack_key(lin, size, l.w, l.h, t->format);
     const char *path = pack_state == 1 ? pack_find(key) : NULL;
+    if (gu && !path) {  // (a pack's own picture of it comes first; then a GU mod's, before the button prompts')
+        uint32_t gw, gh;
+        uint8_t *gpx = gumods_picture(key, &gw, &gh);
+        if (gpx) {
+            bool ok = vk_tex_replace(b, gpx, gw, gh, srgb, 0);
+            free(gpx), free(lin);
+            return ok;
+        }
+    }
     int button_target = -1;
     if (buttons) {  // the game's picture, decoded: one with button pictures? (then painted with the controller's)
         Job j = {.data = lin, .size = size, .w = l.w, .h = l.h, .kind = (uint32_t)kind_of(vf, &srgb), .nvn_format = t->format,
