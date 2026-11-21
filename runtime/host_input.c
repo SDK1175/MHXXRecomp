@@ -650,6 +650,8 @@ void host_input_event(const SDL_Event *e) {
 static int32_t clamp_axis(int v) { return v < -32767 ? -32767 : v > 32767 ? 32767 : v; }
 
 // A Forge plugin's window open (true) or closed: the pointer free for it meanwhile, as Forge's own menu has it
+bool host_input_plugin_mouse(void) { return mouse_plugin_free; }
+
 void host_input_mouse_free(bool on) {
     if (on != mouse_plugin_free) LOG("[input] a plugin %s the mouse pointer\n", on ? "takes" : "gives back");
     mouse_plugin_free = on;

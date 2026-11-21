@@ -979,7 +979,10 @@ static bool mouse_touch(float *x, float *y) {
     SDL_Window *w = ui_window();
     float mx, my;
     int ww = 0, wh = 0;
-    if (!w || overlay_menu_open() || SDL_GetWindowRelativeMouseMode(w) || !SDL_GetWindowSize(w, &ww, &wh) || ww <= 0 || wh <= 0 ||
+    // (a plugin's window that took the mouse reads it through ImGui: its click is not a touch too, which the plugin
+    // would place by Forge's 16:9 canvas and take as a second click elsewhere)
+    if (!w || overlay_menu_open() || host_input_plugin_mouse() || SDL_GetWindowRelativeMouseMode(w) ||
+        !SDL_GetWindowSize(w, &ww, &wh) || ww <= 0 || wh <= 0 ||
         !(SDL_GetMouseState(&mx, &my) & SDL_BUTTON_LMASK))
         return false;
     float asp = g_render_aspect > 0 ? g_render_aspect : 16.0f / 9.0f;
