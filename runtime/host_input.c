@@ -668,11 +668,13 @@ static void mouse_update(int *rx, int *ry) {
         }
         mouse_dx = mouse_dy = 0;
     }
-    static bool chat_pointer;  // (full screen hides the pointer: shown while the chat box can be dragged)
-    if (chat_active() != chat_pointer && w) {
-        chat_pointer = chat_active();
-        if (chat_pointer) SDL_ShowCursor();
-        else if (SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) SDL_HideCursor();
+    // (full screen hides the pointer: shown while the chat box can be dragged, or a plugin's window has it)
+    static bool shown_pointer;
+    bool pointer = chat_active() || mouse_plugin_free;
+    if (pointer != shown_pointer && w) {
+        shown_pointer = pointer;
+        if (pointer) SDL_ShowCursor();
+        else if ((SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) && !overlay_menu_open()) SDL_HideCursor();
     }
     static uint64_t last;
     static float vx, vy;  // the speed, smoothed: counts a second
