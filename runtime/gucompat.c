@@ -71,6 +71,79 @@ static int pc_literals(const Range *r) {
     return k;
 }
 
+// ---- the game's imports. A plugin may find an import's slot (main's own table of the functions it calls in the SDK)
+// by the module's header, as the loader does: the NSO's MOD0 (its offset at +4), the dynamic section, the symbols and
+// the PLT relocations, and put its own function there (MHGU Utility: the controller reads, nn::hid::GetNpadState).
+// The region shows such a header (at IMPORTS, past GU's code and data) for the imports below, each slot holding what
+// MHXX's has; when a plugin's forge_onInit has written one, MHXX's slot gets it (gucompat_imports_sync), so the game's
+// calls go to the plugin, whose own call of the slot's old value goes on to the SDK.
+#define IMPORTS 0x017F0000u  // (in the region, below GU_SHADOW_SIZE: GU's code ends at 0x13f0000, its data at 0x172e600)
+static const char *const IMPORT_NAMES[] = {
+    "_ZN2nn3hid12GetNpadStateEPNS0_16NpadFullKeyStateERKj",
+    "_ZN2nn3hid12GetNpadStateEPNS0_16NpadJoyDualStateERKj",
+    "_ZN2nn3hid12GetNpadStateEPNS0_16NpadJoyLeftStateERKj",
+    "_ZN2nn3hid12GetNpadStateEPNS0_17NpadJoyRightStateERKj",
+    "_ZN2nn3hid12GetNpadStateEPNS0_17NpadHandheldStateERKj",
+};
+#define NIMPORTS (sizeof IMPORT_NAMES / sizeof IMPORT_NAMES[0])
+static uint32_t imp_xx[NIMPORTS], imp_shown[NIMPORTS];  // MHXX's slot (0: none), what the region's slot was last
+
+static void imports_show(void) {
+    const Module *m = &g_modules[0];
+    uint32_t jmprel = 0, pltsz = 0;
+    for (uint32_t d = m->dynamic; d && LD32(d); d += 8) {
+        if (LD32(d) == 23) jmprel = m->base + LD32(d + 4);  // DT_JMPREL
+        if (LD32(d) == 2) pltsz = LD32(d + 4);              // DT_PLTRELSZ
+    }
+    int found = 0;
+    for (uint32_t i = 0; jmprel && i < pltsz / 8 && m->symtab && m->strtab; i++) {
+        uint32_t off = LD32(jmprel + 8 * i), info = LD32(jmprel + 8 * i + 4), si = info >> 8;
+        if ((info & 0xFF) != 22 || si >= m->nsyms) continue;  // R_ARM_JUMP_SLOT
+        uint32_t name = LD32(m->symtab + 16 * si);
+        if (name >= m->strsz) continue;
+        const char *n = G2H(m->strtab + name);
+        for (uint32_t k = 0; k < NIMPORTS; k++)
+            if (!imp_xx[k] && !strcmp(n, IMPORT_NAMES[k])) imp_xx[k] = m->base + off, found++;
+    }
+    // the header: MOD0 at IMPORTS, the dynamic section at +0x40, the symbols at +0x100, their names at +0x200, the
+    // relocations at +0x800, the slots at +0x900 (offsets from the region's base, as a module's are from its own)
+    const uint32_t mod0 = IMPORTS, dyn = mod0 + 0x40, sym = mod0 + 0x100, str = mod0 + 0x200, rel = mod0 + 0x800,
+                   slot = mod0 + 0x900;
+    ST32(GU_SHADOW + 4, mod0);
+    memcpy(G2H(GU_SHADOW + mod0), "MOD0", 4);
+    ST32(GU_SHADOW + mod0 + 4, dyn - mod0);
+    uint32_t tags[][2] = {{5, str}, {6, sym}, {23, rel}, {2, 0}, {20, 17}, {0, 0}};  // STRTAB SYMTAB JMPREL PLTRELSZ PLTREL
+    uint32_t nrel = 0, at = 1;
+    ST8(GU_SHADOW + str, 0);
+    for (uint32_t k = 0; k < NIMPORTS; k++) {
+        if (!imp_xx[k]) continue;
+        size_t l = strlen(IMPORT_NAMES[k]) + 1;
+        memcpy(G2H(GU_SHADOW + str + at), IMPORT_NAMES[k], l);
+        ST32(GU_SHADOW + sym + 16 * (nrel + 1), at);  // (st_name; the rest 0)
+        at += (uint32_t)l;
+        ST32(GU_SHADOW + rel + 8 * nrel, slot + 4 * k);
+        ST32(GU_SHADOW + rel + 8 * nrel + 4, (nrel + 1) << 8 | 22);
+        imp_shown[k] = LD32(imp_xx[k]);
+        ST32(GU_SHADOW + slot + 4 * k, imp_shown[k]);
+        nrel++;
+    }
+    tags[3][1] = nrel * 8;
+    for (uint32_t i = 0; i < sizeof tags / sizeof tags[0]; i++) ST32(GU_SHADOW + dyn + 8 * i, tags[i][0]), ST32(GU_SHADOW + dyn + 8 * i + 4, tags[i][1]);
+    if (found) LOG("[forge] plugins for MHGU: %d of the game's controller imports shown where a plugin looks for them\n", found);
+}
+
+void gucompat_imports_sync(const char *plugin) {
+    if (state <= 0) return;
+    for (uint32_t k = 0; k < NIMPORTS; k++) {
+        if (!imp_xx[k]) continue;
+        uint32_t v = LD32(GU_SHADOW + IMPORTS + 0x900 + 4 * k);
+        if (v == imp_shown[k]) continue;
+        LOG("[forge] %s takes the game's import %s (its slot: %08x -> %08x)\n", plugin, IMPORT_NAMES[k], LD32(imp_xx[k]), v);
+        ST32(imp_xx[k], v);
+        imp_shown[k] = v;
+    }
+}
+
 bool gucompat_build(void) {
     pthread_mutex_lock(&lock);
     if (state) { pthread_mutex_unlock(&lock); return state > 0; }
@@ -105,6 +178,7 @@ bool gucompat_build(void) {
     }
     int lits = 0;
     for (uint32_t i = 0; i < nranges; i++) lits += pc_literals(&by_xx[i]);
+    imports_show();
     for (uint32_t i = 0; i < sizeof GU2XX_DATA / sizeof GU2XX_DATA[0]; i++)
         if ((uint64_t)GU2XX_DATA[i].gu + GU2XX_DATA[i].len <= GU_SHADOW_SIZE && kernel_mapped(MAIN_BASE + GU2XX_DATA[i].xx, GU2XX_DATA[i].len))
             memcpy(G2H(GU_SHADOW + GU2XX_DATA[i].gu), G2H(MAIN_BASE + GU2XX_DATA[i].xx), GU2XX_DATA[i].len);

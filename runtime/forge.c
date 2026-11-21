@@ -1013,6 +1013,9 @@ HLE_FUNC("forge_input_isPressed", f_in_pressed) { RET(ARG(0) < 64 && ((in_now & 
 HLE_FUNC("forge_input_isReleased", f_in_released) { RET(ARG(0) < 64 && ((~in_now & in_prev) >> ARG(0)) & 1); }
 // the pad is there once Forge has read it (the game's player 1 pad always is)
 HLE_FUNC("forge_input_isConnected", f_in_connected) { RET(in_connected); }
+// (bool free): a plugin's own window takes the mouse pointer (true) or gives it back: not captured for the camera
+// meanwhile, its clicks the window's (host_input.c)
+HLE_FUNC("forge_input_setMouseFree", f_in_mouse_free) { host_input_mouse_free(ARG(0) & 1); }
 HLE_FUNC("forge_input_getTouch", f_in_touch) {  // (float *x, float *y): the first finger, in screen pixels (1280x720)
     if (!touch_down) { RET(0); return; }
     if (ARG(0)) STF(ARG(0), touch_x);
@@ -1211,6 +1214,7 @@ static void app_run(Cpu *c) {
         if (p->on_init) {
             flog(0, "Initializing plugin app:/nativeNX/plugins/%s", p->name);
             gcall(c, p->on_init, 0, 0, 0, 0);
+            if (p->gu) gucompat_imports_sync(p->name);
         }
     }
     memcpy(c->r, args, sizeof args);

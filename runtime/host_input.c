@@ -94,6 +94,7 @@ static void wheel_turn(int n) {
 #define MOUSE_DEADZONE 0.40f
 static bool mouse_grab;       // the player's choice: clicked in (true) or Esc / focus lost (false)
 static bool mouse_captured;   // relative mode on now (grabbed, and no Forge menu open)
+static bool mouse_plugin_free; // a Forge plugin's own window wants the pointer (forge_input_setMouseFree)
 static bool mouse_no_capture; // relative mode refused (WSLg, some Wayland compositors): clicks are buttons, no mouse look
 static float mouse_dx, mouse_dy;  // counts moved since the last update
 // (tests: the control file's "mousemove <x> <y> <ms>", a mouse moving at that many counts a second, captured or not)
@@ -619,7 +620,7 @@ void host_input_event(const SDL_Event *e) {
         if (btn < 1 || btn > SDL_BUTTON_X2) break;
         if (!e->button.down) {
             mouse_held &= ~(1u << btn);
-        } else if (!mouse_captured && !mouse_no_capture) {  // (the click that captures the mouse is not a button press)
+        } else if (!mouse_captured && !mouse_no_capture && !mouse_plugin_free) {  // (the click that captures the mouse is not a button press)
             if (!mouse_grab) LOG("[input] capturing the mouse\n");
             mouse_grab = true;
         } else {
@@ -648,9 +649,15 @@ void host_input_event(const SDL_Event *e) {
 
 static int32_t clamp_axis(int v) { return v < -32767 ? -32767 : v > 32767 ? 32767 : v; }
 
+// A Forge plugin's window open (true) or closed: the pointer free for it meanwhile, as Forge's own menu has it
+void host_input_mouse_free(bool on) {
+    if (on != mouse_plugin_free) LOG("[input] a plugin %s the mouse pointer\n", on ? "takes" : "gives back");
+    mouse_plugin_free = on;
+}
+
 // Capture or release the mouse as wanted, and give its movement to the hunt camera or the right stick.
 static void mouse_update(int *rx, int *ry) {
-    bool want = mouse_grab && !overlay_menu_open() && !chat_active();  // (Forge's menu, the chat box: the pointer is theirs)
+    bool want = mouse_grab && !overlay_menu_open() && !chat_active() && !mouse_plugin_free;  // (Forge's menu, the chat box, a plugin's window: the pointer is theirs)
     SDL_Window *w = ui_window();
     if (want != mouse_captured && w) {
         if (SDL_SetWindowRelativeMouseMode(w, want) || !want) {

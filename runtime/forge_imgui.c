@@ -78,7 +78,7 @@ static const char **ig_strarr(uint32_t a, uint32_t n) {
 }
 
 // ------------------------------------------------------------------ guest memory for mirrors and string copies
-static struct { uint32_t addr, size; } g_free[256];
+static struct { uint32_t addr, size; } g_free[4096];  // (mirrors let go of keep their blocks for the next)
 static int g_nfree;
 
 static uint32_t gmem_alloc(uint32_t size) {
@@ -94,7 +94,7 @@ static uint32_t gmem_alloc(uint32_t size) {
 }
 
 static void gmem_free(uint32_t addr, uint32_t size) {
-    if (g_nfree < 256) g_free[g_nfree].addr = addr, g_free[g_nfree++].size = (size + 15) & ~15u;
+    if (g_nfree < 4096) g_free[g_nfree].addr = addr, g_free[g_nfree++].size = (size + 15) & ~15u;
 }
 
 // Host strings the plugin reads, copied into guest memory (by their host address; again if the text changed)
@@ -133,11 +133,12 @@ typedef struct { const char *name; uint32_t gsize, hsize; const MField *f; uint3
 #undef FORGE_IMGUI_TABLES
 
 enum { M_OWN_GUEST = 1, M_OWN_HOST = 2 };  // the guest block is ours / the host object is ours (plugin's object)
-typedef struct { void *host; uint32_t guest; uint16_t type; uint8_t flags; uint8_t *shadow; } Mirror;
+typedef struct { void *host; uint32_t guest; uint16_t type; uint8_t flags; uint8_t *shadow; uint32_t used; } Mirror;  // (used: the frame it was last asked for)
 
-#define MAXM 8192   // mirrors (slots of the two hash tables: twice that)
+#define MAXM 16384  // mirrors (slots of the two hash tables: twice that)
 static Mirror mir[MAXM];
 static int nmir, mfree_list[MAXM], nmfree;
+static uint32_t g_frame;  // (forge_imgui_run calls)
 static int hidx[2 * MAXM], gidx[2 * MAXM];  // open addressing: index + 1, 0 empty, -1 deleted
 static int hot[64], nhot;
 
@@ -147,7 +148,7 @@ static Mirror *find_host(const void *h, int type) {
     for (uint32_t k = hash_ptr((uintptr_t)h + (uintptr_t)type * 0x10001), n = 0; n < 2 * MAXM; n++, k++) {
         int i = hidx[k % (2 * MAXM)];
         if (!i) return NULL;
-        if (i > 0 && mir[i - 1].host == h && mir[i - 1].type == type) return &mir[i - 1];
+        if (i > 0 && mir[i - 1].host == h && mir[i - 1].type == type) return mir[i - 1].used = g_frame, &mir[i - 1];
     }
     return NULL;
 }
@@ -156,7 +157,7 @@ static Mirror *find_guest(uint32_t g) {
     for (uint32_t k = hash_ptr(g), n = 0; n < 2 * MAXM; n++, k++) {
         int i = gidx[k % (2 * MAXM)];
         if (!i) return NULL;
-        if (i > 0 && mir[i - 1].guest == g) return &mir[i - 1];
+        if (i > 0 && mir[i - 1].guest == g) return mir[i - 1].used = g_frame, &mir[i - 1];
     }
     return NULL;
 }
@@ -176,8 +177,36 @@ static void table_del(int *t, uint32_t k, int v) {
 
 static uint32_t mtype_gsize(int type) { return mtypes[type].f ? mtypes[type].gsize : 16; }
 
+static void mirror_drop(Mirror *m);
+
+// The table full: let go of the mirrors of ImGui's objects no plugin asked for in the last few seconds (a font's
+// glyphs and sizes, made as text is drawn, whose ImGui objects move when the font grows: a text-heavy plugin
+// otherwise fills the table in a few minutes). Not the plugins' own objects, nor the ones read every call.
+static int mirror_evict(void) {
+    static bool told;
+    if (!told) {
+        told = true;
+        int count[MTYPES] = {0};
+        for (int i = 0; i < nmir; i++) count[mir[i].type]++;
+        char line[512] = "";
+        for (int t = 0; t < MTYPES; t++)
+            if (count[t] > MAXM / 32)
+                snprintf(line + strlen(line), sizeof line - strlen(line), " %s %d", mtypes[t].name, count[t]);
+        LOG("[forge] ImGui objects for plugins: %d, the oldest let go (by type:%s)\n", nmir, line);
+    }
+    int n = 0;
+    for (uint32_t age = 600; age >= 30 && !n; age /= 4)
+        for (int i = 0; i < nmir; i++) {
+            Mirror *m = &mir[i];
+            if (!m->host || (m->flags & M_OWN_HOST) || mtypes[m->type].hot || g_frame - m->used < age) continue;
+            mirror_drop(m), n++;
+        }
+    return n;
+}
+
 static Mirror *mirror_new(void *h, int type, uint32_t g, int flags) {
     int i;
+    if (!nmfree && nmir == MAXM) mirror_evict();
     if (nmfree) i = mfree_list[--nmfree];
     else if (nmir < MAXM) i = nmir++;
     else {
@@ -186,7 +215,7 @@ static Mirror *mirror_new(void *h, int type, uint32_t g, int flags) {
         return NULL;
     }
     Mirror *m = &mir[i];
-    m->host = h, m->type = (uint16_t)type, m->flags = (uint8_t)flags;
+    m->host = h, m->type = (uint16_t)type, m->flags = (uint8_t)flags, m->used = g_frame;
     m->guest = g ? g : gmem_alloc(mtype_gsize(type));
     if (!g) m->flags |= M_OWN_GUEST;
     m->shadow = mtypes[type].f ? calloc(1, mtypes[type].gsize) : NULL;
@@ -709,6 +738,7 @@ void forge_imgui_init(void *cpu) {
 void forge_imgui_run(void *cpu, int which) {
     Cpu *c = cpu;
     t_cpu = c;
+    g_frame++;
     hot_pull();
     forge_plugins_imgui(c, which, 0, 0, 0);
     hot_push();

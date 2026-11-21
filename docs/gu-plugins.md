@@ -21,6 +21,7 @@
 | Key Quest Markers | PurplefinNeptuna | ❌ 안 됨 (사용자 제보) | 퀘스트 목록의 키·긴급 표시 |
 | World(like) Sharpness Gauge | PurplefinNeptuna | ❌ 안 됨 (사용자 제보) | 원래 포팅에서도 **KatLib보다 먼저 로드**해야 동작: 런처 → 모드에서 순서를 KatLib 위로 올려 다시 확인 필요 |
 | Monster Weakness Icons | Potobc | 확인 필요 | Forge 플러그인이 아닌 **데이터 모드**: 이제 텍스처는 덥크 위치로 옮겨짐(아래 "데이터 모드") |
+| MHGU Utility (Hunter's Compendium) | Rikiar73574 | 🟡 확인 중 | 아이템·무기 트리·방어구·위시리스트 창은 동작(영어). 입력 연결(시작 메뉴 항목, 퀘스트 중 채집 필터 등)은 0.10.8에서 포트가 지원: 확인 필요 |
 | KatSmithy | Katt404 | ❌ 안 됨 (게임이 꺼짐) | 타이틀 뒤 대장간 데이터(`facility/blacksmith.arc`)를 영문판 구조로 읽다가 게임이 멈춤. 메뉴 글씨는 한글 패치를 못 알아보고 영어로 나옴. 빼고 플레이하세요 |
 | Faster Field Hunter | Ellipse1638 | 🟡 대부분 동작 | 전투 중에만 스태미나 소모 등 동작. **모두 채집**(설정은 켜지지만 효과 없음)과 **아이템 아이콘**(스스로 꺼짐)은 덥크에서 안 됨 |
 
