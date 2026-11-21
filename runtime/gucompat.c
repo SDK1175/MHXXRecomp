@@ -256,6 +256,13 @@ uint32_t gucompat_data(uint32_t gu) {
     return xx ? MAIN_BASE + xx : 0;
 }
 
+// The address in MHXX of GU's code at main + gu, 0: not in the table (mhxx_gu_code: for a plugin that compares a
+// function pointer it read from the game, MHXX's real one, with one of GU's)
+uint32_t gucompat_code(uint32_t gu) {
+    const Range *r = range_of_gu(gu);
+    return r ? MAIN_BASE + r->xx + (gu - r->gu) : 0;
+}
+
 static bool shown_data(uint32_t gu) {  // (data the region shows as GU's: the build id)
     for (uint32_t i = 0; i < sizeof GU2XX_DATA / sizeof GU2XX_DATA[0]; i++)
         if (gu - GU2XX_DATA[i].gu < GU2XX_DATA[i].len) return true;

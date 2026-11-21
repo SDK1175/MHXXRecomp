@@ -24,3 +24,5 @@ void gucompat_imports_sync(const char *plugin);
 int gucompat_fix_plugin(const char *name, uint32_t text, uint32_t size);
 // The address in MHXX of GU's data at main + gu (an offset from GU's base), 0: not one the table knows
 uint32_t gucompat_data(uint32_t gu);
+// The address in MHXX of GU's code at main + gu, 0: not in the table
+uint32_t gucompat_code(uint32_t gu);
