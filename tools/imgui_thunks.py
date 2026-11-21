@@ -28,6 +28,9 @@ CIM = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'third_party', 'c
 OUT = os.path.join(ROOT, 'runtime', 'forge_imgui_thunks.inc')
 J = lambda n: json.load(open(os.path.join(CIM, 'generator', 'output', n), encoding='utf-8'))
 DEFS, SE, TD = J('definitions.json'), J('structs_and_enums.json'), J('typedefs_dict.json')
+# Structs a field points into an array of, not at one object: a mirror for each value the field takes would be one for
+# each vertex drawn (ImDrawList::_VtxWritePtr: a plugin drawing many shapes made thousands a frame). As plain data.
+ELEMENTS = {'ImDrawVert'}
 STRUCTS, ENUMS, ENUMTYPES, LOC = SE['structs'], SE['enums'], SE['enumtypes'], SE['locations']
 
 # hand-written in runtime/forge_imgui.c (contexts, allocators, the frame itself, context hooks, files, texture pixels,
@@ -232,7 +235,7 @@ def fields_table(name):
     for (go, gk, gz, gx), (ho, hk, hz, hx) in zip(gl, hl):
         assert gk == hk and gx == hx, name
         kind = gk
-        if kind == 'obj' and gx not in TID:
+        if kind == 'obj' and (gx not in TID or gx in ELEMENTS):
             kind = 'data'
         if kind == 'raw' and out and out[-1][3] == 'raw' and out[-1][0] + out[-1][2] == go and out[-1][1] + out[-1][2] == ho:
             out[-1] = (out[-1][0], out[-1][1], out[-1][2] + gz, 'raw', None)

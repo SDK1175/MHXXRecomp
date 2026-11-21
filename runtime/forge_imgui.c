@@ -179,9 +179,13 @@ static uint32_t mtype_gsize(int type) { return mtypes[type].f ? mtypes[type].gsi
 
 static void mirror_drop(Mirror *m);
 
-// The table full: let go of the mirrors of ImGui's objects no plugin asked for in the last few seconds (a font's
-// glyphs and sizes, made as text is drawn, whose ImGui objects move when the font grows: a text-heavy plugin
-// otherwise fills the table in a few minutes). Not the plugins' own objects, nor the ones read every call.
+// The table full: let go of the mirrors of a font's glyphs and of draw commands no plugin asked for in the last few
+// seconds (made as text is drawn; ImGui's own move when the font grows).
+static bool evictable(int type) {  // (objects a plugin keeps no hold of: its glyph and draw-command reads. Not fonts,
+    // sizes, lists...: given back to ImGui after their mirror was let go, ImGui would get a copy, not its own object)
+    return type == T_ImFontGlyph || type == T_ImDrawCmd || type == T_ImDrawVert;
+}
+
 static int mirror_evict(void) {
     static bool told;
     if (!told) {
@@ -198,7 +202,7 @@ static int mirror_evict(void) {
     for (uint32_t age = 600; age >= 30 && !n; age /= 4)
         for (int i = 0; i < nmir; i++) {
             Mirror *m = &mir[i];
-            if (!m->host || (m->flags & M_OWN_HOST) || mtypes[m->type].hot || g_frame - m->used < age) continue;
+            if (!m->host || !evictable(m->type) || g_frame - m->used < age) continue;
             mirror_drop(m), n++;
         }
     return n;
