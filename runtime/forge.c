@@ -1041,6 +1041,9 @@ HLE_FUNC("forge_input_isCtrlDown", f_ctrl) { RET(key(keys_now, SDL_SCANCODE_LCTR
 // state Forge's isKeyPressed polls once a frame can't give. mhxx_input_keyQueue: 1 (a port without these returns 0
 // for both: the plugin keeps polling).
 HLE_FUNC("mhxx_input_keyQueue", f_key_queue) { RET(1); }
+// The address in MHXX of GU 1.4.0's data at main + offset (0: unknown), for a plugin that adds offsets to the base at
+// run time (the Korean MHGU Utility: its offsets are not movw/movt pairs gucompat_fix_plugin could change)
+HLE_FUNC("mhxx_gu_data", f_gu_data) { RET(gucompat_data(ARG(0))); }
 HLE_FUNC("mhxx_input_popKey", f_pop_key) { RET(host_input_pop_key()); }
 HLE_FUNC("forge_input_isAltDown", f_alt) { RET(key(keys_now, SDL_SCANCODE_LALT) || key(keys_now, SDL_SCANCODE_RALT)); }
 HLE_FUNC("forge_graphics_isMenuVisible", f_gfx_menu_visible) { RET(overlay_menu_open()); }

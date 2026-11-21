@@ -249,6 +249,13 @@ static uint32_t global_gu(uint32_t xx) {
     return gu <= GU2XX_GLOBAL[i].last + 0x40 ? gu : 0;
 }
 
+// The address in MHXX of GU's data at main + gu, 0: not one the table knows (mhxx_gu_data: for a plugin that computes
+// the address at run time, which gucompat_fix_plugin can't find in its code)
+uint32_t gucompat_data(uint32_t gu) {
+    uint32_t xx = global_xx(gu);
+    return xx ? MAIN_BASE + xx : 0;
+}
+
 static bool shown_data(uint32_t gu) {  // (data the region shows as GU's: the build id)
     for (uint32_t i = 0; i < sizeof GU2XX_DATA / sizeof GU2XX_DATA[0]; i++)
         if (gu - GU2XX_DATA[i].gu < GU2XX_DATA[i].len) return true;

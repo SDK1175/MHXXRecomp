@@ -22,3 +22,5 @@ void gucompat_imports_sync(const char *plugin);
 // A plugin made for MHGU, loaded and not run yet: the offsets into GU's data its code holds (movw/movt pairs) changed
 // to give MHXX's addresses when added to the region's base. How many were
 int gucompat_fix_plugin(const char *name, uint32_t text, uint32_t size);
+// The address in MHXX of GU's data at main + gu (an offset from GU's base), 0: not one the table knows
+uint32_t gucompat_data(uint32_t gu);
