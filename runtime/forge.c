@@ -1037,6 +1037,11 @@ HLE_FUNC("forge_input_isKeyPressed", f_key_pressed) { RET(key(keys_now, ARG(0)) 
 HLE_FUNC("forge_input_isKeyReleased", f_key_released) { RET(!key(keys_now, ARG(0)) && key(keys_prev, ARG(0))); }
 HLE_FUNC("forge_input_isShiftDown", f_shift) { RET(key(keys_now, SDL_SCANCODE_LSHIFT) || key(keys_now, SDL_SCANCODE_RSHIFT)); }
 HLE_FUNC("forge_input_isCtrlDown", f_ctrl) { RET(key(keys_now, SDL_SCANCODE_LCTRL) || key(keys_now, SDL_SCANCODE_RCTRL)); }
+// The port's own, for a plugin that types (the Korean MHGU Utility): key presses in the order they came, which the
+// state Forge's isKeyPressed polls once a frame can't give. mhxx_input_keyQueue: 1 (a port without these returns 0
+// for both: the plugin keeps polling).
+HLE_FUNC("mhxx_input_keyQueue", f_key_queue) { RET(1); }
+HLE_FUNC("mhxx_input_popKey", f_pop_key) { RET(host_input_pop_key()); }
 HLE_FUNC("forge_input_isAltDown", f_alt) { RET(key(keys_now, SDL_SCANCODE_LALT) || key(keys_now, SDL_SCANCODE_RALT)); }
 HLE_FUNC("forge_graphics_isMenuVisible", f_gfx_menu_visible) { RET(overlay_menu_open()); }
 

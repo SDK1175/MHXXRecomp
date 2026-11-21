@@ -131,6 +131,7 @@ extern volatile uint64_t g_present_count;  // frames the game presented (the ren
 union SDL_Event;
 void host_input_event(const union SDL_Event *e);
 void host_input_update(void);            // recompute the controller state the game reads (each loop pass)
+uint32_t host_input_pop_key(void);      // key presses in order, for a plugin's text field (mhxx_input_popKey)
 void host_input_mouse_free(bool on);    // a Forge plugin's window has the mouse pointer (forge_input_setMouseFree)
 bool host_input_plugin_mouse(void);     // (it has it now)
 bool host_talk_held(void);               // [Voice] TalkKey or TalkButton held (push to talk; any thread)

@@ -562,6 +562,39 @@ static bool debug_keys(void) {
     return on;
 }
 
+// Key presses in the order they came, for a plugin's text field (mhxx_input_popKey in forge.c): a frame polls the
+// keyboard's state, so two keys pressed within one frame would come out in key-code order, and a key pressed and let go
+// within it not at all. The event thread writes, the game's reads (one each): a ring of 64; a press nobody took within
+// half a second (the plugin's window was closed) is dropped when read.
+static SDL_AtomicInt key_head, key_tail;
+static uint32_t key_ring[64];
+static Uint64 key_time[64];
+static void key_push(const SDL_KeyboardEvent *k) {
+    uint32_t v = (uint32_t)k->scancode & 0x1ff;
+    if (!v) return;
+    if (k->mod & SDL_KMOD_SHIFT) v |= 1u << 16;
+    if (k->mod & SDL_KMOD_CTRL) v |= 1u << 17;
+    if (k->mod & SDL_KMOD_ALT) v |= 1u << 18;
+    if (k->repeat) v |= 1u << 19;
+    int h = SDL_GetAtomicInt(&key_head);
+    if (h - SDL_GetAtomicInt(&key_tail) >= 64) return;  // (full: nobody reads them)
+    key_ring[h & 63] = v;
+    key_time[h & 63] = SDL_GetTicks();
+    SDL_SetAtomicInt(&key_head, h + 1);
+}
+// the next key press (scancode, bit 16 Shift, 17 Ctrl, 18 Alt, 19 a repeat), or 0
+uint32_t host_input_pop_key(void) {
+    Uint64 now = SDL_GetTicks();
+    for (;;) {
+        int t = SDL_GetAtomicInt(&key_tail);
+        if (t == SDL_GetAtomicInt(&key_head)) return 0;
+        uint32_t v = key_ring[t & 63];
+        Uint64 at = key_time[t & 63];
+        SDL_SetAtomicInt(&key_tail, t + 1);
+        if (now - at <= 500) return v;
+    }
+}
+
 void host_input_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) pad_pressed(e->gbutton.which);
     if (overlay_event(e)) return;  // (Forge's menu open: keyboard and mouse are its)
@@ -569,6 +602,7 @@ void host_input_event(const SDL_Event *e) {
     if (textinput_event(e)) return;  // (typing into a text entry: not controller buttons)
     switch (e->type) {
     case SDL_EVENT_KEY_DOWN: case SDL_EVENT_KEY_UP:
+        if (e->type == SDL_EVENT_KEY_DOWN) key_push(&e->key);
         if (e->key.scancode < SDL_SCANCODE_COUNT) keys[e->key.scancode] = e->type == SDL_EVENT_KEY_DOWN;
         if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat) {  // F12: screenshot, Shift+F12: 8 consecutive frames (run\shots\), F11: windowed <-> full screen
             static int nshot;
