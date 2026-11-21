@@ -16,6 +16,8 @@ extern "C" {
 void overlay_init(const char *font_path, float font_size, int menu_key);
 bool overlay_enabled(void);
 bool overlay_menu_open(void);
+// A Forge plugin's own window has the mouse (forge_input_setMouseFree): the mouse goes to ImGui with the menu closed
+void overlay_plugin_mouse(bool on);
 bool overlay_wants_text(void);  // a text field of the open menu (a Forge plugin's) has the focus
 bool overlay_settings_dirty(void);
 void overlay_request_close(void); // Close / Alt+F4 routes to controller confirmation inside settings.

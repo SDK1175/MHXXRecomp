@@ -653,6 +653,7 @@ static int32_t clamp_axis(int v) { return v < -32767 ? -32767 : v > 32767 ? 3276
 void host_input_mouse_free(bool on) {
     if (on != mouse_plugin_free) LOG("[input] a plugin %s the mouse pointer\n", on ? "takes" : "gives back");
     mouse_plugin_free = on;
+    overlay_plugin_mouse(on);
 }
 
 // Capture or release the mouse as wanted, and give its movement to the hunt camera or the right stick.

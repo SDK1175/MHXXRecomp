@@ -167,6 +167,9 @@ void overlay_toggle_settings(void) {
     set_open(g_forge_open);
 }
 
+static std::atomic<bool> g_plugin_mouse;
+void overlay_plugin_mouse(bool on) { g_plugin_mouse = on; }
+
 bool overlay_event(const SDL_Event *e) {
     if (!g_enabled) return false;
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && settings_panel_key((int)e->key.scancode)) return true;
@@ -182,7 +185,11 @@ bool overlay_event(const SDL_Event *e) {
         set_open(!g_forge_open);
         return true;
     }
-    if (!g_open) return false;
+    bool mouse_only = !g_open && g_plugin_mouse;  // (a plugin's window: its pointer and clicks, the keys the game's)
+    if (!g_open && !mouse_only) return false;
+    if (mouse_only && e->type != SDL_EVENT_MOUSE_MOTION && e->type != SDL_EVENT_MOUSE_BUTTON_DOWN &&
+        e->type != SDL_EVENT_MOUSE_BUTTON_UP && e->type != SDL_EVENT_MOUSE_WHEEL)
+        return false;
     SDL_Window *w = ui_window();
     float density = w ? SDL_GetWindowPixelDensity(w) : 1.0f;  // (ImGui works in the image's pixels)
     Ev v = {};
