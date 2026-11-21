@@ -134,6 +134,15 @@ static int source_of(int g, int style) {
     return src >= PAD_SRC_SOUTH && src < PAD_SRCS ? src - PAD_SRC_SOUTH : -1;
 }
 
+// The Xbox controller's letter of the button that presses Switch face button g (0 A, 1 B, 2 X, 3 Y), as the game's
+// prompts show it: 'A', 'B', 'X', 'Y'; 0 when the prompts are not Xbox's or that is not a face button
+// (mhxx_input_faceLabel: a plugin's own prompts the same as the game's)
+int buttonicons_face_label(int g) {
+    if (g < 0 || g > 3 || buttonicons_style() != 0) return 0;
+    int src = source_of(g, 0);
+    return src >= 0 && src < 4 ? "ABXY"[src] : 0;
+}
+
 bool buttonicons_size(uint32_t w, uint32_t h) {
     for (unsigned i = 0; i < sizeof targets / sizeof *targets; i++)
         if (targets[i].w == w && targets[i].h == h) return true;

@@ -163,6 +163,7 @@ uint64_t texpack_key(const uint8_t *level0, uint64_t size, uint32_t w, uint32_t 
 // painted and uploaded; b gone; each frame, from the render thread under vk_lock (painted again when the setting or a
 // binding changed)
 bool buttonicons_size(uint32_t w, uint32_t h);
+int buttonicons_face_label(int g);  // the Xbox letter that presses Switch A/B/X/Y (0..3), 0: not Xbox prompts
 int buttonicons_target(uint64_t key, const uint8_t *rgba, uint32_t w, uint32_t h);
 bool buttonicons_apply(struct TexBackend *b, int target, const uint8_t *rgba, uint32_t w, uint32_t h, bool srgb, uint32_t max_levels);
 void buttonicons_forget(struct TexBackend *b);

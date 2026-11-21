@@ -1046,6 +1046,10 @@ HLE_FUNC("mhxx_input_keyQueue", f_key_queue) { RET(1); }
 HLE_FUNC("mhxx_gu_data", f_gu_data) { RET(gucompat_data(ARG(0))); }
 HLE_FUNC("mhxx_gu_code", f_gu_code) { RET(gucompat_build() ? gucompat_code(ARG(0)) : 0); }
 HLE_FUNC("mhxx_input_popKey", f_pop_key) { RET(host_input_pop_key()); }
+// The Xbox letter ('A'..'Y') of the button that presses Switch face button n (0 A, 1 B, 2 X, 3 Y), as the game's
+// prompts show it with [Controller] / FaceButtons; 0 when the prompts are not Xbox's
+int buttonicons_face_label(int g);
+HLE_FUNC("mhxx_input_faceLabel", f_face_label) { RET((uint32_t)buttonicons_face_label((int)ARG(0))); }
 HLE_FUNC("forge_input_isAltDown", f_alt) { RET(key(keys_now, SDL_SCANCODE_LALT) || key(keys_now, SDL_SCANCODE_RALT)); }
 HLE_FUNC("forge_graphics_isMenuVisible", f_gfx_menu_visible) { RET(overlay_menu_open()); }
 
