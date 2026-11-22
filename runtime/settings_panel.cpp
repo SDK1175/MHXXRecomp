@@ -344,6 +344,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(bonus_content);
     SAME(village_in_hub);
     SAME(share_urgent);
+    SAME(title_back_exit);
     SAME(mouse_sensitivity);
     SAME(aspect_ratio);
     SAME(fov);
@@ -1002,6 +1003,7 @@ void reset_section() {
         c.button_icons = f.button_icons;
         c.update_notice = f.update_notice;
         c.confirm_exit = f.confirm_exit;
+        c.title_back_exit = f.title_back_exit;
         c.updates = f.updates;
         c.bonus_content = f.bonus_content;
         break;
@@ -1575,6 +1577,7 @@ std::vector<Row> main_rows() {
                    [](int v) { c.button_icons = v; }, ini("ButtonIcons"));
         header(r, "general.header", tr("General"));
         add_bool(r, "confirm.exit", "Confirm exit", &c.confirm_exit, ini("ConfirmExit"));
+        add_bool(r, "title.back.exit", "B on the title menu asks to quit", &c.title_back_exit, ini("TitleBackExit"));
         add_choice(r, "updates", "Updates", c.updates, {tr("Ask"), tr("Auto"), tr("Off")},
                    [](int v) { c.updates = v; }, ini("Updates"));
         add_bool(r, "update.notice", "Update notice in game", &c.update_notice, ini("UpdateNotice"));

@@ -88,6 +88,7 @@ typedef struct {
     int menu_scale;           // host UI text/layout scale, 50..200 percent
     int menu_confirm;         // independent confirmation policy for the host settings menu
     int confirm_exit;         // ask before closing the application
+    int title_back_exit;      // B on the title's Main Menu asks to quit (runtime/hle/title_exit.c)
     int fsr;                  // [Upscaler] FSR 3.1: 1 on (runtime/nvn/vulkan/fsr.c), 0 off
     int fsr_quality;          // FSR_*: the render scale
     float fsr_sharpness;      // FSR's RCAS sharpening, 0..1
@@ -234,6 +235,7 @@ int config_live_bonus_content(void);    // [Bonus Content] BonusContent: each ti
 int config_live_discord(void);         // [Discord] RichPresence
 int config_live_discord_hunter(void);  // [Discord] ShowHunter
 int config_live_share_urgent(void);    // [Multiplayer] ShareUrgentCredit
+int config_live_title_back_exit(void); // [Application] TitleBackExit
 void config_live_ldn(char *server, size_t server_size, char *key, size_t key_size);  // [Multiplayer] Server, Key
 bool config_restart_required(const Config *draft); // Raw cold fields vs this process's startup INI values.
 float config_audio_gain(void);  // atomic, safe on audio threads; 0 while muted in the background

@@ -22,6 +22,7 @@ void ui_capture_launch_args(int argc, char **argv) { launch_argc = argc; launch_
 void ui_request_action(bool restart) { SDL_SetAtomicInt(&requested_action, restart ? 2 : 1); }
 void ui_request_import(int what) { SDL_SetAtomicInt(&requested_action, 2 + what); }
 void ui_request_exit_to_launcher(void) { SDL_SetAtomicInt(&requested_action, 20); }
+void ui_request_exit_question(void) { SDL_SetAtomicInt(&requested_action, 21); }
 
 // Exit to launcher: mhxx-launcher (next to the game) started on its own, the game then closes
 static void start_launcher(void) {
@@ -380,6 +381,7 @@ int ui_run(void) {
         int action = SDL_SetAtomicInt(&requested_action, 0);
         if (action == 1) plat_exit(0);
         if (action == 20) { LOG("exit to launcher\n"); start_launcher(); plat_exit(0); }
+        if (action == 21) overlay_request_close();  // (B on the title's Main Menu: runtime/hle/title_exit.c)
         if (action == 2) {
             if (restart_application()) plat_exit(0);
             SDL_SetAtomicInt(&action_failed, 1);
