@@ -50,6 +50,42 @@ def files(build, platform):
     return out
 
 
+def path_markers():
+    """This PC's build folder and user folder in every spelling a build can record
+    (MSYS /f/x, F:/x, F:\\x): none may ship in a release."""
+    import re
+    cands = {os.getcwd(), os.path.expanduser('~')}
+    for k in ('USERPROFILE', 'HOME'):
+        if os.environ.get(k):
+            cands.add(os.environ[k])
+    out = set()
+    for c in cands:
+        c = c.replace('\\', '/').rstrip('/')
+        m = re.match(r'^/([a-zA-Z])(/.*)$', c)
+        if m:
+            c = m.group(1) + ':' + m.group(2)
+        if len(c) < 6:
+            continue
+        out.add(c)
+        if re.match(r'^[a-zA-Z]:/', c):
+            out.add(c.replace('/', '\\'))
+            out.add('/' + c[0] + c[2:])
+    return [m.lower().encode() for m in out]
+
+
+def check_paths(entries):
+    marks = path_markers()
+    bad = []
+    for rel, src, _ in entries:
+        with open(src, 'rb') as f:
+            data = f.read().lower()
+        hits = [m.decode() for m in marks if m in data]
+        if hits:
+            bad.append(f'  {rel}: {", ".join(sorted(hits))}')
+    if bad:
+        sys.exit('dist: these files hold this PC\'s folder paths (rebuild after make clean):\n' + '\n'.join(bad))
+
+
 def main():
     args = sys.argv[1:]
     bonus = None
@@ -77,6 +113,7 @@ def main():
             d = '/'.join(parts[:k])
             if d not in dirs:
                 dirs.append(d)
+    check_paths(entries)
     note = 'data/putexefsromfsfoldershere.txt'
 
     os.makedirs(out_dir, exist_ok=True)

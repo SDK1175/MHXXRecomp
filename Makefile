@@ -185,10 +185,12 @@ IMGUI_OBJ := $(patsubst $(IMGUI)/%.cpp,$(O)/imgui/%.o,$(IMGUI_SRC))
 # (-fvisibility=hidden: without it the executable exports Dear ImGui's C++ symbols, and an overlay that links the
 # system ImGui (MangoHud -> libimgui.so.1) binds its HUD's calls into ours: its 1.91 ImFontAtlas handed to our 1.92
 # code crashes at swap-chain creation. Our own code and the Forge plugins' ImGui thunks bind inside the executable.)
-IMGUIFLAGS := -O2 -g -fvisibility=hidden -DCIMGUI_NO_EXPORT -I$(IMGUI) -I$(IMGUI)/imgui $(LIB_INC)
+# (debug info records the build folder unless told otherwise: -fdebug-compilation-dir keeps it out of the release)
+NOPATH   := -fdebug-compilation-dir=.
+IMGUIFLAGS := -O2 -g $(NOPATH) -fvisibility=hidden -DCIMGUI_NO_EXPORT -I$(IMGUI) -I$(IMGUI)/imgui $(LIB_INC)
 # (vendored VulkanMemoryAllocator fallback: -I on a missing dir is ignored, so MSYS2 builds
 # with the system vulkan-memory-allocator package are unaffected)
-RTFLAGS  := -O2 -g -fno-strict-aliasing -Wall -Wno-unused-function -Iruntime -Ithird_party/vk_mem_alloc -I$(IMGUI) $(OSFLAGS) $(LIB_INC)
+RTFLAGS  := -O2 -g $(NOPATH) -fno-strict-aliasing -Wall -Wno-unused-function -Iruntime -Ithird_party/vk_mem_alloc -I$(IMGUI) $(OSFLAGS) $(LIB_INC)
 RTFLAGS  += -Ithird_party/rnnoise/include -DHAVE_RNNOISE
 # FSR 3.1 temporal upscaler (runtime/nvn/vulkan/fsr.c): third_party/fsr-vulkan = AMD FidelityFX SDK 1.1.4's FSR 3.1.4
 # upscaler (host scheduler, Vulkan backend, its GLSL) + a portable C wrapper, all MIT. No AMD binaries: the shaders are
@@ -201,7 +203,7 @@ FSR_SRC  := $(FSR)/src/ffx_vk_portable.c $(FSR)/src/ffx_vk_fsr3_portable.cpp $(F
               shared/ffx_breadcrumbs_list.cpp components/fsr3upscaler/ffx_fsr3upscaler.cpp backends/vk/ffx_vk.cpp \
               backends/shared/ffx_shader_blobs.cpp)
 FSR_OBJ  := $(patsubst $(FSR)/%,$(O)/fsr/%.o,$(FSR_SRC))
-FSRFLAGS := -O2 -w -DFFX_VK_PORTABLE_HAS_FSR3_UPSCALER=1 -DFFX_FSR3UPSCALER=1 -DDISABLE_FFX_DEBUG_BREAK=1 $(OSFLAGS) $(LIB_INC) \
+FSRFLAGS := -O2 -w $(NOPATH) -DFFX_VK_PORTABLE_HAS_FSR3_UPSCALER=1 -DFFX_FSR3UPSCALER=1 -DDISABLE_FFX_DEBUG_BREAK=1 $(OSFLAGS) $(LIB_INC) \
             -I$(FSR)/include -I$(FFX)/include -I$(FFX)/src/shared -I$(FFX)/src/components -I$(FFX)/src/backends/shared \
             -I$(FFX)/src/backends/shared/blob_accessors
 # the GLSL embedded by ffx_fsr3_glsl.c (assembler .incbin, paths relative to the directory make runs in)
@@ -317,7 +319,7 @@ $(O)/rt/settings_panel.o: runtime/settings_panel.cpp runtime/settings_panel.h ru
 
 $(O)/rnnoise/%.o: third_party/rnnoise/src/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -O2 -w -Ithird_party/rnnoise/include -c $< -o $@
+	$(CC) -O2 -w $(NOPATH) -Ithird_party/rnnoise/include -c $< -o $@
 
 $(O)/imgui/%.o: $(IMGUI)/%.cpp
 	@mkdir -p $(dir $@)
@@ -325,7 +327,7 @@ $(O)/imgui/%.o: $(IMGUI)/%.cpp
 
 $(O)/rt/nvn/vulkan/vma.o: runtime/nvn/vulkan/vma.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) -O2 -w -Ithird_party/vk_mem_alloc -c $< -o $@
+	$(CXX) -O2 -w $(NOPATH) -Ithird_party/vk_mem_alloc -c $< -o $@
 
 $(O)/fsr/%.c.o: $(FSR)/%.c
 	@mkdir -p $(dir $@)
@@ -344,7 +346,7 @@ $(EXE): $(RT_OBJ) $(AV_DEPS)
 # (tools/launcher/update.cpp; MHGU Recomp's separate updater program is gone); the game uses updater/sha256.c.
 $(O)/updater/%.o: updater/%.c updater/updater.h $(O)/version.id
 	@mkdir -p $(dir $@)
-	$(CC) -O2 -g -Wall $(OSFLAGS) $(LIB_INC) -DMHGU_VERSION='"$(VERSION)"' -c $< -o $@
+	$(CC) -O2 -g $(NOPATH) -Wall $(OSFLAGS) $(LIB_INC) -DMHGU_VERSION='"$(VERSION)"' -c $< -o $@
 # (SDL3 / shaderc: their headers before anything is compiled, their archives in LDFLAGS)
 $(RT_OBJ): $(LIB_STAMPS)
 $(ICON_RES): extras/icon/mhgurecomp.rc extras/icon/mhgurecomp.ico
