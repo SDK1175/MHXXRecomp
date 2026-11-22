@@ -23,12 +23,12 @@
 #define PORT_OFF(feat, name) PORT_OFF_RET(feat, name, )
 
 // ---- shared singletons
-#define A_G_GAMECONTROL                      0x0u  // GU 1.4.0: 0x1a8ca48  sGameControl *: +0x30 our player slot
-#define A_G_SELECTOR                         0x0u  // GU 1.4.0: 0x1a8ae38  sQuestSelector *: +0xd750 the quest's join count (hunters), +0xd74c its maximum
-#define A_G_SENEMY                           0x0u  // GU 1.4.0: 0x1a51fe0  sEnemy *: +0x1c the 10 live enemies
+#define A_G_GAMECONTROL                      0x1aadcf8u  // MHXX 1.5.1 (GU's functions' GOT slots, the same places in their MHXX twins). GU 1.4.0: 0x1a8ca48  sGameControl *: +0x30 our player slot
+#define A_G_SELECTOR                         0x1aac268u  // MHXX 1.5.1 (GU's functions' GOT slots, the same places in their MHXX twins). GU 1.4.0: 0x1a8ae38  sQuestSelector *: +0xd750 the quest's join count (hunters), +0xd74c its maximum
+#define A_G_SENEMY                           0x0u  // (MHXX 1.5.1: 0x1a737e0, left 0 until small monster sync is tried) GU 1.4.0: 0x1a51fe0  sEnemy *: +0x1c the 10 live enemies
 #define A_G_SNETWORK                         0x0u  // GU 1.4.0: 0x1a843f0
-#define A_G_SPLAYER                          0x0u  // GU 1.4.0: 0x1a85b58
-#define A_G_SQUEST                           0x0u  // GU 1.4.0: 0x1a8ad90  sQuest *: +0xa4 cQuestData * of the quest being played (+0x8 quest number)
+#define A_G_SPLAYER                          0x0u  // (MHXX 1.5.1: 0x1aa6fa8, left 0 as sEnemy) GU 1.4.0: 0x1a85b58
+#define A_G_SQUEST                           0x0u  // (MHXX 1.5.1: 0x1aac1c0, left 0 as sEnemy) GU 1.4.0: 0x1a8ad90  sQuest *: +0xa4 cQuestData * of the quest being played (+0x8 quest number)
 #define A_G_SYSTEM                           0x2348764u  // MHXX 1.5.1 (read +0x68 at 0x8717ec, 0x92bea4; checked live 2026-11-06: +0x38 60.0, +0x3c 30.0 target, +0x44 ~30.0 measured). GU 1.4.0: 0x2326764  engine system object *: +0x68 the frame step in 60 fps frames
 
 // ---- runtime/hle/buffcycle.c
@@ -148,20 +148,20 @@
 #define VI_PORTED (A_G_SYSTEM)
 
 // ---- runtime/hle/villagehub.c
-#define A_VILLAGEHUB_FN_QUEST_FILTER         0x0u  // GU 1.4.0: 0x5b8090  (list, quest number, counter type) -> listed?
-#define A_VILLAGEHUB_FN_CATEGORY_BUILD       0x0u  // GU 1.4.0: 0x5b85d8  sQuestSelector: categories from the list
-#define A_VILLAGEHUB_FN_CATEGORY_FILL        0x0u  // GU 1.4.0: 0x5bb318  sQuestSelector: category contents
-#define A_VILLAGEHUB_FN_CATEGORY_GET         0x0u  // GU 1.4.0: 0x5bc96c  (selector, slot) -> category
-#define A_VILLAGEHUB_FN_UI_ROWS              0x0u  // GU 1.4.0: 0x983074  uUIQuestCounter: the star rows of a rank
-#define A_VILLAGEHUB_FN_UI_UPDATE            0x0u  // GU 1.4.0: 0x981e34  uUIQuestCounter vtable slot 9
-#define A_VILLAGEHUB_FN_UI_DRAW              0x0u  // GU 1.4.0: 0x981bb0  uUIQuestCounter vtable slot 18
-#define A_VILLAGEHUB_FN_LIST_LOAD            0x0u  // GU 1.4.0: 0x5b7fd8  sQuestSelector: start the list job
-#define A_VILLAGEHUB_FN_LIST_DONE            0x0u  // GU 1.4.0: 0x5b8070  sQuestSelector: the list job has finished
-#define A_VILLAGEHUB_FN_CATEGORIES           0x0u  // GU 1.4.0: 0x5ba8fc  sQuestSelector: build the categories anew (at a stage's start)
-#define A_VILLAGEHUB_FN_QUEST_LOOKUP         0x0u  // GU 1.4.0: 0x5ba50c  (selector, quest number) -> its rQuestData (DLC, loaded, or in the list)
-#define A_VILLAGEHUB_FN_QUEST_UNLOCKED       0x0u  // GU 1.4.0: 0x74af8c  (quest number, 0xff, 0) -> unlocked in this save (the counters' check)
-#define A_VILLAGEHUB_G_RESOURCES             0x0u  // GU 1.4.0: 0x2326a64  the resource manager * (vtable +0x30: getResource(dti, path, mode))
-#define A_VILLAGEHUB_DTI_QUESTDATA           0x0u  // GU 1.4.0: 0x1a8ab98  rQuestData
+#define A_VILLAGEHUB_FN_QUEST_FILTER         0x5b4804u   // MHXX 1.5.1 (GU's code: the GU-to-MHXX code map; UI rows: the next function after 0x777628, the same fields). GU 1.4.0: 0x5b8090  (list, quest number, counter type) -> listed?
+#define A_VILLAGEHUB_FN_CATEGORY_BUILD       0x5b4d4cu   // MHXX 1.5.1 (GU's code: the GU-to-MHXX code map; UI rows: the next function after 0x777628, the same fields). GU 1.4.0: 0x5b85d8  sQuestSelector: categories from the list
+#define A_VILLAGEHUB_FN_CATEGORY_FILL        0x5b79e4u   // MHXX 1.5.1 (GU's code: the GU-to-MHXX code map; UI rows: the next function after 0x777628, the same fields). GU 1.4.0: 0x5bb318  sQuestSelector: category contents
+#define A_VILLAGEHUB_FN_CATEGORY_GET         0x5b901cu   // MHXX 1.5.1 (GU's code: the GU-to-MHXX code map; UI rows: the next function after 0x777628, the same fields). GU 1.4.0: 0x5bc96c  (selector, slot) -> category
+#define A_VILLAGEHUB_FN_UI_ROWS              0x977ba4u   // MHXX 1.5.1 (GU's code: the GU-to-MHXX code map; UI rows: the next function after 0x777628, the same fields). GU 1.4.0: 0x983074  uUIQuestCounter: the star rows of a rank
+#define A_VILLAGEHUB_FN_UI_UPDATE            0x976accu   // MHXX 1.5.1 (GU's code: the GU-to-MHXX code map; UI rows: the next function after 0x777628, the same fields). GU 1.4.0: 0x981e34  uUIQuestCounter vtable slot 9
+#define A_VILLAGEHUB_FN_UI_DRAW              0x976848u   // MHXX 1.5.1 (GU's code: the GU-to-MHXX code map; UI rows: the next function after 0x777628, the same fields). GU 1.4.0: 0x981bb0  uUIQuestCounter vtable slot 18
+#define A_VILLAGEHUB_FN_LIST_LOAD            0x5b474cu   // MHXX 1.5.1 (GU's code: the GU-to-MHXX code map; UI rows: the next function after 0x777628, the same fields). GU 1.4.0: 0x5b7fd8  sQuestSelector: start the list job
+#define A_VILLAGEHUB_FN_LIST_DONE            0x5b47e4u   // MHXX 1.5.1 (GU's code: the GU-to-MHXX code map; UI rows: the next function after 0x777628, the same fields). GU 1.4.0: 0x5b8070  sQuestSelector: the list job has finished
+#define A_VILLAGEHUB_FN_CATEGORIES           0x5b6fc4u   // MHXX 1.5.1 (GU's code: the GU-to-MHXX code map; UI rows: the next function after 0x777628, the same fields). GU 1.4.0: 0x5ba8fc  sQuestSelector: build the categories anew (at a stage's start)
+#define A_VILLAGEHUB_FN_QUEST_LOOKUP         0x5b6bf0u   // MHXX 1.5.1 (GU's code: the GU-to-MHXX code map; UI rows: the next function after 0x777628, the same fields). GU 1.4.0: 0x5ba50c  (selector, quest number) -> its rQuestData (DLC, loaded, or in the list)
+#define A_VILLAGEHUB_FN_QUEST_UNLOCKED       0x745e98u   // MHXX 1.5.1 (GU's code: the GU-to-MHXX code map; UI rows: the next function after 0x777628, the same fields). GU 1.4.0: 0x74af8c  (quest number, 0xff, 0) -> unlocked in this save (the counters' check)
+#define A_VILLAGEHUB_G_RESOURCES             0x2348a64u  // MHXX 1.5.1 (GU's functions' GOT slots, the same places in their MHXX twins). GU 1.4.0: 0x2326a64  the resource manager * (vtable +0x30: getResource(dti, path, mode))
+#define A_VILLAGEHUB_DTI_QUESTDATA           0x1aabfc8u  // MHXX 1.5.1 (GU's functions' GOT slots, the same places in their MHXX twins). GU 1.4.0: 0x1a8ab98  rQuestData
 #define VILLAGEHUB_PORTED (A_VILLAGEHUB_FN_QUEST_FILTER && A_VILLAGEHUB_FN_CATEGORY_BUILD && A_VILLAGEHUB_FN_CATEGORY_FILL && A_VILLAGEHUB_FN_CATEGORY_GET && A_VILLAGEHUB_FN_UI_ROWS && A_VILLAGEHUB_FN_UI_UPDATE && A_VILLAGEHUB_FN_UI_DRAW && A_VILLAGEHUB_FN_LIST_LOAD && A_VILLAGEHUB_FN_LIST_DONE && A_VILLAGEHUB_FN_CATEGORIES && A_VILLAGEHUB_FN_QUEST_LOOKUP && A_VILLAGEHUB_FN_QUEST_UNLOCKED && A_VILLAGEHUB_G_RESOURCES && A_VILLAGEHUB_DTI_QUESTDATA && A_G_GAMECONTROL && A_G_SELECTOR)
 
 // ---- runtime/hle/abort.c

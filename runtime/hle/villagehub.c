@@ -136,7 +136,7 @@ static void ui_draw(Cpu *c) { as_village_menu(c, FN_UI_DRAW); }
 // A quest someone else posted in the hub may be from the other list (a Village quest while this counter shows the
 // Hub's, or the other way round): joining looks its data up in the list (0x5ba50c(selector, quest number)) and says
 // "You do not meet the requirements" when it isn't there. So a quest missing from the list is loaded as the list job
-// loads each (the resource loc\quest\questData\questData_<number>) and added to the list, which has room for 864.
+// loads each (the resource quest\questData\questData_<number>; GU: loc\quest\...) and added to the list, which has room for 864.
 static uint32_t g_path;  // (guest memory for the resource path)
 static void quest_lookup(Cpu *c) {
     uint32_t sel = c->r[0], q = c->r[1], args[2] = {c->r[0], c->r[1]};
@@ -153,7 +153,7 @@ static void quest_lookup(Cpu *c) {
     }
     uint32_t list = LD32(sel + SEL_LIST), n = LD32(sel + SEL_COUNT), mgr = LD32(G_RESOURCES);
     if (!list || n >= LIST_MAX || !mgr) return;
-    snprintf((char *)G2H(g_path), 64, "loc\\quest\\questData\\questData_%07u", q);
+    snprintf((char *)G2H(g_path), 64, "quest\\questData\\questData_%07u", q);
     uint32_t res = call4(c, LD32(LD32(mgr) + 0x30), mgr, DTI_QUESTDATA, g_path, 2);  // (getResource, loading now)
     if (!res) {
         static int next;
