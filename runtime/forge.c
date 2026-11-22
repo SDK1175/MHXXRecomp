@@ -1065,6 +1065,13 @@ HLE_FUNC("forge_input_getKeyPressed", f_in_key_pressed) {
     if (ARG(0) && ARG(1)) snprintf((char *)G2H(ARG(0)), ARG(1), "%s", name);
     RET(1);
 }
+// mhxx_hangul_encode(const char *utf8, char *out, uint32_t size): the text with its Hangul as the MHXX Korean patch's
+// codes (the kanji it draws Hangul over), for a plugin's text in the game's own font; the bytes written (NUL after
+// them), 0: no Korean patch font, a syllable it lacks, or no room.
+uint32_t hangulfont_encode(const char *in, char *out, uint32_t size);  // (nvn/vulkan/hangulfont.c)
+HLE_FUNC("mhxx_hangul_encode", f_hangul_encode) {
+    RET(ARG(0) && ARG(1) && ARG(2) ? hangulfont_encode(gstr(ARG(0)), (char *)G2H(ARG(1)), ARG(2)) : 0);
+}
 HLE_FUNC("forge_input_getStickL", f_in_stick_l) { stick(c, 0); }
 HLE_FUNC("forge_input_getStickR", f_in_stick_r) { stick(c, 2); }
 HLE_FUNC("forge_input_isKeyDown", f_key_down) { RET(key(keys_now, ARG(0))); }

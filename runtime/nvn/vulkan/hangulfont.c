@@ -76,7 +76,9 @@ static uint8_t *member(const uint8_t *arc, long n, const char *name, uint32_t ty
 }
 
 // The font's Hangul boxes, if it is the Korean patch's grid
-static bool read_boxes(const uint8_t *g, uint32_t n) {
+static bool read_boxes_into(const uint8_t *g, uint32_t n, Box *boxes, uint32_t *codes);
+static bool read_boxes(const uint8_t *g, uint32_t n) { return read_boxes_into(g, n, boxes, NULL); }
+static bool read_boxes_into(const uint8_t *g, uint32_t n, Box *boxes, uint32_t *codes) {
     if (n < 0x48 || memcmp(g, "GFD", 4)) return false;
     uint32_t count = rd32(g + 0x1c), name = rd32(g + 0x40);
     uint64_t base = 0x44ull + name + 1;
@@ -100,6 +102,7 @@ static bool read_boxes(const uint8_t *g, uint32_t n) {
             if (!next) return false;  // (the game's own kanji: not in this grid)
         }
         boxes[i] = b;
+        if (codes) codes[i] = rd32(e);
     }
     return true;
 }
@@ -239,4 +242,68 @@ bool hangulfont_apply(TexBackend *b, int page, const uint8_t *rgba, uint32_t w, 
     free(px);
     LOG("[hangul] font page %d: %d syllables drawn from Paperlogy (%ux%u)%s\n", page, drawn, W, H, ok ? "" : ": no memory");
     return ok;
+}
+
+// ---- Hangul as the patch's codes, for a plugin's text in the game's font (forge.c: mhxx_hangul_encode). The codes are
+// the patch font's: the glyphs from U+7A00 on, in its grid (read_boxes), whatever [Display] KoreanFont says.
+static uint32_t enc_codes[SYLLABLES];
+static SDL_AtomicInt enc_state;  // 0 not looked at, 1 the patch's font, 2 not
+
+static bool enc_ready(void) {
+    int st = SDL_GetAtomicInt(&enc_state);
+    if (st) return st == 1;
+    static SDL_SpinLock lock;
+    SDL_LockSpinlock(&lock);
+    if (!(st = SDL_GetAtomicInt(&enc_state))) {
+        const char *path = romfs_host_path("nativeNX/arc/resident.arc");
+        SDL_IOStream *io = path ? SDL_IOFromFile(path, "rb") : NULL;
+        Sint64 n = io ? SDL_GetIOSize(io) : -1;
+        uint8_t *arc = n > 12 ? malloc((size_t)n) : NULL;
+        bool ok = arc && SDL_ReadIO(io, arc, (size_t)n) == (size_t)n;
+        if (io) SDL_CloseIO(io);
+        uint32_t gn = 0;
+        uint8_t *gfd = ok ? member(arc, (long)n, "GUI\\02_common\\font\\font_festa", ARC_GFD, &gn) : NULL;
+        static Box tmp[SYLLABLES];
+        st = gfd && read_boxes_into(gfd, gn, tmp, enc_codes) ? 1 : 2;
+        free(gfd), free(arc);
+        LOG("[hangul] plugins' Hangul in the patch's codes: %s\n", st == 1 ? "yes" : "no (not the Korean patch's font)");
+        SDL_SetAtomicInt(&enc_state, st);
+    }
+    SDL_UnlockSpinlock(&lock);
+    return st == 1;
+}
+
+uint32_t hangulfont_encode(const char *in, char *out, uint32_t size) {
+    if (!in || !out || !size || !enc_ready()) return 0;
+    uint32_t n = 0;
+    for (const unsigned char *p = (const unsigned char *)in; *p;) {
+        uint32_t c = *p, len = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : (c >> 3) == 30 ? 4 : 0;
+        if (!len) return 0;
+        for (uint32_t k = 1; k < len; k++) {
+            if ((p[k] & 0xc0) != 0x80) return 0;
+            c = (c << 6) | (p[k] & 0x3f);
+        }
+        if (len > 1) c &= len == 2 ? 0x7ff : len == 3 ? 0xffff : 0x1fffff;
+        p += len;
+        if (c >= 0xac00 && c <= 0xd7a3) {  // (a syllable outside KS X 1001's 2350: no glyph in the patch)
+            int lo = 0, hi = SYLLABLES - 1, at = -1;
+            while (lo <= hi) {
+                int mid = (lo + hi) / 2;
+                if (ksx1001_hangul[mid] == c) { at = mid; break; }
+                if (ksx1001_hangul[mid] < c) lo = mid + 1;
+                else hi = mid - 1;
+            }
+            if (at < 0) return 0;
+            c = enc_codes[at];
+        }
+        char b[4];
+        uint32_t k = c < 0x80 ? (b[0] = (char)c, 1)
+                   : c < 0x800 ? (b[0] = (char)(0xc0 | c >> 6), b[1] = (char)(0x80 | (c & 0x3f)), 2)
+                   : (b[0] = (char)(0xe0 | c >> 12), b[1] = (char)(0x80 | ((c >> 6) & 0x3f)), b[2] = (char)(0x80 | (c & 0x3f)), 3);
+        if (c >= 0x10000) return 0;
+        if (n + k + 1 > size) return 0;
+        memcpy(out + n, b, k), n += k;
+    }
+    out[n] = 0;
+    return n;
 }
