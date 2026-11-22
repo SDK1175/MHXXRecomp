@@ -139,8 +139,8 @@
 #define QUICKHUNT_PORTED (A_QUICKHUNT_FN_TOWN_IDLE && A_G_SELECTOR)
 
 // ---- runtime/hle/urgentcredit.c
-#define A_URGENTCREDIT_FN_URGENT             0x0u  // GU 1.4.0: 0x5ae75c  (sQuest) -> an Urgent quest
-#define A_URGENTCREDIT_FN_UNLOCKED           0x0u  // GU 1.4.0: 0x74af8c  (quest number, 0xff, 0) -> unlocked in this save
+#define A_URGENTCREDIT_FN_URGENT             0x5ab000u  // GU 1.4.0: 0x5ae75c  (sQuest) -> an Urgent quest
+#define A_URGENTCREDIT_FN_UNLOCKED           0x745e98u  // GU 1.4.0: 0x74af8c  (quest number, 0xff, 0) -> unlocked in this save
 #define URGENTCREDIT_PORTED (A_URGENTCREDIT_FN_URGENT && A_URGENTCREDIT_FN_UNLOCKED)
 
 // ---- runtime/hle/vi.c
