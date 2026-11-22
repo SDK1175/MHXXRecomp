@@ -43,6 +43,7 @@
 #define FN_QUEST_UNLOCKED A_VILLAGEHUB_FN_QUEST_UNLOCKED   // (quest number, 0xff, 0) -> unlocked in this save (the counters' check)
 #define G_RESOURCES       A_VILLAGEHUB_G_RESOURCES  // the resource manager * (vtable +0x30: getResource(dti, path, mode))
 #define DTI_QUESTDATA     A_VILLAGEHUB_DTI_QUESTDATA  // rQuestData
+#define DTI_ARCHIVE       A_VILLAGEHUB_DTI_ARCHIVE  // rArchive
 #define SEL_LIST          0x24u       // sQuestSelector: rQuestData *[LIST_MAX], +0x28 their number
 #define SEL_COUNT         0x28u
 #define LIST_MAX          0x360u
@@ -190,9 +191,27 @@ static void quest_lookup(Cpu *c) {
 // GU's job finishes on its worker; MHXX's needs the game thread running meanwhile, and a wait in place never ended).
 // Until then the counter UI isn't updated (no input, the menu as it was); then the categories are built anew, as when
 // a stage starts, and the UI goes back to its first state, which lays the menu out for the new mode.
+// MHXX keeps the Village quests' data in the archive quest\vq (nativeNX/arc/quest/vq.arc), which the villages load and
+// the Hub doesn't (it has gq / gq2: 0x351cec picks them by area type). So the first switch to Village quests loads it
+// here, at once, and keeps it (the reference is never given back: the quests stay loadable, as the list keeps them).
+static uint32_t g_vq;
+static void load_village_archive(Cpu *c) {
+    uint32_t mgr = LD32(G_RESOURCES);
+    if (g_vq || !mgr) return;
+    static const char *const paths[] = {"quest\\vq", "arc\\quest\\vq"};
+    for (int i = 0; i < 2 && !g_vq; i++) {
+        uint64_t t0 = plat_now_ns();
+        snprintf((char *)G2H(g_path), 64, "%s", paths[i]);
+        g_vq = call4(c, LD32(LD32(mgr) + 0x30), mgr, DTI_ARCHIVE, g_path, 1);
+        LOG("[vqhub] the Village quests' archive %s: %s (%.0f ms)\n", paths[i], g_vq ? "loaded" : "not found",
+            (plat_now_ns() - t0) / 1e6);
+    }
+}
+
 static void list_start(Cpu *c, bool village) {
     uint32_t sel = LDG(G_SELECTOR);
     if (!sel) return;
+    if (village) load_village_archive(c);
     g_list_village = village;
     g_filter_calls = 0, g_filter_last = 0, g_preloaded = 0, g_preload_failed = 0;
     call1(c, FN_LIST_LOAD, sel);

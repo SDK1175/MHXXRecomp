@@ -163,6 +163,7 @@
 #define A_VILLAGEHUB_FN_QUEST_UNLOCKED       0x745e98u   // MHXX 1.5.1 (GU's code: the GU-to-MHXX code map; UI rows: the next function after 0x777628, the same fields). GU 1.4.0: 0x74af8c  (quest number, 0xff, 0) -> unlocked in this save (the counters' check)
 #define A_VILLAGEHUB_G_RESOURCES             0x2348a64u  // MHXX 1.5.1 (GU's functions' GOT slots, the same places in their MHXX twins). GU 1.4.0: 0x2326a64  the resource manager * (vtable +0x30: getResource(dti, path, mode))
 #define A_VILLAGEHUB_DTI_QUESTDATA           0x1aabfc8u  // MHXX 1.5.1 (GU's functions' GOT slots, the same places in their MHXX twins). GU 1.4.0: 0x1a8ab98  rQuestData
+#define A_VILLAGEHUB_DTI_ARCHIVE             0x2346df0u  // MHXX 1.5.1 (the DTI constructor at 0xd2f6d4, "rArchive"). MHXX only: the Village quests' archive quest\\vq, loaded in the villages, not the Hub
 #define VILLAGEHUB_PORTED (A_VILLAGEHUB_FN_QUEST_FILTER && A_VILLAGEHUB_FN_CATEGORY_BUILD && A_VILLAGEHUB_FN_CATEGORY_FILL && A_VILLAGEHUB_FN_CATEGORY_GET && A_VILLAGEHUB_FN_UI_ROWS && A_VILLAGEHUB_FN_UI_UPDATE && A_VILLAGEHUB_FN_UI_DRAW && A_VILLAGEHUB_FN_LIST_LOAD && A_VILLAGEHUB_FN_LIST_DONE && A_VILLAGEHUB_FN_CATEGORIES && A_VILLAGEHUB_FN_QUEST_LOOKUP && A_VILLAGEHUB_FN_QUEST_UNLOCKED && A_VILLAGEHUB_G_RESOURCES && A_VILLAGEHUB_DTI_QUESTDATA && A_G_GAMECONTROL && A_G_SELECTOR)
 
 // ---- runtime/hle/abort.c
