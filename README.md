@@ -55,6 +55,7 @@ MHXX Recomp는 [MHGU Recomp](https://github.com/morerokk/MHGURecomp)를 포크�
 
 | 버전 | 이름 | 내용 |
 |---|---|---|
+| [0.10.11](docs/changelog/0.10.11.md) | | 타이틀 화면 B 종료, F1 메뉴가 패드 배치를 따름, 긴급 퀘스트 클리어 공유, Faster Field Hunter 모두 채집 동작 |
 | [0.10.10](docs/changelog/0.10.10.md) | | Key Quest Markers·World(like) Sharpness Gauge 플러그인 동작, 플러그인 메모리 겹침으로 튕길 수 있던 문제 수정 |
 | [0.10.9](docs/changelog/0.10.9.md) | | MHGU Skill Simulator(덥크용 수정판) 동작, 플러그인 메모리 46MB, 플러그인 마우스·키 입력과 한글 |
 | [0.10.8](docs/changelog/0.10.8.md) | | MHGU Utility 플러그인 동작(한글판 별도), 영문판 텍스처 모드를 덥크에 옮겨 넣기, 플러그인 창 마우스·키보드 입력 |

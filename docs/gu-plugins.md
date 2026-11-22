@@ -24,7 +24,7 @@
 | MHGU Utility (Hunter's Compendium) | Rikiar73574 | ✅ 동작 (0.10.8부터) | 아이템·무기 트리·방어구·위시리스트(보유 수량)·스킬 조합(헌터 정보)·퀘스트 추천·채집 지도 아이콘 모두 동작. 검색창 키보드 입력이 빠르게 쳐도 순서대로 들어가고, 패드 버튼 표시는 F1에서 바꾼 버튼 설정을 따름. 원본은 영어: [한글판](https://github.com/SDK1175/mhgu-utility-kor/releases) |
 | MHGU Skill Simulator | ZellD-0371 | ✅ 동작 (0.10.9부터, 수정판) | 원본은 덥크 메뉴를 못 알아봐서 창이 안 열림. [덥크용 수정판](https://github.com/SDK1175/MHGU-Skill-Simulator/releases)을 쓰세요: 마을·집회소 + 메뉴 3페이지, 한글 이름, 마우스·휠, 장비 읽기 확인 |
 | KatSmithy | Katt404 | ❌ 안 됨 (보류) | 대장간 화면 전체를 바꾸는 큰 모드로, 무기·방어구 데이터를 영문판 구조로 읽어 덥크와 맞지 않음. 빼고 플레이하세요 |
-| Faster Field Hunter | Ellipse1638 | 🟡 대부분 동작 | 빠른 채집·질주, 스태미나, 팝업 묶기, 퀘스트 납품 동작. **모두 채집**은 다음 업데이트부터 동작(0.10.10까지는 효과 없음). **아이템 아이콘**은 덥크에서 스스로 꺼짐 |
+| Faster Field Hunter | Ellipse1638 | 🟡 대부분 동작 | 빠른 채집·질주, 스태미나, 팝업 묶기, 퀘스트 납품, **모두 채집**(0.10.11부터) 동작. **아이템 아이콘**은 덥크에서 스스로 꺼짐 |
 
 확인 전: Sprint/Weapon Trigger Split(Katt404, KatLib 필요: 달리기와 무기 조작을 다른 트리거로 나눔, 월드식 조작), FF14-style Damage Text, Armor Fusion(세이브 관련)
 
