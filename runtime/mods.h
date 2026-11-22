@@ -32,6 +32,7 @@ void forge_init(void);  // Forge plugins from the mods' RomFS (runtime/forge.c):
 void hpscale_init(void);  // large monster HP by the number of hunters (runtime/hle/hpscale.c)
 void villagehub_init(void);  // Village quests at the Hub / Pub counter (runtime/hle/villagehub.c)
 void title_exit_init(void);  // B on the title's Main Menu asks to quit (runtime/hle/title_exit.c)
+void questskip_init(void);  // R3 after a quest's clear returns at once (runtime/hle/questskip.c)
 void urgentcredit_init(void);  // Urgent quests count for all who clear them (runtime/hle/urgentcredit.c)
 void mashrate_init(void);  // mashing out of a stun at the Switch's rate at high frame rates (runtime/hle/mashrate.c)
 void fastload_init(void);  // shorter waits between areas when playing alone (runtime/hle/fastload.c)

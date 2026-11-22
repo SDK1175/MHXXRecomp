@@ -100,6 +100,7 @@
     /* [Application] */                                                                             \
     .confirm_exit = 1,                                                                              \
     .title_back_exit = 1,                                                                           \
+    .quest_skip = 1,                                                                                \
     .language = 2,                                                                                  \
     .button_icons = 0,                                                                              \
     .menu_theme = THEME_HUNTER,                                                                     \
@@ -496,6 +497,10 @@ static const char DEFAULT_INI[] =
     "; Default: On\n"
     "TitleBackExit = On\n"
     "\n"
+    "; After a quest is cleared, R3 (the right stick's click) returns at once instead of waiting (alone only)\n"
+    "; Default: On\n"
+    "QuestClearSkip = On\n"
+    "\n"
     "; Language of the settings menu (F1, or Minus + Plus on a controller)\n"
     "; English, Spanish, Korean\n"
     "; Default: Korean\n"
@@ -734,6 +739,7 @@ const ConfigSetting g_settings[] = {
     {"Voice", "VoiceVolume", SET_INT, F(voice_volume), 0, 0, 100, NULL, NULL, false, ERR_MISC},
     ON_OFF("Application", "ConfirmExit", confirm_exit, false),
     ON_OFF("Application", "TitleBackExit", title_back_exit, false),
+    ON_OFF("Application", "QuestClearSkip", quest_skip, false),
     {"Application", "Language", SET_CHOICE, F(language), 0, 0, 0, "English|en,Spanish|es,Korean|ko|한국어", NULL, false, ERR_LANGUAGE},
     {"Application", "ButtonIcons", SET_CHOICE, F(button_icons), 0, 0, 0, "Xbox,Switch,PlayStation", NULL, false, ERR_ICONS},
     {"Application", "Theme", SET_CHOICE, F(menu_theme), 0, 0, 0, "Gold,Blue,Hunter,DoubleCross", NULL, false, ERR_MISC},

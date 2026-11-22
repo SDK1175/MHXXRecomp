@@ -345,6 +345,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(village_in_hub);
     SAME(share_urgent);
     SAME(title_back_exit);
+    SAME(quest_skip);
     SAME(mouse_sensitivity);
     SAME(aspect_ratio);
     SAME(fov);
@@ -1004,6 +1005,7 @@ void reset_section() {
         c.update_notice = f.update_notice;
         c.confirm_exit = f.confirm_exit;
         c.title_back_exit = f.title_back_exit;
+        c.quest_skip = f.quest_skip;
         c.updates = f.updates;
         c.bonus_content = f.bonus_content;
         break;
@@ -1578,6 +1580,8 @@ std::vector<Row> main_rows() {
         header(r, "general.header", tr("General"));
         add_bool(r, "confirm.exit", "Confirm exit", &c.confirm_exit, ini("ConfirmExit"));
         add_bool(r, "title.back.exit", "B on the title menu asks to quit", &c.title_back_exit, ini("TitleBackExit"));
+        add_bool(r, "quest.skip", "R3 after a quest clear returns at once", &c.quest_skip, ini("QuestClearSkip"));
+        r.back().help = tr("After a quest is cleared, the right stick's click (keyboard: Alt) skips the wait and the closing screens and goes to the results. Only when no other player is in your network.");
         add_choice(r, "updates", "Updates", c.updates, {tr("Ask"), tr("Auto"), tr("Off")},
                    [](int v) { c.updates = v; }, ini("Updates"));
         add_bool(r, "update.notice", "Update notice in game", &c.update_notice, ini("UpdateNotice"));
