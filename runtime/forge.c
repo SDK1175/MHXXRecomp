@@ -1257,6 +1257,7 @@ static void app_run(Cpu *c) {
         p->param = hle_alloc(72);
         p->active = true;
         flog(0, "Resolving symbols for plugin app:/nativeNX/plugins/%s", p->name);
+        if (p->gu) gucompat_check_signatures(p->name, p->m->base + p->m->ro_off, p->m->data_off - p->m->ro_off);
         if (!p->on_load) {
             flog(2, "Plugin app:/nativeNX/plugins/%s does not have a forge_onLoad function, skipping", p->name);
             continue;

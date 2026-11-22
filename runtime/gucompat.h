@@ -10,7 +10,8 @@
 
 // Built once, when the first plugin for GU asks for the game's base. false: this build has no table
 bool gucompat_build(void);
-bool gucompat_shown_as_gu(uint32_t a);  // (a word of GU2XX_WORD: GU's, not MHXX's code)
+bool gucompat_shown_as_gu(uint32_t a);
+void gucompat_check_signatures(const char *plugin, uint32_t ro, uint32_t len);  // (log a plugin's checks of GU code)  // (a word of GU2XX_WORD: GU's, not MHXX's code)
 static inline bool gucompat_in_shadow(uint32_t a) { return a - GU_SHADOW < GU_SHADOW_SIZE; }
 // The address in MHXX of an address in the region, 0: not one the table knows (the first few are logged)
 uint32_t gucompat_real(uint32_t a);

@@ -319,3 +319,31 @@ int gucompat_fix_plugin(const char *name, uint32_t text, uint32_t size) {
     }
     return n;
 }
+
+// A plugin's checks of GU's code, before its forge_onLoad: records of a GU code offset and the 32 bytes the plugin
+// expects there (Key Quest Markers, World Sharpness Gauge, and the like keep them in their read-only data). One that
+// nearly matches what the region shows (4 to 7 of 8 words) is logged with the words that differ: why a plugin says
+// "code mismatch".
+void gucompat_check_signatures(const char *plugin, uint32_t ro, uint32_t len) {
+    if (state <= 0) return;
+    int logged = 0, checked = 0;
+    for (uint32_t a = ro; a + 36 <= ro + len && logged < 12; a += 4) {
+        uint32_t off = LD32(a);
+        if (off < 0x10000 || off >= 0x13f2000 || (off & 3) || off + 32 > GU_SHADOW_SIZE) continue;
+        int same = 0;
+        for (int k = 0; k < 8; k++) same += LD32(a + 4 + 4 * k) == LD32(GU_SHADOW + off + 4 * k);
+        if (same == 8) { checked++; continue; }
+        if (same < 4) continue;
+        char diff[200];
+        int n = 0;
+        for (int k = 0; k < 8 && n < (int)sizeof diff - 40; k++) {
+            uint32_t want = LD32(a + 4 + 4 * k), shown = LD32(GU_SHADOW + off + 4 * k);
+            if (want != shown) n += snprintf(diff + n, sizeof diff - n, " +%d %08x/%08x", 4 * k, want, shown);
+        }
+        const Range *r = range_of_gu(off);
+        LOG("[forge] %s expects GU's code at main+%x (MHXX main+%x): %d of 8 words differ (wanted/shown):%s\n", plugin,
+            off, r ? r->xx + (off - r->gu) : 0, 8 - same, diff);
+        logged++;
+    }
+    if (checked || logged) LOG("[forge] %s: %d checks of GU's code match, %d differ (above)\n", plugin, checked, logged);
+}
