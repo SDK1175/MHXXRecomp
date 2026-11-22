@@ -1185,9 +1185,30 @@ HLE_FUNC("__aeabi_read_tp", f_read_tp) {
 }
 
 // ------------------------------------------------------------------ plugins
+// Each plugin's time in its every-frame drawing (forge_onImGuiFreeRender), logged every 30 s for those over 0.2 ms a
+// frame on average: which plugin a frame-rate drop comes from.
+static uint64_t free_ns[MAX_PLUGINS], free_since;
+static uint32_t free_frames;
+
 void forge_plugins_imgui(Cpu *c, int which, uint32_t a0, uint32_t a1, uint32_t a2) {
-    for (int i = 0; i < nplugins; i++)
-        if (plugins[i].active && plugins[i].on_imgui[which]) gcall(c, plugins[i].on_imgui[which], a0, a1, a2, 0);
+    bool timed = which == FORGE_IMGUI_FREE_RENDER;
+    for (int i = 0; i < nplugins; i++) {
+        if (!plugins[i].active || !plugins[i].on_imgui[which]) continue;
+        uint64_t t0 = timed ? SDL_GetTicksNS() : 0;
+        gcall(c, plugins[i].on_imgui[which], a0, a1, a2, 0);
+        if (timed) free_ns[i] += SDL_GetTicksNS() - t0;
+    }
+    if (!timed) return;
+    uint64_t now = SDL_GetTicksNS();
+    if (!free_since) free_since = now;
+    free_frames++;
+    if (now - free_since < 30000000000ull) return;
+    for (int i = 0; i < nplugins; i++) {
+        double ms = free_ns[i] / 1e6 / free_frames;
+        if (ms >= 0.2) LOG("[forge] %s: %.2f ms a frame drawing (average of %u frames)\n", plugins[i].name, ms, free_frames);
+        free_ns[i] = 0;
+    }
+    free_since = now, free_frames = 0;
 }
 
 bool forge_plugins_have(int which) {
