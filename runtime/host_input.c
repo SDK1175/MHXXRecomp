@@ -1005,6 +1005,25 @@ void host_input_update(void) {
     }
     uint64_t mb = kb | b;  // what the settings menu reads: the controller's usual buttons
     b = kb | (pad ? pad_remap(b) : b);
+    // The menus' A / B / X / Y (Select, Back, Save, Undo) follow [Controller] as the game does, when A and B both stay
+    // on a face button of their own: a setting that took either away keeps the usual ones, so it can be undone with the
+    // controller. The prompts show the button that is pressed for each.
+    if (pad) {
+        int src[4], pos[4];
+        bool follow = true;
+        for (int s = 0; s < 4; s++) {
+            src[s] = config_live_pad_bind(s);  // (rows 0-3: A, B, X, Y, as pad_bind_buttons)
+            pos[s] = overlay_face_position(s);
+            if (src[s] >= PAD_SRC_SOUTH && src[s] <= PAD_SRC_NORTH) pos[s] = src[s] - PAD_SRC_SOUTH;
+            else if (src[s] != PAD_SRC_DEFAULT && s < 2) follow = false;  // (A or B on no face button)
+        }
+        if (follow && pos[0] == pos[1]) follow = false;
+        if (follow) {
+            uint64_t face = B(BTN_A) | B(BTN_B) | B(BTN_X) | B(BTN_Y);
+            mb = (mb & ~face) | (kb & face) | (b & face);
+            overlay_face_positions(pos);  // (after the usual ones, set above for this frame)
+        }
+    }
 
     uint64_t frame = g_present_count;
     for (int i = 0; i < nscript; i++) {
