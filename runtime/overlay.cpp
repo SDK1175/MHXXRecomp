@@ -484,6 +484,7 @@ void overlay_init(const char *font_path, float font_size, int menu_key) {
 static std::mutex g_notice_lock;
 static std::string g_notice_title, g_notice_text;
 static uint64_t g_notice_ns;  // when it came (SDL_GetTicksNS); 0: none
+static bool g_notice_held;    // overlay_notice_hold: kept up, at full strength
 static const uint64_t NOTICE_NS = 7000000000ull;
 
 void overlay_notice(const char *title, const char *text) {
@@ -491,23 +492,41 @@ void overlay_notice(const char *title, const char *text) {
     g_notice_title = title ? title : "";
     g_notice_text = text ? text : "";
     g_notice_ns = std::max<uint64_t>(SDL_GetTicksNS(), 1);
+    g_notice_held = false;
+}
+
+void overlay_notice_hold(const char *title, const char *text) {
+    std::lock_guard<std::mutex> l(g_notice_lock);
+    g_notice_title = title ? title : "";
+    g_notice_text = text ? text : "";
+    if (!g_notice_held || !g_notice_ns) g_notice_ns = std::max<uint64_t>(SDL_GetTicksNS(), 1);  // (fades in once)
+    g_notice_held = true;
+}
+
+void overlay_notice_release(void) {
+    std::lock_guard<std::mutex> l(g_notice_lock);
+    if (!g_notice_held) return;
+    g_notice_held = false;
+    uint64_t now = SDL_GetTicksNS();
+    if (g_notice_ns) g_notice_ns = now > NOTICE_NS - 500000000ull ? now - (NOTICE_NS - 500000000ull) : 1;  // (its last half second: the fade)
 }
 
 static bool notice_due(uint64_t now) {
     std::lock_guard<std::mutex> l(g_notice_lock);
-    if (g_notice_ns && now - g_notice_ns >= NOTICE_NS) g_notice_ns = 0;
+    if (g_notice_ns && !g_notice_held && now - g_notice_ns >= NOTICE_NS) g_notice_ns = 0;
     return g_notice_ns != 0;
 }
 
 static void draw_notice(uint64_t now, float scale) {
     std::string title, text;
     uint64_t at;
+    bool held;
     {
         std::lock_guard<std::mutex> l(g_notice_lock);
         if (!g_notice_ns) return;
-        title = g_notice_title, text = g_notice_text, at = g_notice_ns;
+        title = g_notice_title, text = g_notice_text, at = g_notice_ns, held = g_notice_held;
     }
-    float age = (now - at) / 1e9f, alpha = std::clamp(std::min(age / .15f, (NOTICE_NS / 1e9f - age) / .5f), 0.f, 1.f);
+    float age = (now - at) / 1e9f, alpha = std::clamp(std::min(age / .15f, held ? 1.f : (NOTICE_NS / 1e9f - age) / .5f), 0.f, 1.f);
     auto color = [alpha](float r, float g, float b, float a) {
         return ImGui::ColorConvertFloat4ToU32(ImVec4(r, g, b, a * alpha));
     };

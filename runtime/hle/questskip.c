@@ -93,7 +93,7 @@ static void show(int lang, const char *title, const char *text) {
 static void quest_end(Cpu *c, uint32_t fn) {
     uint32_t seq = c->r[0];
     bool valid = seq >= 0x08000000u && seq < 0xEC000000u && !(seq & 3);
-    static bool skip, voted, was, told, ending;
+    static bool skip, voted, was, told, ending, holding;
     static uint64_t since, sent;
     static int shown = -1;
     uint64_t now = plat_now_ns();
@@ -107,14 +107,10 @@ static void quest_end(Cpu *c, uint32_t fn) {
         }
         bool solo = alone(), on = config_live_quest_skip() && (solo || config_live_quest_skip_online());
         int lang = config_language();
-        if (on && step == 1 && !told) {
+        if (on && step == 1 && !told && solo) {
             told = true;
-            if (solo)
-                show(lang, UI_TEXT("Quest over: press R3 to return now"),
-                     UI_TEXT("Right stick click (keyboard: Alt). Turn it off in the settings menu (F1)."));
-            else
-                show(lang, UI_TEXT("Quest over: press R3 to vote to return now"),
-                     UI_TEXT("Everyone returns at once when all the hunters in the quest have pressed it (right stick click, keyboard: Alt)."));
+            show(lang, UI_TEXT("Quest over: press R3 to return now"),
+                 UI_TEXT("Right stick click (keyboard: Alt). Turn it off in the settings menu (F1)."));
         }
         int32_t sticks[4];
         uint64_t buttons;
@@ -130,15 +126,18 @@ static void quest_end(Cpu *c, uint32_t fn) {
             if (!ending || press || now - sent >= VOTE_EVERY) send_vote(true, voted), sent = now;
             ending = true;
             int yes, n = others(now, &yes);
+            // (kept up for everyone, voted or not, until all have pressed or the wait is over, as in Wilds)
+            int count = n + 1, done = yes + (voted ? 1 : 0), key = count * 16 + done + (voted ? 256 : 0);
+            if (on && !skip && key != shown) {
+                shown = key;
+                char line[160];
+                snprintf(line, sizeof line, settings_text(lang, UI_TEXT("Agreed: %d / %d hunters")), done, count);
+                overlay_notice_hold(settings_text(lang, voted ? UI_TEXT("Return now: waiting for the others to press R3")
+                                                              : UI_TEXT("Quest over: press R3 to vote to return now")),
+                                    line);
+                holding = true;
+            }
             if (voted && !skip && now - since >= VOTE_SETTLE) {
-                int count = n + 1, done = yes + 1;
-                if (done < count && done != shown) {
-                    shown = done;
-                    char line[128];
-                    snprintf(line, sizeof line, settings_text(lang, UI_TEXT("Waiting for the others to press R3: %d / %d")),
-                             done, count);
-                    overlay_notice(line, "");
-                }
                 if (yes == n) {
                     skip = true;
                     LOG("[questskip] all %d voted: skipping the wait (%d frames left, stage %u)\n", count,
@@ -148,6 +147,10 @@ static void quest_end(Cpu *c, uint32_t fn) {
         } else if (press && !skip) {
             skip = true;
             LOG("[questskip] skipping the wait (%d frames left, stage %u)\n", (int32_t)LD32(seq + SEQ_WAIT), LD8(seq + SEQ_STAGE));
+        }
+        if (holding && (skip || step != 1 || !on)) {  // (all agreed, or the wait is over: the box goes)
+            overlay_notice_release();
+            holding = false;
         }
         if (step != 1 && ending) {  // (our wait is over, skipped or not: no longer ending)
             send_vote(false, false);

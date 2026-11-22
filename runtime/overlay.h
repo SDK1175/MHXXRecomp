@@ -26,6 +26,10 @@ int overlay_face_position(int semantic); // A, B, X, Y -> physical south/east/we
 void overlay_toggle_settings(void); // host main thread: F1 or Start + Back
 // Any thread: a notice shown over the game for a few seconds (title on its own line; the latest replaces any other).
 void overlay_notice(const char *title, const char *text);
+// Any thread: the same box kept up (no fading) until overlay_notice_release or another notice; called again with
+// other text, it changes in place.
+void overlay_notice_hold(const char *title, const char *text);
+void overlay_notice_release(void);  // a held notice fades out now (as a notice at its end); none held: nothing
 
 // Host main thread: an event for ImGui while the menu is open (true: taken, not for the game) - and the menu key.
 bool overlay_event(const SDL_Event *e);
