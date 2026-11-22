@@ -24,11 +24,12 @@
 
 // ---- shared singletons
 #define A_G_GAMECONTROL                      0x1aadcf8u  // MHXX 1.5.1 (GU's functions' GOT slots, the same places in their MHXX twins). GU 1.4.0: 0x1a8ca48  sGameControl *: +0x30 our player slot
-#define A_G_SELECTOR                         0x1aac268u  // MHXX 1.5.1 (GU's functions' GOT slots, the same places in their MHXX twins). GU 1.4.0: 0x1a8ae38  sQuestSelector *: +0xd750 the quest's join count (hunters), +0xd74c its maximum
-#define A_G_SENEMY                           0x0u  // (MHXX 1.5.1: 0x1a737e0, left 0 until small monster sync is tried) GU 1.4.0: 0x1a51fe0  sEnemy *: +0x1c the 10 live enemies
+#define A_G_SELECTOR                         0x1aac268u  // MHXX 1.5.1 (GU's functions' GOT slots, the same places in their MHXX twins). GU 1.4.0: 0x1a8ae38  sQuestSelector *: +A_SEL_JOINED the quest's join count (hunters), 4 before it its maximum
+#define A_SEL_JOINED                         0xaf50u  // MHXX 1.5.1 (0x5ba864: GU 0x5be1b4's movw #0xd750 is #0xaf50 here). GU 1.4.0: 0xd750
+#define A_G_SENEMY                           0x1a737e0u  // MHXX 1.5.1 (GU's functions' GOT slots, the same places in their MHXX twins; the HP row getter's too). GU 1.4.0: 0x1a51fe0  sEnemy *: +0x1c the 10 live enemies
 #define A_G_SNETWORK                         0x0u  // GU 1.4.0: 0x1a843f0
-#define A_G_SPLAYER                          0x0u  // (MHXX 1.5.1: 0x1aa6fa8, left 0 as sEnemy) GU 1.4.0: 0x1a85b58
-#define A_G_SQUEST                           0x0u  // (MHXX 1.5.1: 0x1aac1c0, left 0 as sEnemy) GU 1.4.0: 0x1a8ad90  sQuest *: +0xa4 cQuestData * of the quest being played (+0x8 quest number)
+#define A_G_SPLAYER                          0x1aa6fa8u  // MHXX 1.5.1 (as sEnemy; +0x1c in its users as in GU's). GU 1.4.0: 0x1a85b58
+#define A_G_SQUEST                           0x1aac1c0u  // MHXX 1.5.1 (as sEnemy; +0xa4 in its users as in GU's). GU 1.4.0: 0x1a8ad90  sQuest *: +0xa4 cQuestData * of the quest being played (+0x8 quest number)
 #define A_G_SYSTEM                           0x2348764u  // MHXX 1.5.1 (read +0x68 at 0x8717ec, 0x92bea4; checked live 2026-11-06: +0x38 60.0, +0x3c 30.0 target, +0x44 ~30.0 measured). GU 1.4.0: 0x2326764  engine system object *: +0x68 the frame step in 60 fps frames
 
 // ---- runtime/hle/buffcycle.c
@@ -87,7 +88,7 @@
 #define FASTLOAD_PORTED (A_FASTLOAD_FN_TOWN_LEAVE && A_FASTLOAD_FN_STREAM_STOP && A_FASTLOAD_FN_MUSIC_FADE && A_G_SYSTEM)
 
 // ---- runtime/hle/hpscale.c
-#define A_HPSCALE_FN_NANDO_ROW               0x0u  // GU 1.4.0: 0x2baaac  (monster, column) -> the monster's row of the difficulty table
+#define A_HPSCALE_FN_NANDO_ROW               0x2b97e8u  // MHXX 1.5.1 (the GU-to-MHXX code map; the same code). GU 1.4.0: 0x2baaac  (monster, column) -> the monster's row of the difficulty table
 #define HPSCALE_PORTED (A_HPSCALE_FN_NANDO_ROW && A_G_GAMECONTROL && A_G_SELECTOR && A_G_SENEMY && A_G_SPLAYER && A_G_SQUEST)
 
 // ---- runtime/hle/inflate.c
@@ -169,7 +170,8 @@
 #define ABORT_PORTED (A_ABORT_FATAL_EXIT_RET)
 
 // ---- runtime/net/emsync.c
-#define EMSYNC_PORTED (A_G_GAMECONTROL && A_G_SENEMY && A_G_SPLAYER)
+#define A_EMSYNC_TRIED                       0  // small monster sync: its fields not checked on MHXX yet (sEnemy / sPlayer are found for HP scaling)
+#define EMSYNC_PORTED (A_EMSYNC_TRIED && A_G_GAMECONTROL && A_G_SENEMY && A_G_SPLAYER)
 
 // ---- runtime/forge.c (offsets from main's .text, not runtime addresses: + MAIN_BASE 0x200000 gives the address)
 #define A_FORGE_OFF_APP_RUN                  0xb7b344u  // MHXX 1.5.1: 0xd7b344 (the main loop: until +0x2420's +0x34, the frame start 0xdb2b6c then vtable[7] of the two system objects; GU - 0xb5e8, 2026-11-12). GU 1.4.0: 0xb8692c  sApp::run

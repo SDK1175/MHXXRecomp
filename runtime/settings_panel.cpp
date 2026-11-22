@@ -1485,8 +1485,9 @@ std::vector<Row> main_rows() {
         for (int i = 0; i < 4; i++)
             number(r, "hp." + std::to_string(i), std::to_string(i + 1) + " " + tr(i == 0 ? "Hunter" : "Hunters"), &c.hp.scale[i],
                    lo("1Player"), hi("1Player"), .05f, ini("1Player"));
-        number(r, "hp.village", tr("Village quests in Hub"), &c.hp.village, lo("HubHP"), hi("HubHP"), .05f,
+        number(r, "hp.village", tr("Village quests in Hub, 4 hunters"), &c.hp.village, lo("HubHP"), hi("HubHP"), .05f,
                ini("HubHP"));
+        r.back().help = tr("A Village quest's monster HP from the Hub: x1 alone, this with four hunters, evenly between (2.0: x1.33 with two, x1.67 with three). The hunter factors above multiply it again.");
         action(r, "hp.advanced", tr("Per-quest overrides"), []() { s.advanced = !s.advanced; });
         r.back().help = per_quest;
         if (s.advanced) {

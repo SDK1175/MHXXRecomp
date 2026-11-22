@@ -218,7 +218,7 @@ void presence_tick(void) {
         snprintf(a.small_text, sizeof a.small_text, "%s", who);
         uint32_t sel = LDG(G_SELECTOR);
         if (online && sane(sel)) {  // (the quest's hunters, not the hub's)
-            party = (int)LD32(sel + 0xd750), party_max = (int)LD32(sel + 0xd74c);
+            party = (int)LD32(sel + A_SEL_JOINED), party_max = (int)LD32(sel + A_SEL_JOINED - 4);
             if (party < 1 || party > 4 || party_max < party || party_max > 4) party = 0;
             size_t n = strlen(party_id);  // (the quest's own party: not the hunters who stayed in the hub)
             snprintf(party_id + n, sizeof party_id - n, "-q%u", quest);

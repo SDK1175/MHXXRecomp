@@ -6,7 +6,8 @@
 // row with only the HP multiplier scaled, so attack, defense, size, stamina... stay as the quest made them.
 // Village quests (numbers below 10000, and the village Prowler quests 100000-109999) are left alone: they are
 // played alone - unless posted in the Hub or the Hunters' Pub ([Village Quests], runtime/hle/villagehub.c): then
-// their HP gets [Village Quests] HubHP first, then the factor for the number of hunters. Every other quest is
+// their HP grows with the hunters first (MHXX Recomp: x1 alone up to [Village Quests] HubHP with four, evenly between;
+// MHGU Recomp: HubHP whatever the number), then the factor for the number of hunters. Every other quest is
 // Hub-type: Hub and G Rank, Arena, Special Permit, Event, Hub Prowler quests.
 // The number of hunters is the quest's join count (sQuestSelector), as it was when the quest started.
 // Multiplayer: every game computes a monster's HP itself, so all must use the same factors: the hub's host sends its
@@ -23,7 +24,7 @@
 #define FN_NANDO_ROW  A_HPSCALE_FN_NANDO_ROW  // (monster, column) -> the monster's row of the difficulty table
 #define G_SENEMY      A_G_SENEMY  // sEnemy *: +0x257c rEnemyNandoData * (+0x64 rows, +0x68 row count)
 #define G_SQUEST      A_G_SQUEST  // sQuest *: +0xa4 cQuestData * of the quest being played (+0x8 quest number)
-#define G_SELECTOR    A_G_SELECTOR  // sQuestSelector *: +0xd750 the quest's join count (hunters), +0xd74c its maximum
+#define G_SELECTOR    A_G_SELECTOR  // sQuestSelector *: +A_SEL_JOINED the quest's join count (hunters; GU +0xd750)
 #define G_SPLAYER     A_G_SPLAYER  // sPlayer *: +0x1c the 4 player slots
 #define G_GAMECONTROL A_G_GAMECONTROL  // sGameControl *: +0x4c area type (0 Hub, 1-6 villages, 7 Hunters' Pub)
 #define EN_INFO       0x1428u     // enemy: status block pointer (+0x1b6 u16 network id; +0x39c HP row number)
@@ -57,7 +58,7 @@ static uint32_t quest_no(void) {
 
 static int hunters(void) {
     uint32_t sel = LDG(G_SELECTOR);
-    int n = sane(sel) ? (int)LD32(sel + 0xd750) : 0;
+    int n = sane(sel) ? (int)LD32(sel + A_SEL_JOINED) : 0;
     if (n >= 1 && n <= 4) return n;
     uint32_t sp = LDG(G_SPLAYER);  // (no join count: the players there are)
     n = 0;
@@ -80,13 +81,14 @@ static float factor(uint32_t quest, int n, bool *from_host) {
     return f;
 }
 
-// [Village Quests] HubHP (the host's in a hub we joined).
-static float village_factor(void) {
+// A Village quest's HP from the Hub for n hunters: x1 alone, [Village Quests] HubHP with four (the host's in a hub we
+// joined), evenly between.
+static float village_factor(int n) {
     float own = config_live_hp_village();
     pthread_mutex_lock(&g_lock);
     float v = g_have_host ? g_host.village : own;
     pthread_mutex_unlock(&g_lock);
-    return v;
+    return 1.0f + (v - 1.0f) * (float)(n - 1) / 3.0f;
 }
 
 static float f32(uint32_t w) { float f; memcpy(&f, &w, 4); return f; }
@@ -104,7 +106,7 @@ static void nando_row(Cpu *c) {
     if (!q || (village_quest(q) && !from_hub)) return;
     int n = hunters();
     bool host;
-    float v = village_quest(q) ? village_factor() : 1.0f, f = v * factor(q, n, &host), hp = f32(LD32(row));
+    float v = village_quest(q) ? village_factor(n) : 1.0f, f = v * factor(q, n, &host), hp = f32(LD32(row));
     uint32_t info = sane(em) ? LD32(em + EN_INFO) : 0;
     LOG("[hpscale] quest %u, %d hunter(s): monster %u, HP x%.2f (row %u) x %.2f%s%s = x%.3f\n", q, n,
         sane(info) ? LD16(info + 0x1b6) : 0xffffu, hp, (row - LD32(tbl + 0x64)) / ROW_SIZE, f,
