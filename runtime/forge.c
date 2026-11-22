@@ -1290,6 +1290,7 @@ static void frame_update(Cpu *c) {
         c->v.f[0] = dt;  // (plugins are softfp, as Forge: the float in r0; s0 too, for any built hard-float)
         memcpy(&c->r[0], &dt, 4);
         guest_call(c, plugins[i].on_update);
+        if (plugins[i].gu) gucompat_imports_sync(plugins[i].name);  // (a plugin that takes the controller reads later)
     }
     input_frame();  // (Forge reads the input when it draws, after the updates: the plugins' view is the last frame's)
     overlay_frame(c);

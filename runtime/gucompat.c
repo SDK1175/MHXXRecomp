@@ -87,6 +87,10 @@ static const char *const IMPORT_NAMES[] = {
 };
 #define NIMPORTS (sizeof IMPORT_NAMES / sizeof IMPORT_NAMES[0])
 static uint32_t imp_xx[NIMPORTS], imp_shown[NIMPORTS];  // MHXX's slot (0: none), what the region's slot was last
+// A plugin may also take GU 1.4.0's slots at their fixed places (base + offset: MHGU Skill Simulator), past the region's
+// end: that page is shown too, the slots in it holding what MHXX's do, and kept in step the same way.
+static const uint32_t GU_GOT[NIMPORTS] = {0x1838494, 0x1838498, 0x183849c, 0x18384a0, 0x18384a4};
+#define GU_GOT_PAGE 0x01838000u
 
 static void imports_show(void) {
     const Module *m = &g_modules[0];
@@ -125,6 +129,7 @@ static void imports_show(void) {
         ST32(GU_SHADOW + rel + 8 * nrel + 4, (nrel + 1) << 8 | 22);
         imp_shown[k] = LD32(imp_xx[k]);
         ST32(GU_SHADOW + slot + 4 * k, imp_shown[k]);
+        ST32(GU_SHADOW + GU_GOT[k], imp_shown[k]);
         nrel++;
     }
     tags[3][1] = nrel * 8;
@@ -137,10 +142,12 @@ void gucompat_imports_sync(const char *plugin) {
     for (uint32_t k = 0; k < NIMPORTS; k++) {
         if (!imp_xx[k]) continue;
         uint32_t v = LD32(GU_SHADOW + IMPORTS + 0x900 + 4 * k);
+        if (v == imp_shown[k]) v = LD32(GU_SHADOW + GU_GOT[k]);
         if (v == imp_shown[k]) continue;
         LOG("[forge] %s takes the game's import %s (its slot: %08x -> %08x)\n", plugin, IMPORT_NAMES[k], LD32(imp_xx[k]), v);
         ST32(imp_xx[k], v);
         imp_shown[k] = v;
+        ST32(GU_SHADOW + IMPORTS + 0x900 + 4 * k, v), ST32(GU_SHADOW + GU_GOT[k], v);  // (both show it now)
     }
 }
 
@@ -162,6 +169,8 @@ bool gucompat_build(void) {
     qsort(by_xx, nranges, sizeof by_xx[0], cmp_xx);
     plat_commit(GUEST_BASE + GU_SHADOW, GU_SHADOW_SIZE);
     kernel_map_region(GU_SHADOW, GU_SHADOW_SIZE, 3, 5);
+    plat_commit(GUEST_BASE + GU_SHADOW + GU_GOT_PAGE, 0x1000);  // (GU's import slots: imports_show)
+    kernel_map_region(GU_SHADOW + GU_GOT_PAGE, 0x1000, 4, 3);
     uint32_t bytes = 0;
     for (uint32_t i = 0; i < nranges; i++) {
         const Range *r = &by_xx[i];
