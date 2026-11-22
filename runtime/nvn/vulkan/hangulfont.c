@@ -15,6 +15,7 @@
 // It is only done for a font laid out exactly so (every one of the 2350 boxes where the next of that grid would be):
 // without the patch the same glyphs are the game's kanji, packed some other way.
 #include <SDL3/SDL.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <zlib.h>
@@ -273,7 +274,7 @@ static bool enc_ready(void) {
     return st == 1;
 }
 
-uint32_t hangulfont_encode(const char *in, char *out, uint32_t size) {
+static uint32_t encode(const char *in, char *out, uint32_t size, bool typed) {
     if (!in || !out || !size || !enc_ready()) return 0;
     uint32_t n = 0;
     for (const unsigned char *p = (const unsigned char *)in; *p;) {
@@ -293,8 +294,8 @@ uint32_t hangulfont_encode(const char *in, char *out, uint32_t size) {
                 if (ksx1001_hangul[mid] < c) lo = mid + 1;
                 else hi = mid - 1;
             }
-            if (at < 0) return 0;
-            c = enc_codes[at];
+            if (at < 0 && !typed) return 0;
+            c = at < 0 ? '?' : enc_codes[at];  // (typed: a syllable the patch can't show becomes ?)
         }
         char b[4];
         uint32_t k = c < 0x80 ? (b[0] = (char)c, 1)
@@ -306,4 +307,15 @@ uint32_t hangulfont_encode(const char *in, char *out, uint32_t size) {
     }
     out[n] = 0;
     return n;
+}
+
+// Hangul for plugins (forge.c mhxx_hangul_encode): 0 when a syllable has no glyph or the patch isn't there.
+uint32_t hangulfont_encode(const char *in, char *out, uint32_t size) { return encode(in, out, size, false); }
+
+// Typed text for the game's text entries (hle/swkbd.c: chat, names): Hangul in the patch's codes, so the game shows
+// it and other players with the patch read it; a syllable outside the patch's 2350 becomes ?. Without the Korean patch
+// (or on any trouble) the text as typed.
+void hangulfont_typed(const char *in, char *out, uint32_t size) {
+    if (!size) return;
+    if (!encode(in, out, size, true)) snprintf(out, size, "%s", in ? in : "");
 }

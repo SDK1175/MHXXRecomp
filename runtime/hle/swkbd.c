@@ -13,6 +13,8 @@
 #include "../textinput.h"
 #include "chat.h"
 
+void hangulfont_typed(const char *in, char *out, uint32_t size);  // (nvn/vulkan/hangulfont.c)
+
 // nn::swkbd::ShowKeyboard(String *out, const ShowKeyboardArg &) -> Result. String = {void *ptr; size_t size}.
 HLE_FUNC("_ZN2nn5swkbd12ShowKeyboardEPNS0_6StringERKNS0_15ShowKeyboardArgE", swkbd_show) {
     uint32_t ptr = LD32(ARG(0)), size = LD32(ARG(0) + 4);
@@ -53,9 +55,18 @@ HLE_FUNC("_ZN2nn5swkbd14InlineKeyboard31SetReleasedUserWordInfoCallbackEPFvvE", 
 // 0x7d4 bytes), its length in characters at +0x7d4, then the cursor position (+0x7d8; ChangedString also has the
 // dictionary range there: given the cursor too).
 #define ARG_TEXT_MAX 0x7d0
-static uint32_t cb_arg(const char *text, int chars) {
+// Hangul goes in the Korean patch's codes (its font has no Hangul of its own: the patch shows its syllables in kanji
+// slots), so the game shows what is typed and other players with the patch read it: hangulfont_typed. The character
+// count is then the encoded text's (one per syllable either way).
+static uint32_t cb_arg(const char *typed, int chars) {
     static uint32_t arg;
+    static char text[ARG_TEXT_MAX + 4];
     if (!arg) arg = hle_alloc(0x800);
+    hangulfont_typed(typed, text, sizeof text);
+    if (strcmp(text, typed)) {
+        chars = 0;
+        for (const char *p = text; *p; p++) chars += ((unsigned char)*p & 0xC0) != 0x80;
+    }
     memset(G2H(arg), 0, 0x800);
     snprintf((char *)G2H(arg), ARG_TEXT_MAX, "%s", text);
     ST32(arg + 0x7d4, (uint32_t)chars);

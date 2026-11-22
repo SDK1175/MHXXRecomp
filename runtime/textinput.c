@@ -17,6 +17,7 @@
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 static bool g_active, g_window_on;
 static char g_text[TEXT_MAX + 4];
+static char g_comp[64];  // the IME's syllable being composed (Korean: shown in the entry until it is committed)
 static int g_max_chars, g_event;  // g_event: TI_* waiting for the game's next poll (ENTER / CANCEL win over CHANGED)
 
 static int utf8_chars(const char *s) {
@@ -34,6 +35,7 @@ void textinput_begin(const char *initial, int max_chars) {
     g_active = true;
     g_max_chars = max_chars;
     g_event = TI_NONE;
+    g_comp[0] = 0;
     snprintf(g_text, sizeof g_text, "%s", initial ? initial : "");
     pthread_mutex_unlock(&g_lock);
     LOG("[textinput] text entry (up to %d characters, \"%s\"): type, Enter confirms, Escape cancels\n", max_chars,
@@ -51,15 +53,15 @@ int textinput_poll(char *out, size_t size, int *chars) {
     pthread_mutex_lock(&g_lock);
     int ev = g_event;
     g_event = TI_NONE;
-    snprintf(out, size, "%s", g_text);
-    if (chars) *chars = utf8_chars(g_text);
+    snprintf(out, size, "%s%s", g_text, ev == TI_ENTER ? "" : g_comp);
+    if (chars) *chars = utf8_chars(out);
     pthread_mutex_unlock(&g_lock);
     return ev;
 }
 
 void textinput_peek(char *out, size_t size) {
     pthread_mutex_lock(&g_lock);
-    snprintf(out, size, "%s", g_text);
+    snprintf(out, size, "%s%s", g_text, g_comp);
     pthread_mutex_unlock(&g_lock);
 }
 
@@ -92,7 +94,9 @@ void textinput_type(const char *s) {
 void textinput_key(int what) {
     pthread_mutex_lock(&g_lock);
     if (g_active) {
-        if (what == TI_NONE) {  // Backspace: the last character
+        if (what == TI_NONE && g_comp[0]) {
+            // (Backspace while a syllable is composed: the IME takes it back itself, by TEXT_EDITING)
+        } else if (what == TI_NONE) {  // Backspace: the last character
             size_t len = strlen(g_text);
             if (len) {
                 while (len > 0 && ((unsigned char)g_text[len - 1] & 0xC0) == 0x80) len--;
@@ -101,6 +105,11 @@ void textinput_key(int what) {
                 post(TI_CHANGED);
             }
         } else {
+            if (what == TI_ENTER && g_comp[0]) {  // (Enter while composing: the syllable goes in, as the IME commits it)
+                size_t len = strlen(g_text), n = strlen(g_comp);
+                if (len + n <= TEXT_MAX) memcpy(g_text + len, g_comp, n + 1);
+            }
+            g_comp[0] = 0;
             post(what);
         }
     }
@@ -111,7 +120,18 @@ bool textinput_event(const SDL_Event *e) {
     if (!textinput_active()) return false;
     switch (e->type) {
     case SDL_EVENT_TEXT_INPUT:
+        pthread_mutex_lock(&g_lock);
+        g_comp[0] = 0;  // (the composed syllable is committed with this text)
+        pthread_mutex_unlock(&g_lock);
         textinput_type(e->text.text);
+        return true;
+    case SDL_EVENT_TEXT_EDITING:  // (the IME composing: a Korean syllable before it is done)
+        pthread_mutex_lock(&g_lock);
+        if (g_active && strcmp(g_comp, e->edit.text ? e->edit.text : "")) {
+            snprintf(g_comp, sizeof g_comp, "%s", e->edit.text ? e->edit.text : "");
+            post(TI_CHANGED);
+        }
+        pthread_mutex_unlock(&g_lock);
         return true;
     case SDL_EVENT_KEY_DOWN: {
         SDL_Scancode sc = e->key.scancode;
@@ -149,6 +169,11 @@ void textinput_update(void) {
     }
 #endif
     if (want == g_window_on) return;
+    static bool hint;
+    if (!hint) {  // (the composing syllable is shown in the entry itself, by TEXT_EDITING: no IME window over the game)
+        SDL_SetHint(SDL_HINT_IME_IMPLEMENTED_UI, "composition");
+        hint = true;
+    }
     if (want) SDL_StartTextInput(w);
     else SDL_StopTextInput(w);
     g_window_on = want;
