@@ -970,21 +970,25 @@ static int32_t in_sticks[4];
 static bool in_connected;  // (false until the first frame: Forge's state is empty until then)
 static bool touch_down;
 static float touch_x, touch_y;
+static bool mouse_on;  // (forge_input_getMouse: the pointer on the picture, these frame's)
+static float mouse_x, mouse_y;
+static uint32_t mouse_buttons;
+static int pressed_key;  // (forge_input_getKeyPressed)
 
 // The mouse as the touch screen: the left button is a finger while the mouse is free (not captured for the camera,
 // Forge's menu closed), and the pointer must be on the game's picture, which is fitted into the window by its shape
 // (g_render_aspect) and centred. The picture is the console's 1280x720 screen: its HUD canvas (g_ui_anchor_aspect wide
 // at most, centred) is what 0..1279 spans; a pointer on the picture beyond that edge is at the edge.
-static bool mouse_touch(float *x, float *y) {
+// The pointer on the game's picture, in its 1280x720 screen pixels (false: off the picture, captured, Forge's menu open)
+static bool mouse_screen(float *x, float *y, uint32_t *held) {
     SDL_Window *w = ui_window();
     float mx, my;
     int ww = 0, wh = 0;
-    // (a plugin's window that took the mouse reads it through ImGui: its click is not a touch too, which the plugin
-    // would place by Forge's 16:9 canvas and take as a second click elsewhere)
-    if (!w || overlay_menu_open() || host_input_plugin_mouse() || SDL_GetWindowRelativeMouseMode(w) ||
-        !SDL_GetWindowSize(w, &ww, &wh) || ww <= 0 || wh <= 0 ||
-        !(SDL_GetMouseState(&mx, &my) & SDL_BUTTON_LMASK))
+    if (!w || overlay_menu_open() || SDL_GetWindowRelativeMouseMode(w) || !SDL_GetWindowSize(w, &ww, &wh) || ww <= 0 ||
+        wh <= 0)
         return false;
+    uint32_t buttons = SDL_GetMouseState(&mx, &my);
+    if (held) *held = buttons;
     float asp = g_render_aspect > 0 ? g_render_aspect : 16.0f / 9.0f;
     float pw = (float)ww, ph = (float)wh;  // (the picture's size in the window: the largest that fits)
     if (pw / ph > asp) pw = ph * asp;
@@ -999,6 +1003,14 @@ static bool mouse_touch(float *x, float *y) {
     return true;
 }
 
+// The mouse as the touch screen's first finger: the left button held
+static bool mouse_touch(float *x, float *y) {
+    uint32_t held = 0;
+    // (a plugin's window that took the mouse reads it itself: its click is not a touch too, which the plugin would
+    // place by Forge's 16:9 canvas and take as a second click elsewhere)
+    return !host_input_plugin_mouse() && mouse_screen(x, y, &held) && (held & SDL_BUTTON_LMASK);
+}
+
 static void input_frame(void) {
     in_prev = in_now;
     in_now = input_npad_state(in_sticks);
@@ -1008,6 +1020,10 @@ static void input_frame(void) {
     const bool *k = SDL_GetKeyboardState(&n);
     for (int i = 0; i < 256; i++) keys_now[i] = k && i < n ? k[i] : 0;
     touch_down = mouse_touch(&touch_x, &touch_y);
+    uint32_t held = 0;
+    mouse_on = mouse_screen(&mouse_x, &mouse_y, &held);
+    mouse_buttons = (held | host_input_mods_pressed()) & 0x1F;  // (a click shorter than a frame is seen once)
+    pressed_key = host_input_mods_key();
 }
 
 static bool key(const uint8_t *s, uint32_t k) { return k < 256 && s[k]; }
@@ -1029,6 +1045,25 @@ static float stick_value(int32_t v) { return fminf(fmaxf(v / 32767.0f, -1.0f), 1
 static void stick(Cpu *c, int i) {
     if (ARG(0)) STF(ARG(0), stick_value(in_sticks[i]));
     if (ARG(1)) STF(ARG(1), stick_value(in_sticks[i + 1]));
+}
+// MHGU Recomp's own calls for plugins (a plugin made for the console doesn't know them):
+// forge_input_getMouse(float *x, float *y, uint32_t *buttons): the pointer in screen pixels (1280x720, as getTouch's)
+// and the buttons held or pressed since the last frame (1 left, 2 middle, 4 right, 8 / 16 the side buttons). False, and
+// nothing written, while the mouse is captured, Forge's menu is open or the pointer is off the game's picture.
+HLE_FUNC("forge_input_getMouse", f_in_mouse) {
+    if (!mouse_on) { RET(0); return; }
+    if (ARG(0)) STF(ARG(0), mouse_x);
+    if (ARG(1)) STF(ARG(1), mouse_y);
+    if (ARG(2)) ST32(ARG(2), mouse_buttons);
+    RET(1);
+}
+// forge_input_getKeyPressed(char *out, uint32_t size): the first key, mouse button or wheel notch pressed since the last
+// frame, by its [Keybinds] name ("Left Ctrl", "Mouse 4", "Wheel Up"). False: none (or one without a name).
+HLE_FUNC("forge_input_getKeyPressed", f_in_key_pressed) {
+    const char *name = pressed_key ? config_key_name(pressed_key) : "";
+    if (!name || !*name) { RET(0); return; }
+    if (ARG(0) && ARG(1)) snprintf((char *)G2H(ARG(0)), ARG(1), "%s", name);
+    RET(1);
 }
 HLE_FUNC("forge_input_getStickL", f_in_stick_l) { stick(c, 0); }
 HLE_FUNC("forge_input_getStickR", f_in_stick_r) { stick(c, 2); }

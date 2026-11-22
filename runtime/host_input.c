@@ -34,6 +34,7 @@
 #include "hle/input.h"
 #include "hle/itembar.h"
 #include "hle/mousecam.h"
+#include "keymap.h"
 #include "overlay.h"
 #include "rt.h"
 #include "textinput.h"
@@ -595,8 +596,42 @@ uint32_t host_input_pop_key(void) {
     }
 }
 
+// ---- for plugins (forge_input_getMouse / getKeyPressed, MHGU Recomp's calls): the mouse buttons pressed since the
+// last take, and the first key, mouse button or wheel notch since then by its [Keybinds] code, whoever took it (Forge's
+// menu, a plugin's window, the game). Not the port's own keys (keymap.h) but Esc, to cancel with.
+static SDL_AtomicInt mods_pressed, mods_key;
+
+static void mods_event(const SDL_Event *e) {
+    int code = 0;
+    switch (e->type) {
+    case SDL_EVENT_KEY_DOWN:
+        if (!e->key.repeat && e->key.scancode < SDL_SCANCODE_COUNT) code = (int)e->key.scancode;
+        break;
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        if (e->button.button >= 1 && e->button.button <= SDL_BUTTON_X2) {
+            for (int old = SDL_GetAtomicInt(&mods_pressed);
+                 !SDL_CompareAndSwapAtomicInt(&mods_pressed, old, old | (int)SDL_BUTTON_MASK(e->button.button));
+                 old = SDL_GetAtomicInt(&mods_pressed)) {}
+            code = KEY_MOUSE + e->button.button;
+        }
+        break;
+    case SDL_EVENT_MOUSE_WHEEL: {
+        int n = e->wheel.integer_y * (e->wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1 : 1);
+        if (n) code = n > 0 ? KEY_WHEEL_UP : KEY_WHEEL_DOWN;
+        break;
+    }
+    default: break;
+    }
+    if (code && (code == SDL_SCANCODE_ESCAPE || code >= SDL_SCANCODE_COUNT || !key_reserved(code)))
+        SDL_CompareAndSwapAtomicInt(&mods_key, 0, code);
+}
+
+uint32_t host_input_mods_pressed(void) { return (uint32_t)SDL_SetAtomicInt(&mods_pressed, 0); }
+int host_input_mods_key(void) { return SDL_SetAtomicInt(&mods_key, 0); }
+
 void host_input_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) pad_pressed(e->gbutton.which);
+    mods_event(e);  // (every event, also those Forge's menu or a plugin's window takes)
     if (overlay_event(e)) return;  // (Forge's menu open: keyboard and mouse are its)
     if (chat_mouse(e)) return;  // (typing a line of chat: the mouse drags its box)
     if (textinput_event(e)) return;  // (typing into a text entry: not controller buttons)

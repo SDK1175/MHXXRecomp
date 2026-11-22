@@ -135,6 +135,8 @@ void host_input_update(void);            // recompute the controller state the g
 uint32_t host_input_pop_key(void);      // key presses in order, for a plugin's text field (mhxx_input_popKey)
 void host_input_mouse_free(bool on);    // a Forge plugin's window has the mouse pointer (forge_input_setMouseFree)
 bool host_input_plugin_mouse(void);     // (it has it now)
+uint32_t host_input_mods_pressed(void); // mouse buttons pressed since the last call (SDL_BUTTON_MASK bits; forge.c, once a frame)
+int host_input_mods_key(void);          // the first key / mouse button / wheel notch since the last call ([Keybinds] code, 0 none)
 bool host_talk_held(void);               // [Voice] TalkKey or TalkButton held (push to talk; any thread)
 bool host_input_press(const char *button, unsigned frames);  // scripted press from the next frame (UI thread)
 void quickhunt_poll(void);               // (debug) MHGU_QUICKHUNT's presses (runtime/hle/quickhunt.c; UI thread)
