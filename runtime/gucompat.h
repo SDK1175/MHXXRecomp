@@ -5,9 +5,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// Above the stacks: nothing else is there. (It was at 0xA0000000, inside the heap MHXX asks for: 0x08000000 + 2.5 GB.
-// QueryMemory showed the heap there, not code, and World Sharpness Gauge refused GU's code it can't execute.)
-#define GU_SHADOW      0xF0000000u
+// At the top of the stack region, which is told to the game 64 MB smaller (rt.h STACK_SIZE): nothing else is there,
+// and it stays below 0xF0000000, the bound KatLib and MapAssist check addresses against. (It was at 0xA0000000, inside
+// the heap MHXX asks for: 0x08000000 + 2.5 GB. QueryMemory said heap there, not code, and World Sharpness Gauge and
+// Key Quest Markers stopped.)
+#define GU_SHADOW      0xEC000000u
 #define GU_SHADOW_SIZE 0x01800000u
 
 // Built once, when the first plugin for GU asks for the game's base. false: this build has no table

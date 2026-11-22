@@ -35,7 +35,7 @@ void rt_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 #define ALIAS_BASE    0xA8000000u   // svcMapMemory targets
 #define ALIAS_SIZE    0x28000000u
 #define STACK_BASE    0xD0000000u   // stack region (main thread stack, mapped thread stacks)
-#define STACK_SIZE    0x20000000u
+#define STACK_SIZE    0x1C000000u   // (to 0xEC000000: above it, the GU code view for MHGU plugins, gucompat.h)
 #define GUEST_SPACE   0x100000000ull
 
 // ---- loader.c
