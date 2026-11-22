@@ -55,6 +55,7 @@ static SDL_AtomicInt live_sync_zako;
 static SDL_AtomicInt live_share_urgent;
 static SDL_AtomicInt live_title_back_exit;
 static SDL_AtomicInt live_quest_skip;
+static SDL_AtomicInt live_quest_skip_online;
 // [Monster HP, Village Quests]
 static SDL_AtomicInt live_village;
 // [Discord]
@@ -105,6 +106,7 @@ static void publish_live(const Config *c, bool all) {
     if (all || c->share_urgent != saved.share_urgent) SDL_SetAtomicInt(&live_share_urgent, c->share_urgent);
     if (all || c->title_back_exit != saved.title_back_exit) SDL_SetAtomicInt(&live_title_back_exit, c->title_back_exit);
     if (all || c->quest_skip != saved.quest_skip) SDL_SetAtomicInt(&live_quest_skip, c->quest_skip);
+    if (all || c->quest_skip_online != saved.quest_skip_online) SDL_SetAtomicInt(&live_quest_skip_online, c->quest_skip_online);
     if (all || c->fsr_sharpness != saved.fsr_sharpness) set_float(&live_fsr_sharpness, c->fsr_sharpness);
     if (all || c->fsr_reactive != saved.fsr_reactive) set_float(&live_fsr_reactive, c->fsr_reactive);
     if (all || c->village_in_hub != saved.village_in_hub) SDL_SetAtomicInt(&live_village, c->village_in_hub);
@@ -201,6 +203,7 @@ int config_live_discord_hunter(void) { return SDL_GetAtomicInt(&live_discord_hun
 int config_live_share_urgent(void) { return SDL_GetAtomicInt(&live_share_urgent); }
 int config_live_title_back_exit(void) { return SDL_GetAtomicInt(&live_title_back_exit); }
 int config_live_quest_skip(void) { return SDL_GetAtomicInt(&live_quest_skip); }
+int config_live_quest_skip_online(void) { return SDL_GetAtomicInt(&live_quest_skip_online); }
 int config_live_bind(int bind, int slot) { return SDL_GetAtomicInt(&live_binds[bind][slot]); }
 void config_live_ldn(char *server, size_t server_size, char *key, size_t key_size) {
     SDL_LockSpinlock(&live_ldn_lock);

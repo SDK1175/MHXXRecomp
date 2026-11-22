@@ -62,6 +62,7 @@ void emsync_aux_received(const void *data, uint32_t len);  // an F_AUX message f
 // hle/hpscale.c: large monster HP by the number of hunters; the host's settings go to the others
 void hpscale_tick(void);            // each frame, from the game's input polling
 void hpscale_aux_received(const void *data, uint32_t len);
+void questskip_aux_received(const void *data, uint32_t len);  // the quest end skip's votes (runtime/hle/questskip.c)
 
 #ifdef __cplusplus
 }
