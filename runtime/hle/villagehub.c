@@ -58,9 +58,9 @@
 
 static bool g_village;  // the counter shows Village quests
 static volatile bool g_list_village;  // the list job takes Village quests (set at the switch; the job runs on a worker)
-static bool g_pending;  // a switch waits for its list job (MHXX: the job needs the game thread running, see ui_update)
+static volatile bool g_pending;  // a switch waits for its list job (MHXX: the job needs the game thread running, see ui_update)
 static uint64_t g_pending_at;
-static volatile uint32_t g_filter_calls, g_filter_last;  // (the job's progress, for the log while a switch waits)
+static volatile uint32_t g_filter_calls, g_filter_last, g_preloaded, g_preload_failed;  // (the job's progress, for the log while a switch waits)
 static int g_trace;
 
 static bool hub_area(uint8_t a) { return a == AREA_HUB || a == AREA_PUB; }
@@ -107,6 +107,19 @@ static bool locked_village_quest(Cpu *c, uint32_t q) {
     return !(call4(c, FN_QUEST_UNLOCKED, q, 0xff, 0, 0) & 0xff);
 }
 
+// MHXX: the list job asks for each quest's data to load in the background (getResource mode 2) and waits until all
+// have; at the area's loading they do, but at the counter they never did (32 asked, then the job waited for good). So
+// while a switch waits, each quest the filter takes is loaded here first, at once (mode 1, on the job's thread):
+// the job's own request then finds it loaded. (The extra reference keeps it loaded, as the list does anyway.)
+static uint32_t g_job_path;  // (guest memory: the list job's thread)
+static void preload(Cpu *c, uint32_t q) {
+    uint32_t mgr = LD32(G_RESOURCES);
+    if (!mgr) return;
+    snprintf((char *)G2H(g_job_path), 64, "quest\\questData\\questData_%07u", q);
+    if (call4(c, LD32(LD32(mgr) + 0x30), mgr, DTI_QUESTDATA, g_job_path, 1)) g_preloaded++;
+    else g_preload_failed++;
+}
+
 static void quest_filter(Cpu *c) {
     uint32_t q = c->r[1], type = c->r[2];
     g_filter_calls++, g_filter_last = q;
@@ -114,6 +127,7 @@ static void quest_filter(Cpu *c) {
     if (g_list_village && hub_area((uint8_t)type)) c->r[2] = AREA_VILLAGE;
     fnhook_call_original(c, FN_QUEST_FILTER);
     if ((c->r[0] & 1) && hub_area((uint8_t)type) && locked_village_quest(c, q)) c->r[0] = 0;
+    if ((c->r[0] & 1) && g_pending && hub_area((uint8_t)type)) preload(c, q);
     if (g_trace) {
         static uint8_t seen[8][10][2];
         uint32_t ok = c->r[0] & 1, group = q / 10000 % 10;
@@ -159,7 +173,7 @@ static void quest_lookup(Cpu *c) {
     uint32_t list = LD32(sel + SEL_LIST), n = LD32(sel + SEL_COUNT), mgr = LD32(G_RESOURCES);
     if (!list || n >= LIST_MAX || !mgr) return;
     snprintf((char *)G2H(g_path), 64, "quest\\questData\\questData_%07u", q);
-    uint32_t res = call4(c, LD32(LD32(mgr) + 0x30), mgr, DTI_QUESTDATA, g_path, 2);  // (getResource, loading now)
+    uint32_t res = call4(c, LD32(LD32(mgr) + 0x30), mgr, DTI_QUESTDATA, g_path, 1);  // (getResource, loading now: MHXX mode 1; 2 loads in the background)
     if (!res) {
         static int next;
         failed[next++ % 16] = q;
@@ -180,7 +194,7 @@ static void list_start(Cpu *c, bool village) {
     uint32_t sel = LDG(G_SELECTOR);
     if (!sel) return;
     g_list_village = village;
-    g_filter_calls = 0, g_filter_last = 0;
+    g_filter_calls = 0, g_filter_last = 0, g_preloaded = 0, g_preload_failed = 0;
     call1(c, FN_LIST_LOAD, sel);
     g_pending = true;
     g_pending_at = plat_now_ns();
@@ -190,13 +204,14 @@ static bool list_finish(Cpu *c, uint32_t ui) {
     uint32_t sel = LDG(G_SELECTOR);
     if (!sel) { g_pending = false; return true; }
     uint64_t now = plat_now_ns();
-    bool late = now - g_pending_at > 30000000000ull;
+    bool late = now - g_pending_at > 15000000000ull;
     static uint64_t said;
     if (now - said > 2000000000ull) {  // (every 2 s while waiting: the job's state (+0x40: 1 running, 2 done) and where it is)
         said = now;
         uint32_t job = LD32(sel + 0x1c);
-        LOG("[vqhub] waiting for the list: job %#x state %u, %u quests filtered (last %07u), %u in the list\n", job,
-            job ? LD32(job + 0x40) : 0, g_filter_calls, g_filter_last, LD32(sel + SEL_COUNT));
+        LOG("[vqhub] waiting for the list: job %#x state %u, %u quests filtered (last %07u), %u in the list, %u loaded"
+            " here (%u failed)\n", job, job ? LD32(job + 0x40) : 0, g_filter_calls, g_filter_last, LD32(sel + SEL_COUNT),
+            g_preloaded, g_preload_failed);
     }
     if (!call1(c, FN_LIST_DONE, sel) && !late) return false;
     g_pending = false;
@@ -207,8 +222,9 @@ static bool list_finish(Cpu *c, uint32_t ui) {
     call1(c, FN_CATEGORIES, sel);
     if (a) ST8(a, was);
     ST8(ui + UI_STATE, 0);  // (lays the menu out again)
-    LOG("[vqhub] quest counter: %s quests (list loaded in %.0f ms%s)\n", g_village ? "Village" : "Hub",
-        (plat_now_ns() - g_pending_at) / 1e6, late ? ", not finished: given up" : "");
+    LOG("[vqhub] quest counter: %s quests (list loaded in %.0f ms, %u in it, %u loaded here%s)\n",
+        g_village ? "Village" : "Hub", (plat_now_ns() - g_pending_at) / 1e6, LD32(sel + SEL_COUNT), g_preloaded,
+        late ? ", not finished: given up" : "");
     return true;
 }
 
@@ -241,6 +257,7 @@ void villagehub_init(void) {
     PORT_OFF(VILLAGEHUB, "Village quests in the Hub");
     g_trace = getenv("MHGU_VQ_TRACE") != NULL;
     g_path = hle_alloc(64);
+    g_job_path = hle_alloc(64);
     fnhook_set(FN_QUEST_FILTER, hle_register("villagehub:quest_filter", quest_filter));
     fnhook_set(FN_QUEST_LOOKUP, hle_register("villagehub:quest_lookup", quest_lookup));
     fnhook_set(FN_CATEGORY_BUILD, hle_register("villagehub:category_build", category_build));
