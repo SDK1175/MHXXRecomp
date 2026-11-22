@@ -16,7 +16,7 @@
 // comes when every game that is ending has pressed; those in the lobby or in another quest send nothing and don't count.
 // A game counts the others only after a second of its own wait, so a member whose end started a moment later is heard
 // first. Each game decides by itself on the same messages, so all go within a moment of each other.
-// [Application] QuestClearSkip (the skip at all), QuestClearSkipOnline (the vote; off by default until tried).
+// [Application] QuestClearSkip (the skip at all), QuestClearSkipOnline (the vote).
 #include <stdio.h>
 #include <string.h>
 

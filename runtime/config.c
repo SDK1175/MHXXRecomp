@@ -101,7 +101,7 @@
     .confirm_exit = 1,                                                                              \
     .title_back_exit = 1,                                                                           \
     .quest_skip = 1,                                                                                \
-    .quest_skip_online = 0,                                                                         \
+    .quest_skip_online = 1,                                                                         \
     .language = 2,                                                                                  \
     .button_icons = 0,                                                                              \
     .menu_theme = THEME_HUNTER,                                                                     \
@@ -503,8 +503,8 @@ static const char DEFAULT_INI[] =
     "QuestClearSkip = On\n"
     "\n"
     "; The same with other players: everyone returns at once when all the hunters in the quest have pressed R3\n"
-    "; Default: Off\n"
-    "QuestClearSkipOnline = Off\n"
+    "; Default: On\n"
+    "QuestClearSkipOnline = On\n"
     "\n"
     "; Language of the settings menu (F1, or Minus + Plus on a controller)\n"
     "; English, Spanish, Korean\n"
