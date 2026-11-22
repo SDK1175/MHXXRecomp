@@ -307,6 +307,31 @@ int gucompat_fix_plugin(const char *name, uint32_t text, uint32_t size) {
             }
             if (compared) break;
             uint32_t xx = v >= g_modules[0].text_size && !shown_data(v) ? global_xx(v) : 0;
+            // (the base of a field read right after: add ra, rd, base; ldr rb, [ra, #imm]. GU's word at v + imm is
+            // what the plugin reads, and MHXX may keep it elsewhere than xx + imm: FasterFieldHunter reads the import
+            // slot 0x1bc past one it names, and MHXX's import slots are laid out otherwise)
+            int32_t field = 0;
+            for (uint32_t c = b + 4, ra = 16; xx && c < b + 40 && c + 4 <= text + size; c += 4) {
+                uint32_t u = LD32(c);
+                if ((u >> 28) != 0xE) continue;
+                if (ra == 16 && (u & 0x0FE00FF0u) == 0x00800000u && (((u >> 16) & 15) == rd || (u & 15) == rd)) {
+                    ra = (u >> 12) & 15;  // add ra, rn, rm
+                    continue;
+                }
+                if (ra != 16 && (u & 0x0F500000u) == 0x05100000u && ((u >> 16) & 15) == ra) {  // ldr rb, [ra, #imm]
+                    field = (int32_t)(u & 0xFFFu) * ((u & 0x00800000u) ? 1 : -1);
+                    break;
+                }
+                if (ra != 16 && ((u >> 12) & 15) == ra) break;
+            }
+            if (field) {
+                uint32_t at = global_xx(v + (uint32_t)field);
+                if (at && at != xx + (uint32_t)field) {
+                    LOG("[forge] %s+%x: the word %+d past MHGU data main+%x is at MHXX's main+%x\n", name, a - text,
+                        field, v, at);
+                    xx = at - (uint32_t)field;
+                }
+            }
             if (xx) {
                 uint32_t nv = MAIN_BASE + xx - GU_SHADOW;
                 ST32(a, (w & 0xFFF0F000u) | ((nv & 0xF000u) << 4) | (nv & 0xFFFu));
