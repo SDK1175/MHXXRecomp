@@ -5,7 +5,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define GU_SHADOW      0xA0000000u  // (between the heap's end and the alias region: nothing else is there)
+// Above the stacks: nothing else is there. (It was at 0xA0000000, inside the heap MHXX asks for: 0x08000000 + 2.5 GB.
+// QueryMemory showed the heap there, not code, and World Sharpness Gauge refused GU's code it can't execute.)
+#define GU_SHADOW      0xF0000000u
 #define GU_SHADOW_SIZE 0x01800000u
 
 // Built once, when the first plugin for GU asks for the game's base. false: this build has no table
