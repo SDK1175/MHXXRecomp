@@ -22,12 +22,12 @@ void rt_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 #define TLS_BASE      0x03100000u   // thread local regions, 0x200 bytes per thread
 #define TLS_SIZE      0x00100000u
 #define PLUGIN_BASE   0x03200000u   // Forge plugins (runtime/forge.c): modules, then Forge's hook trampolines / stubs
-#define PLUGIN_END    0x03E00000u
-#define FORGE_TRAMP   0x03E00000u   // trampolines to hooked functions' original code (dispatch.c runs them)
-#define FORGE_STUBS   0x03F00000u   // ARM stubs Forge writes (interpreted)
-#define FORGE_END     0x04000000u
-#define HLE_HEAP      0x04000000u   // guest-visible memory owned by host code
-#define HLE_HEAP_SIZE 0x04000000u
+#define PLUGIN_END    0x05000000u   // (30 MB: MHGU Utility alone is 10 MB; 12 MB left no room for a further plugin)
+#define FORGE_TRAMP   0x05000000u   // trampolines to hooked functions' original code (dispatch.c runs them)
+#define FORGE_STUBS   0x05100000u   // ARM stubs Forge writes (interpreted)
+#define FORGE_END     0x05200000u
+#define HLE_HEAP      0x05200000u   // guest-visible memory owned by host code
+#define HLE_HEAP_SIZE 0x02E00000u   // (to CODE_END)
 #define CODE_END      0x08000000u
 #define HEAP_BASE     0x08000000u   // svcSetHeapSize
 #define HEAP_MAX      0xA0000000u   // 2.5 GB
