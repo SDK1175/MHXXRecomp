@@ -98,8 +98,11 @@ uint32_t hle_alloc(uint32_t size) {
     static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_lock(&m);
     uint32_t a = hle_next;
+    uint32_t before = hle_next - HLE_HEAP;
     hle_next += (size + 63) & ~63u;
-    if (hle_next > HLE_HEAP + HLE_HEAP_SIZE) FATAL("HLE heap exhausted\n");
+    if (hle_next > HLE_HEAP + HLE_HEAP_SIZE) FATAL("HLE heap exhausted (%u MB): runtime/rt.h HLE_HEAP_SIZE\n", HLE_HEAP_SIZE >> 20);
+    if ((before >> 22) != ((hle_next - HLE_HEAP) >> 22))
+        LOG("[hle] host memory for the game: %u of %u MB in use\n", (hle_next - HLE_HEAP) >> 20, HLE_HEAP_SIZE >> 20);
     pthread_mutex_unlock(&m);
     plat_commit(GUEST_BASE + a, size);
     memset(G2H(a), 0, size);

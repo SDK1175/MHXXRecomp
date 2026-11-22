@@ -22,12 +22,13 @@ void rt_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 #define TLS_BASE      0x03100000u   // thread local regions, 0x200 bytes per thread
 #define TLS_SIZE      0x00100000u
 #define PLUGIN_BASE   0x03200000u   // Forge plugins (runtime/forge.c): modules, then Forge's hook trampolines / stubs
-#define PLUGIN_END    0x05000000u   // (30 MB: MHGU Utility alone is 10 MB; 12 MB left no room for a further plugin)
-#define FORGE_TRAMP   0x05000000u   // trampolines to hooked functions' original code (dispatch.c runs them)
-#define FORGE_STUBS   0x05100000u   // ARM stubs Forge writes (interpreted)
-#define FORGE_END     0x05200000u
-#define HLE_HEAP      0x05200000u   // guest-visible memory owned by host code
-#define HLE_HEAP_SIZE 0x02E00000u   // (to CODE_END)
+#define PLUGIN_END    0x06000000u   // (46 MB: MHGU Utility alone is 10 MB; the first 12 MB left no room for more plugins)
+#define FORGE_TRAMP   0x06000000u   // trampolines to hooked functions' original code (dispatch.c runs them)
+#define FORGE_STUBS   0x06100000u   // ARM stubs Forge writes (interpreted)
+#define FORGE_END     0x06200000u
+#define HLE_HEAP      0x06200000u   // guest-visible memory owned by host code
+#define HLE_HEAP_SIZE 0x01E00000u   // (30 MB, to CODE_END: plugins stay in the code region, below the game's heap, as on
+                                    // the console; how much is used is logged every 4 MB)
 #define CODE_END      0x08000000u
 #define HEAP_BASE     0x08000000u   // svcSetHeapSize
 #define HEAP_MAX      0xA0000000u   // 2.5 GB
