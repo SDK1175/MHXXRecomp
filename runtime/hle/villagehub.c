@@ -57,6 +57,9 @@
 #define AREA_PUB          7
 
 static bool g_village;  // the counter shows Village quests
+static volatile bool g_list_village;  // the list job takes Village quests (set at the switch; the job runs on a worker)
+static bool g_pending;  // a switch waits for its list job (MHXX: the job needs the game thread running, see ui_update)
+static uint64_t g_pending_at;
 static int g_trace;
 
 static bool hub_area(uint8_t a) { return a == AREA_HUB || a == AREA_PUB; }
@@ -106,7 +109,7 @@ static bool locked_village_quest(Cpu *c, uint32_t q) {
 static void quest_filter(Cpu *c) {
     uint32_t q = c->r[1], type = c->r[2];
     if (!village_active()) { fnhook_call_original(c, FN_QUEST_FILTER); return; }
-    if (g_village && hub_area((uint8_t)type)) c->r[2] = AREA_VILLAGE;
+    if (g_list_village && hub_area((uint8_t)type)) c->r[2] = AREA_VILLAGE;
     fnhook_call_original(c, FN_QUEST_FILTER);
     if ((c->r[0] & 1) && hub_area((uint8_t)type) && locked_village_quest(c, q)) c->r[0] = 0;
     if (g_trace) {
@@ -115,7 +118,7 @@ static void quest_filter(Cpu *c) {
         if (type < 8 && !seen[type][group][ok]) {
             seen[type][group][ok] = 1;
             LOG("[vqhub] filter: counter type %u%s, quest %07u (group %u): %s\n", type,
-                g_village && hub_area((uint8_t)type) ? " as a village" : "", q, group, ok ? "listed" : "no");
+                g_list_village && hub_area((uint8_t)type) ? " as a village" : "", q, group, ok ? "listed" : "no");
         }
     }
 }
@@ -167,21 +170,35 @@ static void quest_lookup(Cpu *c) {
     fnhook_call_original(c, FN_QUEST_LOOKUP);
 }
 
-static void reload_list(Cpu *c) {
+// The switch: the list job is started and the counter waits for it, a frame at a time (MHGU Recomp waited in place:
+// GU's job finishes on its worker; MHXX's needs the game thread running meanwhile, and a wait in place never ended).
+// Until then the counter UI isn't updated (no input, the menu as it was); then the categories are built anew, as when
+// a stage starts, and the UI goes back to its first state, which lays the menu out for the new mode.
+static void list_start(Cpu *c, bool village) {
     uint32_t sel = LDG(G_SELECTOR);
     if (!sel) return;
-    uint64_t t0 = plat_now_ns();
+    g_list_village = village;
     call1(c, FN_LIST_LOAD, sel);
-    while (!call1(c, FN_LIST_DONE, sel) && plat_now_ns() - t0 < 5000000000ull)
-        plat_sleep_until_ns(plat_now_ns() + 1000000);
-    // the categories (quest numbers per star...) are built anew too, as when a stage starts, for the new mode
+    g_pending = true;
+    g_pending_at = plat_now_ns();
+}
+
+static bool list_finish(Cpu *c, uint32_t ui) {
+    uint32_t sel = LDG(G_SELECTOR);
+    if (!sel) { g_pending = false; return true; }
+    bool late = plat_now_ns() - g_pending_at > 30000000000ull;
+    if (!call1(c, FN_LIST_DONE, sel) && !late) return false;
+    g_pending = false;
+    g_village = g_list_village;
     uint32_t a = area_addr();
     uint8_t was = a ? LD8(a) : 0xff;
     if (g_village && hub_area(was)) ST8(a, AREA_VILLAGE);
     call1(c, FN_CATEGORIES, sel);
     if (a) ST8(a, was);
-    LOG("[vqhub] quest counter: %s quests (list loaded in %.0f ms)\n", g_village ? "Village" : "Hub",
-        (plat_now_ns() - t0) / 1e6);
+    ST8(ui + UI_STATE, 0);  // (lays the menu out again)
+    LOG("[vqhub] quest counter: %s quests (list loaded in %.0f ms%s)\n", g_village ? "Village" : "Hub",
+        (plat_now_ns() - g_pending_at) / 1e6, late ? ", not finished: given up" : "");
+    return true;
 }
 
 static void ui_update(Cpu *c) {
@@ -192,13 +209,17 @@ static void ui_update(Cpu *c) {
     uint64_t pressed = b & ~held;
     held = b;
     uint32_t ui = c->r[0], a = area_addr();
+    if (g_pending) {
+        if (!list_finish(c, ui)) return;  // (still loading: the counter waits)
+        as_village_menu(c, FN_UI_UPDATE);
+        return;
+    }
     uint8_t st = LD8(ui + UI_STATE);
     bool on = config_live_village_in_hub();
     if (a && hub_area(LD8(a)) && (st == UI_RANK_MENU || st == UI_STAR_MENU) &&
         (on ? (pressed & ((1ull << BTN_L) | (1ull << BTN_R))) != 0 : g_village)) {  // (off: back to the Hub's quests)
-        g_village = !g_village;
-        reload_list(c);
-        ST8(ui + UI_STATE, 0);  // (lays the menu out again)
+        list_start(c, !g_village);
+        return;
     }
     as_village_menu(c, FN_UI_UPDATE);
 }
