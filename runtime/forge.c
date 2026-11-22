@@ -523,7 +523,9 @@ static bool hook_install(uint32_t target, uint32_t detour, bool want_orig, uint3
     // The trampoline as the plugin knows the function (Damage Numbers reads it back: the two words it saw, then a jump
     // to its address + 8). It runs the same: the words differ from MHXX's only where they can't be moved anyway, and
     // the jump comes back through the region to MHXX's address.
-    if (*tramp) ST32(*tramp, w0), ST32(*tramp + 4, w1), ST32(*tramp + 12, target + 8);
+    // (not where the region shows GU's own words for a function MHXX has in another form: those don't run here)
+    if (*tramp && !gucompat_shown_as_gu(target) && !gucompat_shown_as_gu(target + 4))
+        ST32(*tramp, w0), ST32(*tramp + 4, w1), ST32(*tramp + 12, target + 8);
     gucompat_mirror(real, 8);
     return true;
 }

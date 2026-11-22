@@ -200,6 +200,13 @@ bool gucompat_build(void) {
     return true;
 }
 
+// The word at this GU address in the region is GU's own (GU2XX_WORD), not MHXX's code shown at it
+bool gucompat_shown_as_gu(uint32_t a) {
+    for (uint32_t i = 0; i < sizeof GU2XX_WORD / sizeof GU2XX_WORD[0]; i++)
+        if (GU2XX_WORD[i].gu == a - GU_SHADOW) return true;
+    return false;
+}
+
 uint32_t gucompat_real(uint32_t a) {
     uint32_t gu = a - GU_SHADOW;
     const Range *r = state > 0 ? range_of_gu(gu) : NULL;
