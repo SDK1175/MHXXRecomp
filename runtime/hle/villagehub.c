@@ -60,6 +60,7 @@ static bool g_village;  // the counter shows Village quests
 static volatile bool g_list_village;  // the list job takes Village quests (set at the switch; the job runs on a worker)
 static bool g_pending;  // a switch waits for its list job (MHXX: the job needs the game thread running, see ui_update)
 static uint64_t g_pending_at;
+static volatile uint32_t g_filter_calls, g_filter_last;  // (the job's progress, for the log while a switch waits)
 static int g_trace;
 
 static bool hub_area(uint8_t a) { return a == AREA_HUB || a == AREA_PUB; }
@@ -108,6 +109,7 @@ static bool locked_village_quest(Cpu *c, uint32_t q) {
 
 static void quest_filter(Cpu *c) {
     uint32_t q = c->r[1], type = c->r[2];
+    g_filter_calls++, g_filter_last = q;
     if (!village_active()) { fnhook_call_original(c, FN_QUEST_FILTER); return; }
     if (g_list_village && hub_area((uint8_t)type)) c->r[2] = AREA_VILLAGE;
     fnhook_call_original(c, FN_QUEST_FILTER);
@@ -178,6 +180,7 @@ static void list_start(Cpu *c, bool village) {
     uint32_t sel = LDG(G_SELECTOR);
     if (!sel) return;
     g_list_village = village;
+    g_filter_calls = 0, g_filter_last = 0;
     call1(c, FN_LIST_LOAD, sel);
     g_pending = true;
     g_pending_at = plat_now_ns();
@@ -186,7 +189,15 @@ static void list_start(Cpu *c, bool village) {
 static bool list_finish(Cpu *c, uint32_t ui) {
     uint32_t sel = LDG(G_SELECTOR);
     if (!sel) { g_pending = false; return true; }
-    bool late = plat_now_ns() - g_pending_at > 30000000000ull;
+    uint64_t now = plat_now_ns();
+    bool late = now - g_pending_at > 30000000000ull;
+    static uint64_t said;
+    if (now - said > 2000000000ull) {  // (every 2 s while waiting: the job's state (+0x40: 1 running, 2 done) and where it is)
+        said = now;
+        uint32_t job = LD32(sel + 0x1c);
+        LOG("[vqhub] waiting for the list: job %#x state %u, %u quests filtered (last %07u), %u in the list\n", job,
+            job ? LD32(job + 0x40) : 0, g_filter_calls, g_filter_last, LD32(sel + SEL_COUNT));
+    }
     if (!call1(c, FN_LIST_DONE, sel) && !late) return false;
     g_pending = false;
     g_village = g_list_village;
