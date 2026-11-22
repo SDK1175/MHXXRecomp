@@ -198,7 +198,7 @@ static uint32_t g_vq;
 static void load_village_archive(Cpu *c) {
     uint32_t mgr = LD32(G_RESOURCES);
     if (g_vq || !mgr) return;
-    static const char *const paths[] = {"quest\\vq", "arc\\quest\\vq"};
+    static const char *const paths[] = {"arc\\quest\\vq", "quest\\vq"};  // (the first, checked live: ~10 ms)
     for (int i = 0; i < 2 && !g_vq; i++) {
         uint64_t t0 = plat_now_ns();
         snprintf((char *)G2H(g_path), 64, "%s", paths[i]);
