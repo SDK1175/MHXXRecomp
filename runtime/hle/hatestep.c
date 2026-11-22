@@ -9,6 +9,11 @@
 // Here the monster's time is cut into 30 fps updates (2.0 of its step): 0x2bbf98 runs once for each with the step 2.0,
 // so the scores move as in the 30 fps game. At 30 fps and below the original. MHGU_NO_HATESTEP=1: the original per-update
 // add (for comparing).
+// The noticing meters the same way (MHGU Recomp 4a6a1cb): 0x2b9ae8 (GU 0x2badac) moves a meter per hunter (status
+// +0x29c..+0x2a8) and Palico (+0x2ac..+0x2b8), 0..20000, by (int)(rate * step); far from the hunters the rate is -1 or
+// -2, which became 0 above 30 fps, so a meter filled in a fight never drained and a monster that fled to its nest to
+// sleep noticed the hunter on arrival, looked around and walked off instead. While the meters' reset flag (status
+// +0x2bc) is set the function only empties them, every update, as in the original. MHGU_NO_NOTICESTEP=1: the original.
 #include "../game/addr.h"
 #include <math.h>
 #include <stdlib.h>
@@ -16,10 +21,14 @@
 #include "../hle.h"
 
 #define FN_HATE  A_HATESTEP_FN_HATE  // (monster): the update of its attention scores
+#define FN_NOTICE A_HATESTEP_FN_NOTICE  // (monster): the update of its noticing meters
 #define EN_STEP  0x1cu      // monster: its step (f32, 60 fps frames)
+#define EN_INFO  0x1428u    // monster: its status block
+#define ST_RESET 0x2bcu     // status: u8, the noticing meters' reset flag
 #define SLOTS    32
 
-static struct { uint32_t en; uint64_t seen; float t; } g_slot[SLOTS];
+typedef struct { uint32_t en; uint64_t seen; float t; } Slot;
+static Slot g_slot[SLOTS], g_notice[SLOTS];
 
 // MHXX_HATE_LOG=1: each monster's scores (hunters, Palicos, the rest: +0x254 / +0x264 / +0x274, 4 each) about once a
 // second of game time, to compare a run at 30 fps with one above it (the same hunt: the scores should move alike)
@@ -39,30 +48,44 @@ static void log_scores(uint32_t en, float step) {
         v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11]);
 }
 
-static void hate(Cpu *c) {
+// Runs fn (monster in r0) only when the monster's time has reached another 30 fps update, with the step 2.0.
+static void in_30fps_updates(Cpu *c, uint32_t fn, Slot *tab) {
     uint32_t en = c->r[0];
     float step = LDF(en + EN_STEP);
-    if (g_log) log_scores(en, step);
     if (!(step > 0.0f && step < 2.0f)) {
-        fnhook_call_original(c, FN_HATE);
+        fnhook_call_original(c, fn);
         return;
     }
     int s = 0, old = 0;
-    while (s < SLOTS && g_slot[s].en != en) {
-        if (g_slot[s].seen < g_slot[old].seen) old = s;
+    while (s < SLOTS && tab[s].en != en) {
+        if (tab[s].seen < tab[old].seen) old = s;
         s++;
     }
     if (s == SLOTS) {  // (new here: its first update starts a 30 fps update)
         s = old;
-        g_slot[s].en = en, g_slot[s].t = 2.0f - step;
+        tab[s].en = en, tab[s].t = 2.0f - step;
     }
-    g_slot[s].seen = g_present_count;
-    g_slot[s].t += step;
-    if (g_slot[s].t < 2.0f) return;
-    g_slot[s].t = fmodf(g_slot[s].t, 2.0f);
+    tab[s].seen = g_present_count;
+    tab[s].t += step;
+    if (tab[s].t < 2.0f) return;
+    tab[s].t = fmodf(tab[s].t, 2.0f);
     STF(en + EN_STEP, 2.0f);
-    fnhook_call_original(c, FN_HATE);
+    fnhook_call_original(c, fn);
     STF(en + EN_STEP, step);
+}
+
+static void hate(Cpu *c) {
+    if (g_log) log_scores(c->r[0], LDF(c->r[0] + EN_STEP));
+    in_30fps_updates(c, FN_HATE, g_slot);
+}
+
+static void notice(Cpu *c) {
+    uint32_t info = LD32(c->r[0] + EN_INFO);
+    if (info && LD8(info + ST_RESET)) {  // (emptying the meters, no step)
+        fnhook_call_original(c, FN_NOTICE);
+        return;
+    }
+    in_30fps_updates(c, FN_NOTICE, g_notice);
 }
 
 static void log_only(Cpu *c) {
@@ -72,6 +95,8 @@ static void log_only(Cpu *c) {
 
 void hatestep_init(void) {
     PORT_OFF(HATESTEP, "monster attention at high frame rates");
+    const char *n = getenv("MHGU_NO_NOTICESTEP");
+    if (!(n && *n == '1')) fnhook_set(FN_NOTICE, hle_register("hatestep:notice", notice));
     const char *l = getenv("MHXX_HATE_LOG");
     g_log = l && *l == '1';
     const char *e = getenv("MHGU_NO_HATESTEP");

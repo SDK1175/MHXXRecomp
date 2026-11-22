@@ -70,7 +70,8 @@
 
 // ---- runtime/hle/hatestep.c
 #define A_HATESTEP_FN_HATE                   0x2bacd4u  // MHXX 1.5.1 (called once, from the monster update 0x2a4240; +0x1428 the status block, scores +0x254 + 4 * i += (int)(rate * step +0x1c), rate from 0x2ba564 = this - 0x770 as in GU). GU 1.4.0: 0x2bbf98  (monster): the update of its attention scores
-#define HATESTEP_PORTED (A_HATESTEP_FN_HATE)
+#define A_HATESTEP_FN_NOTICE                 0x2b9ae8u  // MHXX 1.5.1 (called once, from 0x2a4238; the same code as GU's: status +0x2bc reset flag, meters +0x29c.. 0..20000). GU 1.4.0: 0x2badac  (monster): the update of its noticing meters
+#define HATESTEP_PORTED (A_HATESTEP_FN_HATE && A_HATESTEP_FN_NOTICE)
 
 // ---- runtime/hle/fastload.c (MHXX 1.5.1 found 2026-11-12 from main.bin, by GU's layout: the town code is GU - 0xb160,
 // the sound code GU - 0x51d8)

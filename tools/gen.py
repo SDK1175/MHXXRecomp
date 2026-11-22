@@ -144,6 +144,11 @@ MHXX_PATCHES = {
     # uScheduler's update (GU 0xb66164; vtable 0x19ae40c): event camera pans skippable with A
     ('main', 0xb5ab7c): (0xE92D4010, '{ extern void evskip_update(Cpu *); evskip_update(c); '
                                      'uint32_t ea = c->r[13] - 8u; ST32(ea, c->r[4]); ST32(ea + 4u, c->r[14]); c->r[13] = ea; }'),
+    # Monster turns (runtime/hle/emturn.c; MHGU Recomp 451306c): Duramboros' turn at the end of 7:32 divides by the frame
+    # step instead of multiplying (`vdiv.f32 s0, s6, s0`, s0 = (C2 / speed) * s2, s2 = step / 2, r4 = the monster;
+    # GU 0x10dc744)
+    ('main', 0x10d0fac): (0xEE830A00, '{ extern float emturn_div(uint32_t, float, float, float); '
+                          'c->v.f[0] = emturn_div(c->r[4], c->v.f[6], c->v.f[0], c->v.f[2]); }'),
     # Buff icon cycle (GU 0x834d20 / 0x834ef4; function 0x82ba0c)
     ('main', 0x82ba2c): (0xE2477001, '{ extern uint32_t buffcycle_tick(void); c->r[7] -= buffcycle_tick(); }'),
     ('main', 0x82bc00): (0xE3A00014, '{ extern uint32_t buffcycle_reload(void); c->r[0] = buffcycle_reload(); }'),
