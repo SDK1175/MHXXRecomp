@@ -22,7 +22,7 @@
 | World(like) Sharpness Gauge | PurplefinNeptuna | ❌ 안 됨 (사용자 제보) | 원래 포팅에서도 **KatLib보다 먼저 로드**해야 동작: 런처 → 모드에서 순서를 KatLib 위로 올려 다시 확인 필요 |
 | Monster Weakness Icons | Potobc | 확인 필요 | Forge 플러그인이 아닌 **데이터 모드**: 이제 텍스처는 덥크 위치로 옮겨짐(아래 "데이터 모드") |
 | MHGU Utility (Hunter's Compendium) | Rikiar73574 | ✅ 동작 (0.10.8부터) | 아이템·무기 트리·방어구·위시리스트(보유 수량)·스킬 조합(헌터 정보)·퀘스트 추천·채집 지도 아이콘 모두 동작. 검색창 키보드 입력이 빠르게 쳐도 순서대로 들어가고, 패드 버튼 표시는 F1에서 바꾼 버튼 설정을 따름. 원본은 영어: [한글판](https://github.com/SDK1175/mhgu-utility-kor/releases) |
-| MHGU Skill Simulator | ZellD-0371 | 🟡 수정판으로 동작 | 원본 그대로는 덥크 메뉴를 못 알아보고 창이 안 열림. [덥크용 수정 브랜치](https://github.com/SDK1175/mhgu-skill-simulator/tree/mhxx)(직접 빌드)와 다음 포트 업데이트로 메뉴 3페이지·한글 이름·마우스·장비 읽기까지 확인. 제작자에게 반영 요청 예정 |
+| MHGU Skill Simulator | ZellD-0371 | ✅ 동작 (0.10.9부터, 수정판) | 원본은 덥크 메뉴를 못 알아봐서 창이 안 열림. [덥크용 수정판](https://github.com/SDK1175/MHGU-Skill-Simulator/releases)을 쓰세요: 마을·집회소 + 메뉴 3페이지, 한글 이름, 마우스·휠, 장비 읽기 확인 |
 | KatSmithy | Katt404 | ❌ 안 됨 (게임이 꺼짐) | 타이틀 뒤 대장간 데이터(`facility/blacksmith.arc`)를 영문판 구조로 읽다가 게임이 멈춤. 메뉴 글씨는 한글 패치를 못 알아보고 영어로 나옴. 빼고 플레이하세요 |
 | Faster Field Hunter | Ellipse1638 | 🟡 대부분 동작 | 전투 중에만 스태미나 소모 등 동작. **모두 채집**(설정은 켜지지만 효과 없음)과 **아이템 아이콘**(스스로 꺼짐)은 덥크에서 안 됨 |
 
