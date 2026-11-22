@@ -333,7 +333,8 @@ void gucompat_check_signatures(const char *plugin, uint32_t ro, uint32_t len) {
         int same = 0;
         for (int k = 0; k < 8; k++) same += LD32(a + 4 + 4 * k) == LD32(GU_SHADOW + off + 4 * k);
         if (same == 8) { checked++; continue; }
-        if (same < 4) continue;
+        // (only code this port maps and words that read as ARM code: a plugin's other tables only look like this)
+        if (same < 4 || !range_of_gu(off) || (LD32(a + 4) >> 28) != 0xE) continue;
         char diff[200];
         int n = 0;
         for (int k = 0; k < 8 && n < (int)sizeof diff - 40; k++) {
