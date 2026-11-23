@@ -1322,6 +1322,21 @@ static void iai_trace(Cpu *c) {
         pl, (int)r[0], (int)r[1], r[2], LD32(b + 0xb5280), LD8(pl + 0x13cc), LD8(pl + 0x1054),
         LD32(pl + 0xf18), LD32(pl + 0x3198), LD32(pl + 0x319c), LD32(pl + 0x24f0), LD32(pl + 0x135c),
         LD32(g), LD32(g + 8), LD32(g + 0x10), LD32(g + 0x24), LD32(g + 0x28));
+    {  // its kind-1 lookup (0x11ac8), link by link: GU main+0x188a12c (MHXX 0x18ab57c) an object whose vtable is GU
+       // 0x1752828 (MHXX 0x17746f8); player+0x135c GU 0x1734428 (0x1756428); +0x1360 an index; the object's +0x1c +
+       // 4 * index an entry, vtable GU 0x1752520 (0x17743f0) or 0x17314bc (0x17534bc); its +0xb4 = player + 0xfd8
+        uint32_t o = LD32(MAIN_BASE + 0x18ab57cu), ix = LD32(pl + 0x1360);
+        uint32_t e = o && ix <= 0x3f ? LD32(o + 0x1c + 4 * ix) : 0;
+        LOG("[iai] kind1: object %x vtable main+%x (want 17746f8); player+135c main+%x (want 1756428) +1360 %u; "
+            "entry %x vtable main+%x (want 17743f0 or 17534bc) +b4 %x (want %x) +40 %x\n",
+            o, o ? LD32(o) - MAIN_BASE : 0, LD32(pl + 0x135c) - MAIN_BASE, ix, e, e ? LD32(e) - MAIN_BASE : 0,
+            e ? LD32(e + 0xb4) : 0, pl + 0xfd8, e ? LD32(e + 0x40) : 0);
+        for (uint32_t k = 0; o && k < 8; k++) {  // (the first few entries, in case the index or the layout differ)
+            uint32_t f = LD32(o + 0x1c + 4 * k);
+            if (f) LOG("[iai]   object +%x: %x vtable main+%x +b4 %x +40 %x\n", 0x1c + 4 * k, f, LD32(f) - MAIN_BASE,
+                       LD32(f + 0xb4), LD32(f + 0x40));
+        }
+    }
     for (int e = 0; e < 32; e++)
         for (int h = 0; h < 2; h++) {
             uint32_t t = b + 0xb2964 + e * 0x148 + h * 0xa4, res = LD32(t);
