@@ -1303,6 +1303,33 @@ static void app_run(Cpu *c) {
     fnhook_call_original(c, text_addr(OFF_APP_RUN));
 }
 
+// (debug, MHXX_PAD_TRACE) the IAI SLASH HELM BREAKER mod (mhgu_fix40_fx): its own checks, called as it does, on ZR+B
+static void iai_trace(Cpu *c) {
+    uint32_t b = 0;
+    for (int i = 0; i < nplugins; i++)
+        if (plugins[i].m && strstr(plugins[i].name, "fix40")) b = plugins[i].m->base;
+    uint32_t gc = LD32(A_G_GAMECONTROL), sp = LD32(A_G_SPLAYER);
+    uint32_t n = gc ? LD32(gc + 0x30) : 4, pl = sp && n < 4 ? LD32(sp + 0x1c + 4 * n) : 0;
+    if (!b || !pl) { LOG("[iai] base %x player %x\n", b, pl); return; }
+    uint32_t r[3], keep[4];  // (the three only read)
+    memcpy(keep, c->r, sizeof keep);
+    static const uint32_t fn[3] = {0x1188c, 0x11488, 0x11ac8};  // its gate (before the decision), kind 2, kind 1
+    for (int k = 0; k < 3; k++) r[k] = gcall(c, b + fn[k], pl, 0, 0, 0);
+    memcpy(c->r, keep, sizeof keep);
+    uint32_t g = b + 0xb2000;
+    LOG("[iai] player %x: gate %d kind2 %d kind1 %x; res count %u; +13cc %02x +1054 %02x; "
+        "+f18 %x +3198 %x +319c %x +24f0 %x +135c %x; g: pl %x valid %u held %x acc %x prev %x\n",
+        pl, (int)r[0], (int)r[1], r[2], LD32(b + 0xb5280), LD8(pl + 0x13cc), LD8(pl + 0x1054),
+        LD32(pl + 0xf18), LD32(pl + 0x3198), LD32(pl + 0x319c), LD32(pl + 0x24f0), LD32(pl + 0x135c),
+        LD32(g), LD32(g + 8), LD32(g + 0x10), LD32(g + 0x24), LD32(g + 0x28));
+    for (int e = 0; e < 32; e++)
+        for (int h = 0; h < 2; h++) {
+            uint32_t t = b + 0xb2964 + e * 0x148 + h * 0xa4, res = LD32(t);
+            if (res) LOG("[iai]   table %d.%d: res %x kind %u state %u +20 %x (res+64 %x) +24 %x (res+68 %x)\n", e, h, res,
+                         LD32(t + 4), LD32(t + 0x10), LD32(t + 0x20), LD32(res + 0x64), LD32(t + 0x24), LD32(res + 0x68));
+        }
+}
+
 static void frame_update(Cpu *c) {
     uint32_t self = c->r[0];
     fnhook_call_original(c, text_addr(OFF_UPDATE));
@@ -1328,6 +1355,7 @@ static void frame_update(Cpu *c) {
         if ((held & 0xffff) != (last_held & 0xffff) || slot != last_slot)
             LOG("[padtrace] frame %u: pad %u held %08x new %08x (ZR+B %s); player vtable +0x324 = %x\n", frame_no, idx,
                 held, edge, (held & 0x4800) == 0x4800 ? "yes" : "no", slot);
+        if ((held & 0x4800) == 0x4800 && (last_held & 0x4800) != 0x4800) iai_trace(c);
         last_held = held, last_slot = slot;
     }
     input_frame();  // (Forge reads the input when it draws, after the updates: the plugins' view is the last frame's)
