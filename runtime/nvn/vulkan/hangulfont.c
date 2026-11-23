@@ -12,8 +12,8 @@
 // third_party/paperlogy: the font the Korean patch of MHGU draws its Hangul from), the ink as tall as the patch's.
 // Nothing changes in the game's files or its text; the font's box and spacing stay the patch's.
 //
-// The patch has no glyphs for the letters alone (ㄱ ... ㅣ, typed in chat as ㅋㅋ or ㅇㅇ). The first 51 glyphs after
-// its syllables with a box as big (kanji it left as they were; not in its grid) are drawn here as those letters
+// The patch has no glyphs for the letters alone (ㄱ ... ㅣ, typed in chat as ㅋㅋ or ㅇㅇ). The font's last 51 glyphs
+// with a box as big as a syllable's (its rarest kanji) are drawn here as those letters
 // (U+3131..U+3163) too, and typed letters are given their codes (hangulfont_typed): kanji the Korean text doesn't use. With KoreanFont off
 // (the patch's own pictures) they stay kanji, and typed letters become ?.
 //
@@ -114,14 +114,17 @@ static bool read_boxes_into(const uint8_t *g, uint32_t n, Box *boxes, uint32_t *
         boxes[i] = b;
         if (codes) codes[i] = rd32(e);
     }
-    // the letters: the first 51 glyphs after the syllables with a box as big as a syllable's (the kanji the patch left;
-    // not in its grid, each box drawn where it is)
+    // the letters: the last 51 glyphs of the font with a box as big as a syllable's (the rarest kanji, at the end of the
+    // code order; each box drawn where it is). Not the ones right after the syllables: the patch uses those for more
+    // text of its own (굿 in the chat's set phrases came out as a letter).
     int k = SYLLABLES;
-    for (uint32_t j = first + SYLLABLES; j < count && k < GLYPHS; j++) {
+    for (uint32_t j = count; j-- > first + SYLLABLES && k < GLYPHS;) {
         const uint8_t *e = g + base + (uint64_t)j * 20;
         uint32_t place = rd32(e + 4), size = rd32(e + 8);
         Box b = {(uint16_t)((place >> 8) & 0xfff), (uint16_t)(place >> 20), (uint16_t)(size & 0xfff),
                  (uint16_t)((size >> 12) & 0xfff), (uint8_t)(place & 0xff)};
+        uint32_t code = rd32(e);
+        if (code < 0x8000 || code > 0x9fff) continue;  // (kanji only, from the patch's own range on: no symbols, no fullwidth forms)
         if (b.w < boxes[0].w || b.h < boxes[0].h || b.x + b.w > PAGE_SIDE || b.y + b.h > PAGE_SIDE || b.page >= MAX_PAGES)
             continue;
         boxes[k] = b;
