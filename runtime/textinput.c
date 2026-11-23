@@ -169,11 +169,6 @@ void textinput_update(void) {
     }
 #endif
     if (want == g_window_on) return;
-    static bool hint;
-    if (!hint) {  // (the composing syllable is shown in the entry itself, by TEXT_EDITING: no IME window over the game)
-        SDL_SetHint(SDL_HINT_IME_IMPLEMENTED_UI, "composition");
-        hint = true;
-    }
     if (want) SDL_StartTextInput(w);
     else SDL_StopTextInput(w);
     g_window_on = want;

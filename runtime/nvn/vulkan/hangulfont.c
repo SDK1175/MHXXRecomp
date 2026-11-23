@@ -12,6 +12,11 @@
 // third_party/paperlogy: the font the Korean patch of MHGU draws its Hangul from), the ink as tall as the patch's.
 // Nothing changes in the game's files or its text; the font's box and spacing stay the patch's.
 //
+// The patch has no glyphs for the letters alone (ㄱ ... ㅣ, typed in chat as ㅋㅋ or ㅇㅇ). When the 51 glyphs after its
+// syllables go on in the same grid, they are drawn here as those letters (U+3131..U+3163) too, and typed letters are
+// given their codes (hangulfont_typed): 51 kanji of the patched game the Korean text doesn't use. With KoreanFont off
+// (the patch's own pictures) they stay kanji, and typed letters become ?.
+//
 // It is only done for a font laid out exactly so (every one of the 2350 boxes where the next of that grid would be):
 // without the patch the same glyphs are the game's kanji, packed some other way.
 #include <SDL3/SDL.h>
@@ -42,13 +47,16 @@ extern const unsigned char mhxx_paperlogy_ttf[], mhxx_paperlogy_ttf_end[];
 #define ARC_TEX 0x241f5debu
 #define ARC_GFD 0x2d462600u
 #define SYLLABLES 2350
+#define JAMO 51          // ㄱ (U+3131) .. ㅣ (U+3163)
+#define GLYPHS (SYLLABLES + JAMO)
 #define FIRST_CODE 0x7a00u
 #define PAGE_SIDE 1024u
 #define SCALE 2u  // (the pictures' size: the page's x 2, as the MHGU patch's own pages)
 #define MAX_PAGES 8
 
 typedef struct { uint16_t x, y, w, h; uint8_t page; } Box;
-static Box boxes[SYLLABLES];
+static Box boxes[GLYPHS];
+static int g_jamo;  // 51: the glyphs after the syllables go on in the grid and are drawn as the letters; else 0
 static struct { uint64_t key; int page; } pages[MAX_PAGES];
 static int npages;
 static int state = -1;  // -1 not looked at, 0 not the patch's font (or off), 1 ready
@@ -77,9 +85,10 @@ static uint8_t *member(const uint8_t *arc, long n, const char *name, uint32_t ty
 }
 
 // The font's Hangul boxes, if it is the Korean patch's grid
-static bool read_boxes_into(const uint8_t *g, uint32_t n, Box *boxes, uint32_t *codes);
-static bool read_boxes(const uint8_t *g, uint32_t n) { return read_boxes_into(g, n, boxes, NULL); }
-static bool read_boxes_into(const uint8_t *g, uint32_t n, Box *boxes, uint32_t *codes) {
+static bool read_boxes_into(const uint8_t *g, uint32_t n, Box *boxes, uint32_t *codes, int *jamo);
+static bool read_boxes(const uint8_t *g, uint32_t n) { return read_boxes_into(g, n, boxes, NULL, &g_jamo); }
+static bool read_boxes_into(const uint8_t *g, uint32_t n, Box *boxes, uint32_t *codes, int *jamo) {
+    *jamo = 0;
     if (n < 0x48 || memcmp(g, "GFD", 4)) return false;
     uint32_t count = rd32(g + 0x1c), name = rd32(g + 0x40);
     uint64_t base = 0x44ull + name + 1;
@@ -90,20 +99,25 @@ static bool read_boxes_into(const uint8_t *g, uint32_t n, Box *boxes, uint32_t *
     for (uint32_t i = 0; i < count; i++)
         if (rd32(g + base + i * 20ull) >= FIRST_CODE) { first = i; break; }
     if (first + SYLLABLES > count || rd32(g + base + first * 20ull) != FIRST_CODE) return false;
-    for (int i = 0; i < SYLLABLES; i++) {
+    for (int i = 0; i < GLYPHS; i++) {
+        if (i >= SYLLABLES && first + i >= count) break;  // (the letters: only if the grid goes on)
         const uint8_t *e = g + base + (uint64_t)(first + i) * 20;
         uint32_t place = rd32(e + 4), size = rd32(e + 8);
         Box b = {(uint16_t)((place >> 8) & 0xfff), (uint16_t)(place >> 20), (uint16_t)(size & 0xfff),
                  (uint16_t)((size >> 12) & 0xfff), (uint8_t)(place & 0xff)};
-        if (!b.w || !b.h || b.x + b.w > PAGE_SIDE || b.y + b.h > PAGE_SIDE || b.page >= MAX_PAGES) return false;
-        if (i) {
+        bool fits = b.w && b.h && b.x + b.w <= PAGE_SIDE && b.y + b.h <= PAGE_SIDE && b.page < MAX_PAGES;
+        if (fits && i) {
             const Box *p = &boxes[i - 1];
-            bool next = (b.page == p->page && b.y == p->y && b.x == p->x + 22) ||
-                        (b.page == p->page && b.y > p->y && b.x == 0) || (b.page == p->page + 1 && b.x == 0);
-            if (!next) return false;  // (the game's own kanji: not in this grid)
+            fits = (b.page == p->page && b.y == p->y && b.x == p->x + 22) ||
+                   (b.page == p->page && b.y > p->y && b.x == 0) || (b.page == p->page + 1 && b.x == 0);
+        }
+        if (!fits) {
+            if (i < SYLLABLES) return false;  // (the game's own kanji: not in this grid)
+            break;
         }
         boxes[i] = b;
         if (codes) codes[i] = rd32(e);
+        if (i == GLYPHS - 1) *jamo = JAMO;
     }
     return true;
 }
@@ -145,7 +159,7 @@ static void look(void) {
     }
     free(gfd);
     bool used[MAX_PAGES] = {0};
-    for (int i = 0; i < SYLLABLES; i++) used[boxes[i].page] = true;
+    for (int i = 0; i < SYLLABLES + g_jamo; i++) used[boxes[i].page] = true;
     for (int p = 0; p < MAX_PAGES; p++) {
         if (!used[p]) continue;
         char name[64];
@@ -158,7 +172,8 @@ static void look(void) {
     }
     free(arc);
     if (npages) state = 1;
-    LOG("[hangul] the Korean patch's font: its Hangul drawn from Paperlogy (%d page(s))\n", npages);
+    LOG("[hangul] the Korean patch's font: its Hangul drawn from Paperlogy (%d page(s)%s)\n", npages,
+        g_jamo ? ", and the letters alone" : "");
 }
 
 bool hangulfont_size(uint32_t w, uint32_t h) {
@@ -206,10 +221,10 @@ bool hangulfont_apply(TexBackend *b, int page, const uint8_t *rgba, uint32_t w, 
     float baseline = ink_top + y1 * sc;
     uint8_t *glyph = malloc((size_t)64 * SCALE * 64 * SCALE);
     int drawn = 0;
-    for (int i = 0; glyph && i < SYLLABLES; i++) {
+    for (int i = 0; glyph && i < SYLLABLES + g_jamo; i++) {
         const Box *bx = &boxes[i];
         if (bx->page != page) continue;
-        uint32_t cp = ksx1001_hangul[i];
+        uint32_t cp = i < SYLLABLES ? ksx1001_hangul[i] : 0x3131u + (uint32_t)(i - SYLLABLES);
         uint32_t bxw = bx->w * SCALE, bxh = bx->h * SCALE, ox = bx->x * SCALE, oy = bx->y * SCALE;
         for (uint32_t y = 0; y < bxh; y++)  // (the patch's glyph out: white, clear)
             for (uint32_t x = 0; x < bxw; x++) {
@@ -247,7 +262,8 @@ bool hangulfont_apply(TexBackend *b, int page, const uint8_t *rgba, uint32_t w, 
 
 // ---- Hangul as the patch's codes, for a plugin's text in the game's font (forge.c: mhxx_hangul_encode). The codes are
 // the patch font's: the glyphs from U+7A00 on, in its grid (read_boxes), whatever [Display] KoreanFont says.
-static uint32_t enc_codes[SYLLABLES];
+static uint32_t enc_codes[GLYPHS];
+static int enc_jamo;  // the letters' glyphs follow the syllables in the grid (only drawn as letters with KoreanFont on)
 static SDL_AtomicInt enc_state;  // 0 not looked at, 1 the patch's font, 2 not
 
 static bool enc_ready(void) {
@@ -264,8 +280,8 @@ static bool enc_ready(void) {
         if (io) SDL_CloseIO(io);
         uint32_t gn = 0;
         uint8_t *gfd = ok ? member(arc, (long)n, "GUI\\02_common\\font\\font_festa", ARC_GFD, &gn) : NULL;
-        static Box tmp[SYLLABLES];
-        st = gfd && read_boxes_into(gfd, gn, tmp, enc_codes) ? 1 : 2;
+        static Box tmp[GLYPHS];
+        st = gfd && read_boxes_into(gfd, gn, tmp, enc_codes, &enc_jamo) ? 1 : 2;
         free(gfd), free(arc);
         LOG("[hangul] plugins' Hangul in the patch's codes: %s\n", st == 1 ? "yes" : "no (not the Korean patch's font)");
         SDL_SetAtomicInt(&enc_state, st);
@@ -296,6 +312,10 @@ static uint32_t encode(const char *in, char *out, uint32_t size, bool typed) {
             }
             if (at < 0 && !typed) return 0;
             c = at < 0 ? '?' : enc_codes[at];  // (typed: a syllable the patch can't show becomes ?)
+        }
+        if (c >= 0x3131 && c <= 0x3163) {  // (a letter alone: only typed text, and only where it is drawn as one)
+            if (!typed) return 0;
+            c = enc_jamo && g_config.korean_font == KOREAN_FONT_PAPERLOGY ? enc_codes[SYLLABLES + (c - 0x3131)] : '?';
         }
         char b[4];
         uint32_t k = c < 0x80 ? (b[0] = (char)c, 1)

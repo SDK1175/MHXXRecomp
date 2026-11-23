@@ -283,6 +283,9 @@ static void set_window_icon(void) {}
 #endif
 
 void ui_init(void) {
+    // (text entries draw the IME's composing syllable themselves, textinput.c: no IME window of the system's at the
+    // window's corner. Read when the video starts, so before SDL_Init.)
+    SDL_SetHint(SDL_HINT_IME_IMPLEMENTED_UI, "composition,candidates");
     if (!SDL_Init(SDL_INIT_VIDEO)) FATAL("SDL_Init: %s\n", SDL_GetError());
     int sdl = SDL_GetVersion();
 #ifdef MHGU_SDL_BUNDLED
