@@ -55,6 +55,7 @@ MHXX Recomp는 [MHGU Recomp](https://github.com/morerokk/MHGURecomp)를 포크�
 
 | 버전 | 이름 | 내용 |
 |---|---|---|
+| [0.10.13](docs/changelog/0.10.13.md) | | 한글 채팅·이름 입력, IAI SLASH HELM BREAKER(라이즈 태도 기술) 모드 동작, 멀티 R3 동의 안내 개선 |
 | [0.10.12](docs/changelog/0.10.12.md) | | 퀘스트 종료 후 R3로 바로 귀환(멀티는 전원 동의), 집회소에서 마을 퀘스트(인원별 체력), 고프레임 몬스터 수정 2개 |
 | [0.10.11](docs/changelog/0.10.11.md) | | 타이틀 화면 B 종료, F1 메뉴가 패드 배치를 따름, 긴급 퀘스트 클리어 공유, Faster Field Hunter 모두 채집 동작 |
 | [0.10.10](docs/changelog/0.10.10.md) | | Key Quest Markers·World(like) Sharpness Gauge 플러그인 동작, 플러그인 메모리 겹침으로 튕길 수 있던 문제 수정 |
