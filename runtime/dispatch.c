@@ -363,6 +363,14 @@ static GuestFn dispatch_slow(Cpu *c) {
     if (pc & 1) FATAL("jump to Thumb code at %x (lr=%x)\n", pc, c->r[14]);
     if (gucompat_in_shadow(pc)) {  // a plugin for MHGU calling the game at GU's address: MHXX's function
         uint32_t real = gucompat_real(pc);
+        static int gucalls = -1;  // (debug) MHXX_PLUGIN_GUCALLS=1: each GU function a plugin calls, the first time
+        if (gucalls < 0) gucalls = getenv("MHXX_PLUGIN_GUCALLS") != NULL;
+        if (gucalls && c->r[14] >= PLUGIN_BASE && c->r[14] < PLUGIN_END) {
+            uint32_t off;
+            const char *s = loader_symbol_at(c->r[14], &off);
+            LOG("[plugin] %s+%x calls GU main+%x (MHXX main+%x) (%x, %x, %x, %x)\n", s ? s : "?", off,
+                pc - GU_SHADOW, real ? real - MAIN_BASE : 0, c->r[0], c->r[1], c->r[2], c->r[3]);
+        }
         if (!real) FATAL("a plugin made for MHGU called MHGU address %x (lr=%x), which this port does not know in MHXX\n", pc - GU_SHADOW + MAIN_BASE, c->r[14]);
         c->pc = pc = real;
         for (int i = 0; i < override_count; i++)
