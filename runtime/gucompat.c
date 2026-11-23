@@ -403,11 +403,14 @@ int gucompat_fix_plugin(const char *name, uint32_t text, uint32_t size) {
     int n = 0;
     for (uint32_t a = text; a + 8 <= text + size; a += 4) {
         uint32_t w = LD32(a);
-        if ((w & 0x0FF00000u) != 0x03000000u || (w >> 28) != 0xE) continue;  // movw rd, #lo
-        uint32_t rd = (w >> 12) & 15;
+        // movw rd, #lo, under any condition: the IAI mod keeps 8 of its constants in conditional pairs (movwne /
+        // movtne: sGameControl, the second vtable it accepts for its kind-1 file), which, left as GU's, kept its
+        // resource patch from ever starting
+        if ((w & 0x0FF00000u) != 0x03000000u || (w >> 28) == 0xF) continue;
+        uint32_t rd = (w >> 12) & 15, cond = w >> 28;
         for (uint32_t b = a + 4; b < a + 20 && b + 4 <= text + size; b += 4) {
             uint32_t t = LD32(b);
-            if (((t >> 12) & 15) != rd || (t >> 28) != 0xE) continue;
+            if (((t >> 12) & 15) != rd || (t >> 28) != cond) continue;
             if ((t & 0x0FF00000u) != 0x03400000u) break;  // (another write of rd first: not a pair)
             uint32_t v = (((t >> 4) & 0xF000u) | (t & 0xFFFu)) << 16 | ((w >> 4) & 0xF000u) | (w & 0xFFFu);
             // (a value the plugin compares with what it read from the game's code: a word as GU has it, which the
