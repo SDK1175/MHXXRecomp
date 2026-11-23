@@ -285,6 +285,120 @@ static bool shown_data(uint32_t gu) {  // (data the region shows as GU's: the bu
     return false;
 }
 
+// ---- GU code pointers a plugin compares with pointers it read from the game (a vtable's slots: the IAI SLASH HELM
+// BREAKER mod checks 30 of them before it hooks anything). It builds them as its main + a GU code offset, and main is
+// the region (GU's code as GU has it), while the game's vtables hold MHXX's real code: they never matched. Such an
+// offset is given so that main + it is MHXX's twin of that code. Told apart from a hook target or a read of GU's code
+// (which want the region) by what is done with it: added to another register (the main) and then only compared, never
+// read through. The plugin's two forms:
+//   movw / movt rd, #off; add ra, rbase, rd; [add rb, ra, #imm;] cmp rx, ra|rb    -> off changed
+//   add ra, rbase, #i1; add ra, ra, #i2; cmp rx, ra (rbase a main of the first form) -> movw / movt ra, #real
+static int arm_reg_written(uint32_t u) {  // the register an instruction writes, or -1 (data processing, loads)
+    if ((u >> 28) == 0xF) return -1;
+    if ((u & 0x0C000000u) == 0x00000000u) {
+        if ((u & 0x0F900000u) == 0x01100000u) return -1;  // (tst teq cmp cmn)
+        if ((u & 0x0E000090u) == 0x00000090u && (u & 0x60u)) return (u & 0x00100000u) ? (int)((u >> 12) & 15) : -1;
+        return (int)((u >> 12) & 15);
+    }
+    if ((u & 0x0C000000u) == 0x04000000u) return (u & 0x00100000u) ? (int)((u >> 12) & 15) : -1;  // ldr / str
+    return -1;
+}
+static uint32_t arm_imm(uint32_t u) {
+    uint32_t v = u & 0xFF, rot = ((u >> 8) & 15) * 2;
+    return rot ? (v >> rot) | (v << (32 - rot)) : v;
+}
+// main + gu as MHXX's real code, 0: not mapped
+static uint32_t real_code(uint32_t gu) {
+    const Range *r = range_of_gu(gu);
+    return r ? MAIN_BASE + r->xx + (gu - r->gu) : 0;
+}
+static int fix_code_pointers(const char *name, uint32_t text, uint32_t size) {
+    int n = 0;
+    uint32_t bases[16] = {0};  // a register used as the main: the last address it was seen at (for the second form)
+    for (uint32_t a = text; a + 8 <= text + size; a += 4) {
+        uint32_t w = LD32(a);
+        if ((w & 0x0FF00000u) != 0x03000000u || (w >> 28) != 0xE) continue;  // movw rd, #lo
+        uint32_t rd = (w >> 12) & 15, b = 0, t = 0;
+        for (uint32_t c = a + 4; c < a + 20 && c + 4 <= text + size; c += 4) {
+            uint32_t u = LD32(c);
+            if (arm_reg_written(u) != (int)rd) continue;
+            if ((u & 0x0FF00000u) == 0x03400000u && (u >> 28) == 0xE) b = c, t = u;
+            break;
+        }
+        if (!b) continue;
+        uint32_t v = (((t >> 4) & 0xF000u) | (t & 0xFFFu)) << 16 | ((w >> 4) & 0xF000u) | (w & 0xFFFu);
+        if (v < 0x10000 || v >= g_modules[0].text_size || !range_of_gu(v)) continue;
+        int32_t off[16];
+        bool in[16] = {0}, added = false, bad = false;
+        int cmps = 0, base = -1;
+        int32_t seen[8];
+        in[rd] = true, off[rd] = 0;
+        for (uint32_t c = b + 4; c < b + 4 + 4 * 40 && c + 4 <= text + size && !bad; c += 4) {
+            uint32_t u = LD32(c);
+            if ((u & 0x0E000000u) == 0x0A000000u || (u & 0x0FFFFFF0u) == 0x012FFF10u) break;  // (a branch: as far as it goes)
+            uint32_t un = (u >> 16) & 15, um = u & 15, ud = (u >> 12) & 15;
+            if ((u & 0x0FF0F010u) == 0x01500000u && !(u & 0xFF0u)) {  // cmp rn, rm
+                int r = in[un] ? (int)un : in[um] ? (int)um : -1;
+                if (r >= 0 && cmps < 8) seen[cmps++] = off[r];
+                continue;
+            }
+            if ((u & 0x0FE00FF0u) == 0x00800000u && (in[un] != in[um])) {  // add rd, rn, rm (one of them the offset)
+                off[ud] = off[in[un] ? un : um], in[ud] = true, added = true;
+                base = in[un] ? (int)um : (int)un;
+                continue;
+            }
+            if ((u & 0x0FE00000u) == 0x02800000u && in[un] && (u >> 28) == 0xE) {  // add rd, rn, #imm
+                off[ud] = off[un] + (int32_t)arm_imm(u), in[ud] = true;
+                continue;
+            }
+            if ((u & 0x0C000000u) == 0x04000000u && (in[un] || (!(u & 0x02000000u) ? false : in[um]))) bad = true;
+            if ((u & 0x0E000090u) == 0x00000090u && (u & 0x60u) && in[un]) bad = true;  // (read through: GU's code)
+            int wr = arm_reg_written(u);
+            if (wr >= 0) in[wr] = false;
+            bool any = false;
+            for (int r = 0; r < 16; r++) any |= in[r];
+            if (!any) break;
+        }
+        if (bad || !added || !cmps || base < 0) continue;
+        // (one twin for all the offsets compared: the same range)
+        uint32_t real = real_code(v + (uint32_t)seen[0]) - (uint32_t)seen[0];
+        bool same = real_code(v + (uint32_t)seen[0]) != 0;
+        for (int k = 1; k < cmps; k++) same &= real_code(v + (uint32_t)seen[k]) - (uint32_t)seen[k] == real;
+        if (!same) continue;
+        uint32_t nv = real - GU_SHADOW;
+        ST32(a, (w & 0xFFF0F000u) | ((nv & 0xF000u) << 4) | (nv & 0xFFFu));
+        ST32(b, (t & 0xFFF0F000u) | ((nv >> 28) << 16) | ((nv >> 16) & 0xFFFu));
+        bases[base] = a;
+        LOG("[forge] %s+%x: GU code main+%x compared as a pointer: MHXX's main+%x\n", name, a - text, v, real - MAIN_BASE);
+        n++;
+    }
+    // the second form: two adds of immediates to a main seen above (within 0x400 bytes), then compared
+    for (uint32_t a = text; a + 12 <= text + size; a += 4) {
+        uint32_t u1 = LD32(a), u2 = LD32(a + 4);
+        if ((u1 & 0x0FE00000u) != 0x02800000u || (u1 >> 28) != 0xE) continue;
+        uint32_t ra = (u1 >> 12) & 15, rb = (u1 >> 16) & 15;
+        if (!bases[rb] || a - bases[rb] > 0x400 || ra == 15 || rb == 15) continue;
+        if ((u2 & 0x0FE00000u) != 0x02800000u || ((u2 >> 16) & 15) != ra || ((u2 >> 12) & 15) != ra || (u2 >> 28) != 0xE) continue;
+        uint32_t k = arm_imm(u1) + arm_imm(u2), real = k < g_modules[0].text_size ? real_code(k) : 0;
+        if (!real) continue;
+        bool compared = false;
+        for (uint32_t c = a + 8; c < a + 24 && c + 4 <= text + size; c += 4) {
+            uint32_t u = LD32(c);
+            if ((u & 0x0FF0F010u) == 0x01500000u && !(u & 0xFF0u) && (((u >> 16) & 15) == ra || (u & 15) == ra)) {
+                compared = true;
+                break;
+            }
+            if (arm_reg_written(u) == (int)ra || ((u >> 16) & 15) == ra || (u & 15) == ra) break;
+        }
+        if (!compared) continue;
+        ST32(a, 0xE3000000u | (ra << 12) | ((real & 0xF000u) << 4) | (real & 0xFFFu));         // movw ra, #lo
+        ST32(a + 4, 0xE3400000u | (ra << 12) | ((real >> 28) << 16) | ((real >> 16) & 0xFFFu));  // movt ra, #hi
+        LOG("[forge] %s+%x: GU code main+%x compared as a pointer: MHXX's main+%x\n", name, a - text, k, real - MAIN_BASE);
+        n++;
+    }
+    return n;
+}
+
 int gucompat_fix_plugin(const char *name, uint32_t text, uint32_t size) {
     int n = 0;
     for (uint32_t a = text; a + 8 <= text + size; a += 4) {
@@ -342,7 +456,7 @@ int gucompat_fix_plugin(const char *name, uint32_t text, uint32_t size) {
             break;
         }
     }
-    return n;
+    return n + fix_code_pointers(name, text, size);
 }
 
 // A plugin's checks of GU's code, before its forge_onLoad: records of a GU code offset and the 32 bytes the plugin
