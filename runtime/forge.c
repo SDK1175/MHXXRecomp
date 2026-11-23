@@ -1316,6 +1316,20 @@ static void frame_update(Cpu *c) {
         guest_call(c, plugins[i].on_update);
         if (plugins[i].gu) gucompat_imports_sync(plugins[i].name);  // (a plugin that takes the controller reads later)
     }
+    static int padtrace = -1;  // (debug) MHXX_PAD_TRACE=1: the game's pad words (as plugins read them) when they change
+    if (padtrace < 0) padtrace = getenv("MHXX_PAD_TRACE") != NULL;
+    if (padtrace) {
+        static uint32_t last_held, last_slot;
+        uint32_t pad = LD32(MAIN_BASE + 0x2148888u);  // (sPad: GU main+0x2126888; +0x6b60 the pad in use, 0xb50 each)
+        uint32_t idx = pad ? LD32(pad + 0x6b60) : ~0u;
+        uint32_t held = pad && idx <= 8 ? LD32(pad + idx * 0xb50 + 0x1d0) : 0;
+        uint32_t edge = pad && idx <= 8 ? LD32(pad + idx * 0xb50 + 0x1e0) : 0;
+        uint32_t slot = LD32(MAIN_BASE + 0x176ee34u + 0x324);  // (the player vtable's slot the IAI mod takes)
+        if ((held & 0xffff) != (last_held & 0xffff) || slot != last_slot)
+            LOG("[padtrace] frame %u: pad %u held %08x new %08x (ZR+B %s); player vtable +0x324 = %x\n", frame_no, idx,
+                held, edge, (held & 0x4800) == 0x4800 ? "yes" : "no", slot);
+        last_held = held, last_slot = slot;
+    }
     input_frame();  // (Forge reads the input when it draws, after the updates: the plugins' view is the last frame's)
     overlay_frame(c);
     c->r[0] = ret[0], c->r[1] = ret[1], c->v.f[0] = s0;
