@@ -1807,6 +1807,10 @@ static const struct { uint32_t gu, word; } GU2XX_WORD[] = {
     // simpler one at 0x3b2078 (added to GU2XX_CODE by hand): its first eight words as GU has them, for Key Quest
     // Markers' check of it. A hook there runs MHXX's own words (forge.c: gucompat_shown_as_gu).
     {0x3b57d0, 0xe92d4010}, {0x3b57d4, 0xe1a04000}, {0x3b57d8, 0xebff12c1}, {0x3b57dc, 0xe3500000}, {0x3b57e0, 0x0a000002}, {0x3b57e4, 0xe1a00004}, {0x3b57e8, 0xebff12bd}, {0x3b57ec, 0xea000002},
+    // GU 0xbc8414 is MHXX's 0xbbcdd4 with another register saved (push {r4-r8, sl, fp, lr} there, {r4, r5, r6, r8, fp,
+    // lr} here): its first word as GU has it, for IAI SLASH HELM BREAKER's check of the code it cleans up after
+    // (the only one of its 19 word checks MHXX words differently).
+    {0xbc8414, 0xe92d4df0},
 };
 // Data (globals, vtables, constants, the GOT) of GU in MHXX: {GU first, GU last, MHXX first} of runs of addresses
 // that moved by the same distance, sorted. From what the matched code refers to at the same place in both games
