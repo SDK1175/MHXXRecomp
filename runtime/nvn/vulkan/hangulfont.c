@@ -49,6 +49,10 @@ extern const unsigned char mhxx_paperlogy_ttf[], mhxx_paperlogy_ttf_end[];
 #define SYLLABLES 2350
 #define JAMO 51          // ㄱ (U+3131) .. ㅣ (U+3163)
 #define GLYPHS (SYLLABLES + JAMO)
+// Off: every kanji slot tried was text of the patch's own (after its syllables: 굿 in the chat's set phrases; the
+// font's last ones: 로 in 로그). The patch draws more of its Hangul outside its grid, so no slot is known to be free
+// until its text is read for the codes it uses. Typed letters alone stay ?.
+#define LETTERS 0
 #define FIRST_CODE 0x7a00u
 #define PAGE_SIDE 1024u
 #define SCALE 2u  // (the pictures' size: the page's x 2, as the MHGU patch's own pages)
@@ -118,7 +122,7 @@ static bool read_boxes_into(const uint8_t *g, uint32_t n, Box *boxes, uint32_t *
     // code order; each box drawn where it is). Not the ones right after the syllables: the patch uses those for more
     // text of its own (굿 in the chat's set phrases came out as a letter).
     int k = SYLLABLES;
-    for (uint32_t j = count; j-- > first + SYLLABLES && k < GLYPHS;) {
+    for (uint32_t j = count; LETTERS && j-- > first + SYLLABLES && k < GLYPHS;) {
         const uint8_t *e = g + base + (uint64_t)j * 20;
         uint32_t place = rd32(e + 4), size = rd32(e + 8);
         Box b = {(uint16_t)((place >> 8) & 0xfff), (uint16_t)(place >> 20), (uint16_t)(size & 0xfff),
