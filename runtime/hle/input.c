@@ -24,11 +24,14 @@ void input_set(uint64_t buttons, int32_t lx, int32_t ly, int32_t rx, int32_t ry)
 }
 
 // A plugin's own screen takes the controller (mhxx_input_capture): until then the game sees it untouched; afterwards,
-// a button still held from the screen stays hidden from the game until it is let go (B that closed the screen is not
-// also the game's B).
+// when the capture runs out, a button still held from the screen stays hidden from the game until it is let go; given
+// back on purpose (0), the buttons held are the game's at once (the screen's B is the game's Back).
 static volatile uint64_t capture_until_ns;
 static uint64_t swallow;
-void input_capture(uint32_t ms) { capture_until_ns = ms ? plat_now_ns() + (uint64_t)ms * 1000000ull : 0; }
+void input_capture(uint32_t ms) {
+    capture_until_ns = ms ? plat_now_ns() + (uint64_t)ms * 1000000ull : 0;
+    if (!ms) swallow = 0;  // (given back on purpose: the button that did it is the game's too - B the game's Back)
+}
 bool input_captured(void) { return capture_until_ns && plat_now_ns() < capture_until_ns; }
 
 void input_get(uint64_t *buttons, int32_t sticks[4]) {
