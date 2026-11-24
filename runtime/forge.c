@@ -36,6 +36,7 @@
 #include "mods.h"
 #include "overlay.h"
 #include "platform.h"
+#include "romfs.h"
 
 #define FORGE_MAJOR 1
 #define FORGE_MINOR 5
@@ -1357,6 +1358,7 @@ static void iai_trace(Cpu *c) {
 
 // (debug) MHXX_FIND_TEXT="<Korean text>": where in the game's memory that text is (in the Korean patch's codes), and the
 // message file (GMD) holding it - every 10 s until found, then once more a minute later
+static uint32_t LD32H(const uint8_t *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
 static void find_text(void) {
     static const char *want;
     static int state = -1;
@@ -1395,6 +1397,17 @@ static void find_text(void) {
         }
     }
     LOG("[findtext] %d place(s)%s\n", hits, hits ? "" : " (again in 10 s)");
+    if (state == 0) {  // (once: the file the game reads for the long swords' names, and its 7th string)
+        const char *hp = romfs_host_path("nativeNX/table/weapon07MsgData_jpn.gmd");
+        FILE *f = hp ? fopen(hp, "rb") : NULL;
+        static uint8_t buf[0x20000];
+        size_t got = f ? fread(buf, 1, sizeof buf - 1, f) : 0;
+        if (f) fclose(f);
+        buf[got] = 0;
+        const char *str = got > 0x28 ? (const char *)buf + 0x28 + LD32H(buf + 0x24) + 1 : "";
+        for (int k = 0; k < 6 && str < (const char *)buf + got; k++) str += strlen(str) + 1;
+        LOG("[findtext] weapon07MsgData_jpn.gmd: %s (%u bytes); its 7th string: %.60s\n", hp ? hp : "(none)", (unsigned)got, str);
+    }
     if (hits) state = state ? 2 : 1;
 }
 
