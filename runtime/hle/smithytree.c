@@ -69,7 +69,7 @@ static bool load(int t) {
 }
 
 // The game's message resource "table\\weaponNNMsgData_jpn": an rGUIMessage, its path at +8, its strings' count at
-// +0x88, their bytes at +0x90, their pointers at +0x94 and the text at +0x98. Looked for in the heap (once a type).
+// +0x88, their bytes at +0x90, the text at +0x94 and their pointers at +0x98. Looked for in the heap (once a type).
 static uint32_t find_names(int t) {
     char want[40];
     snprintf(want, sizeof want, "table\\weapon%02dMsgData_jpn", t);
@@ -80,7 +80,7 @@ static uint32_t find_names(int t) {
             if (LD32(a) != vt || strcmp((const char *)G2H(a + 8), want)) continue;
             uint32_t n = LD32(a + 0x88);
             if (!n || n >= 0x10000) continue;
-            LOG("[smithytree] %s at %08x: %u strings (%u bytes; pointers %08x, text %08x)\n", want, a, n, LD32(a + 0x90),
+            LOG("[smithytree] %s at %08x: %u strings (%u bytes; text %08x, pointers %08x)\n", want, a, n, LD32(a + 0x90),
                 LD32(a + 0x94), LD32(a + 0x98));
             return a;
         }
@@ -94,9 +94,10 @@ static const char *name_of(int t, uint32_t weapon, int which) {
     Type *ty = &g_type[t];
     uint32_t i = weapon * 6 + (uint32_t)which * 2, n = ty->names ? LD32(ty->names + 0x88) : 0;
     if (i >= n) return "?";
-    uint32_t arr = LD32(ty->names + 0x94), data = LD32(ty->names + 0x98), size = LD32(ty->names + 0x90), s = 0;
-    if (kernel_mapped(arr, n * 4) && kernel_mapped(LD32(arr), 1)) s = LD32(arr + 4 * i);  // (an array of the strings)
-    else if (kernel_mapped(data, size)) {  // (else the strings one after another)
+    // (the text at +0x94, the strings one after another; +0x98 the array of their pointers, used when it points into it)
+    uint32_t data = LD32(ty->names + 0x94), arr = LD32(ty->names + 0x98), size = LD32(ty->names + 0x90), s = 0;
+    if (kernel_mapped(arr, n * 4) && LD32(arr) - data < size) s = LD32(arr + 4 * i);
+    else if (kernel_mapped(data, size)) {
         s = data;
         for (uint32_t k2 = 0; k2 < i && s < data + size; k2++) s += (uint32_t)strlen((const char *)G2H(s)) + 1;
     }
@@ -133,7 +134,7 @@ static void dump_branch(int t, uint32_t weapon, int depth, uint8_t *seen) {
 static void dump(int t) {
     Type *ty = &g_type[t];
     {  // (so one run says how the strings are kept, whichever way it is: the array's first entries and what they point at)
-        uint32_t arr = LD32(ty->names + 0x94), data = LD32(ty->names + 0x98);
+        uint32_t arr = LD32(ty->names + 0x98), data = LD32(ty->names + 0x94);
         for (uint32_t i = 0; i < 8 && kernel_mapped(arr + 4 * i, 4); i++) {
             uint32_t p = LD32(arr + 4 * i);
             char raw[40] = "";
