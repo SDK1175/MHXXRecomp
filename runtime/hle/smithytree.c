@@ -132,6 +132,15 @@ static void dump_branch(int t, uint32_t weapon, int depth, uint8_t *seen) {
 
 static void dump(int t) {
     Type *ty = &g_type[t];
+    {  // (so one run says how the strings are kept, whichever way it is: the array's first entries and what they point at)
+        uint32_t arr = LD32(ty->names + 0x94), data = LD32(ty->names + 0x98);
+        for (uint32_t i = 0; i < 8 && kernel_mapped(arr + 4 * i, 4); i++) {
+            uint32_t p = LD32(arr + 4 * i);
+            char raw[40] = "";
+            if (kernel_mapped(p, 16)) for (int k = 0; k < 12; k++) snprintf(raw + 3 * k, 4, "%02x ", LD8(p + (uint32_t)k));
+            LOG("[smithytree] string %u: pointer %08x (text +%x): %s\n", i, p, p - data, raw);
+        }
+    }
     LOG("[smithytree] weapon type %d: %u weapons, %u levels, %u recipes, %u level ups; names %08x (%u strings)\n", t,
         ty->nbase, ty->nlevel, ty->ncreate, ty->nprocess, ty->names, ty->names ? LD32(ty->names + 0x88) : 0);
     uint8_t seen[256] = {0};
