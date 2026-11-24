@@ -91,6 +91,22 @@ static uint32_t imp_xx[NIMPORTS], imp_shown[NIMPORTS];  // MHXX's slot (0: none)
 // end: that page is shown too, the slots in it holding what MHXX's do, and kept in step the same way.
 static const uint32_t GU_GOT[NIMPORTS] = {0x1838494, 0x1838498, 0x183849c, 0x18384a0, 0x18384a4};
 #define GU_GOT_PAGE 0x01838000u
+// GU 1.4.0's PLT stubs for them (add ip, pc / add ip, ip / ldr pc, [ip, #x]!, 12 bytes): shown as GU has them, and a
+// hook on one goes to MHXX's stub for the same import (gucompat_real) - GU CraftWheel checks them and hooks two
+static const uint32_t GU_PLT[NIMPORTS] = {0x13f0af0, 0x13f0afc, 0x13f0b08, 0x13f0b14, 0x13f0b20};
+static uint32_t imp_stub[NIMPORTS];  // MHXX's stub (runtime address; 0: not found)
+
+static uint32_t arm_rot_imm(uint32_t w) { uint32_t r = ((w >> 8) & 15) * 2, v = w & 0xFF; return r ? (v >> r) | (v << (32 - r)) : v; }
+static void plt_find(const Module *m) {  // MHXX's stubs whose slot is one of imp_xx
+    uint32_t lo = m->base + m->text_off, hi = lo + m->text_size;
+    for (uint32_t a = hi > lo + 0x80000 ? hi - 0x80000 : lo; a + 12 <= hi; a += 4) {
+        uint32_t w0 = LD32(a), w1 = LD32(a + 4), w2 = LD32(a + 8);
+        if ((w0 & 0xFFFFF000u) != 0xE28FC000u || (w1 & 0xFFFFF000u) != 0xE28CC000u || (w2 & 0xFFFFF000u) != 0xE5BCF000u) continue;
+        uint32_t got = a + 8 + arm_rot_imm(w0) + arm_rot_imm(w1) + (w2 & 0xFFF);
+        for (uint32_t k = 0; k < NIMPORTS; k++)
+            if (imp_xx[k] == got) imp_stub[k] = a;
+    }
+}
 
 static void imports_show(void) {
     const Module *m = &g_modules[0];
@@ -128,13 +144,20 @@ static void imports_show(void) {
         ST32(GU_SHADOW + rel + 8 * nrel, slot + 4 * k);
         ST32(GU_SHADOW + rel + 8 * nrel + 4, (nrel + 1) << 8 | 22);
         imp_shown[k] = LD32(imp_xx[k]);
+        {  // GU's stub words: slot GU_GOT[k] from GU_PLT[k] (add ip, pc, #0x400000; add ip, ip, #0x47000; ldr pc, [ip, #x]!)
+            uint32_t x = GU_GOT[k] - (GU_PLT[k] + 8 + 0x400000 + 0x47000);
+            ST32(GU_SHADOW + GU_PLT[k], 0xE28FC604u), ST32(GU_SHADOW + GU_PLT[k] + 4, 0xE28CCA47u);
+            ST32(GU_SHADOW + GU_PLT[k] + 8, 0xE5BCF000u | (x & 0xFFF));
+        }
         ST32(GU_SHADOW + slot + 4 * k, imp_shown[k]);
         ST32(GU_SHADOW + GU_GOT[k], imp_shown[k]);
         nrel++;
     }
     tags[3][1] = nrel * 8;
     for (uint32_t i = 0; i < sizeof tags / sizeof tags[0]; i++) ST32(GU_SHADOW + dyn + 8 * i, tags[i][0]), ST32(GU_SHADOW + dyn + 8 * i + 4, tags[i][1]);
-    if (found) LOG("[forge] plugins for MHGU: %d of the game's controller imports shown where a plugin looks for them\n", found);
+    plt_find(m);
+    if (found) LOG("[forge] plugins for MHGU: %d of the game's controller imports shown where a plugin looks for them "
+                   "(stubs: %x %x %x %x %x)\n", found, imp_stub[0], imp_stub[1], imp_stub[2], imp_stub[3], imp_stub[4]);
 }
 
 void gucompat_imports_sync(const char *plugin) {
@@ -209,6 +232,8 @@ bool gucompat_shown_as_gu(uint32_t a) {
 
 uint32_t gucompat_real(uint32_t a) {
     uint32_t gu = a - GU_SHADOW;
+    for (uint32_t k = 0; state > 0 && k < NIMPORTS; k++)  // (a PLT stub of GU's: MHXX's for the same import)
+        if (imp_stub[k] && gu - GU_PLT[k] < 12) return imp_stub[k] + (gu - GU_PLT[k]);
     const Range *r = state > 0 ? range_of_gu(gu) : NULL;
     if (r) return MAIN_BASE + r->xx + (gu - r->gu);
     if (__atomic_add_fetch(&unknown, 1, __ATOMIC_RELAXED) <= 16)
