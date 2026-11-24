@@ -1380,7 +1380,17 @@ static void find_text(void) {
             uint32_t at = (uint32_t)page + i, gmd = 0;
             for (uint32_t back = at & ~3u; back + 0x100000 > at && back >= 0x1000 && kernel_mapped(back, 4); back -= 4)
                 if (!memcmp(G2H(back), "GMD", 4)) { gmd = back; break; }
-            LOG("[findtext] \"%s\" at %08x; GMD %s (%08x)\n", want, at, gmd ? (const char *)G2H(gmd + 0x28) : "none within 1 MB", gmd);
+            if (!gmd)  // (further back: 16 MB)
+                for (uint32_t back = (at & ~3u) - 0x100000; back + 0x1000000 > at && back >= 0x1000 && kernel_mapped(back, 4); back -= 4)
+                    if (!memcmp(G2H(back), "GMD", 4)) { gmd = back; break; }
+            LOG("[findtext] \"%s\" at %08x; GMD %s (%08x)\n", want, at, gmd ? (const char *)G2H(gmd + 0x28) : "none within 16 MB", gmd);
+            if (!hits && kernel_mapped(at - 0x200, 0x400)) {  // (the first: what's around it, as words)
+                char line[1200];
+                int k = 0;
+                for (uint32_t q = at - 0x200; q < at + 0x200 && k < (int)sizeof line - 16; q += 4)
+                    k += snprintf(line + k, sizeof line - k, "%08x%s", LD32(q), (q & 0x1f) == 0x1c ? "\n" : " ");
+                LOG("[findtext] around %08x (from %08x):\n%s\n", at, at - 0x200, line);
+            }
             hits++, i += n;
         }
     }
