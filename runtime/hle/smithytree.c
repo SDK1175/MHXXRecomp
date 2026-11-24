@@ -95,7 +95,7 @@ static const char *name_of(int t, uint32_t weapon, int which) {
     uint32_t i = weapon * 6 + (uint32_t)which * 2, n = ty->names ? LD32(ty->names + 0x88) : 0;
     if (i >= n) return "?";
     uint32_t arr = LD32(ty->names + 0x94), data = LD32(ty->names + 0x98), size = LD32(ty->names + 0x90), s = 0;
-    if (kernel_mapped(arr, n * 4) && LD32(arr) - data < size) s = LD32(arr + 4 * i);  // (an array of the strings)
+    if (kernel_mapped(arr, n * 4) && kernel_mapped(LD32(arr), 1)) s = LD32(arr + 4 * i);  // (an array of the strings)
     else if (kernel_mapped(data, size)) {  // (else the strings one after another)
         s = data;
         for (uint32_t k2 = 0; k2 < i && s < data + size; k2++) s += (uint32_t)strlen((const char *)G2H(s)) + 1;
