@@ -78,10 +78,11 @@ static uint32_t find_names(int t) {
         if (!kernel_mapped(page, 0x10000)) continue;
         for (uint32_t a = (uint32_t)page; a < page + 0x10000 - 0xa8; a += 4) {
             if (LD32(a) != vt || strcmp((const char *)G2H(a + 8), want)) continue;
-            uint32_t n = LD32(a + 0x94);
-            LOG("[smithytree] %s at %08x: %u strings; +0x98.. %08x %08x %08x %08x\n", want, a, n, LD32(a + 0x98),
-                LD32(a + 0x9c), LD32(a + 0xa0), LD32(a + 0xa4));
-            if (n && n < 0x10000) return a;
+            uint32_t n = LD32(a + 0x84);
+            if (!n || n >= 0x10000) continue;
+            LOG("[smithytree] %s at %08x: %u strings (%u bytes; pointers %08x, text %08x)\n", want, a, n, LD32(a + 0x8c),
+                LD32(a + 0x90), LD32(a + 0x94));
+            return a;
         }
     }
     return 0;
@@ -91,9 +92,9 @@ static const char *name_of(int t, uint32_t weapon, int which) {
     static char out[4][192];
     static int k;
     Type *ty = &g_type[t];
-    uint32_t i = weapon * 6 + (uint32_t)which * 2, n = ty->names ? LD32(ty->names + 0x94) : 0;
+    uint32_t i = weapon * 6 + (uint32_t)which * 2, n = ty->names ? LD32(ty->names + 0x84) : 0;
     if (i >= n) return "?";
-    uint32_t arr = LD32(ty->names + 0xa0), data = LD32(ty->names + 0xa4), size = LD32(ty->names + 0x9c), s = 0;
+    uint32_t arr = LD32(ty->names + 0x90), data = LD32(ty->names + 0x94), size = LD32(ty->names + 0x8c), s = 0;
     if (kernel_mapped(arr, n * 4) && LD32(arr) - data < size) s = LD32(arr + 4 * i);  // (an array of the strings)
     else if (kernel_mapped(data, size)) {  // (else the strings one after another)
         s = data;
@@ -132,7 +133,7 @@ static void dump_branch(int t, uint32_t weapon, int depth, uint8_t *seen) {
 static void dump(int t) {
     Type *ty = &g_type[t];
     LOG("[smithytree] weapon type %d: %u weapons, %u levels, %u recipes, %u level ups; names %08x (%u strings)\n", t,
-        ty->nbase, ty->nlevel, ty->ncreate, ty->nprocess, ty->names, ty->names ? LD32(ty->names + 0x94) : 0);
+        ty->nbase, ty->nlevel, ty->ncreate, ty->nprocess, ty->names, ty->names ? LD32(ty->names + 0x84) : 0);
     uint8_t seen[256] = {0};
     for (uint32_t i = 0; i < ty->ncreate; i++) {  // (the roots: made from materials alone)
         const uint8_t *e = ty->create + 8 + 38 * i;
