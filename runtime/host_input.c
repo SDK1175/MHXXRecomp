@@ -629,8 +629,17 @@ static void mods_event(const SDL_Event *e) {
 uint32_t host_input_mods_pressed(void) { return (uint32_t)SDL_SetAtomicInt(&mods_pressed, 0); }
 int host_input_mods_key(void) { return SDL_SetAtomicInt(&mods_key, 0); }
 
+// The mouse's movement for mods (forge_input_getMouseMove): all of it, captured or not, window pixels; last_dev: the
+// device a button was last pressed on (host_input_last_device)
+static float mod_dx, mod_dy, mod_last_dx, mod_last_dy;
+static int last_dev = -1;
+void host_input_mouse_move(float *dx, float *dy) { *dx = mod_last_dx, *dy = mod_last_dy; }
+int host_input_last_device(void) { return last_dev >= 0 ? last_dev : npads ? 0 : 1; }
+
 void host_input_event(const SDL_Event *e) {
-    if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) pad_pressed(e->gbutton.which);
+    if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) pad_pressed(e->gbutton.which), last_dev = 0;
+    if (e->type == SDL_EVENT_KEY_DOWN || e->type == SDL_EVENT_MOUSE_BUTTON_DOWN) last_dev = 1;
+    if (e->type == SDL_EVENT_MOUSE_MOTION) mod_dx += e->motion.xrel, mod_dy += e->motion.yrel;
     mods_event(e);  // (every event, also those Forge's menu or a plugin's window takes)
     if (overlay_event(e)) return;  // (Forge's menu open: keyboard and mouse are its)
     if (chat_mouse(e)) return;  // (typing a line of chat: the mouse drags its box)
@@ -899,6 +908,7 @@ static bool pad_capture_update(void) {
 }
 
 void host_input_update(void) {
+    mod_last_dx = mod_dx, mod_last_dy = mod_dy, mod_dx = mod_dy = 0;
     if (nscript < 0) script_parse();
     rumble_update();
     { void motion_update(SDL_Gamepad *); motion_update(pad); }  // (the gyro: runtime/motion.c)

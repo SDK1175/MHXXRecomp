@@ -1036,6 +1036,15 @@ HLE_FUNC("forge_input_isReleased", f_in_released) { RET(ARG(0) < 64 && ((~in_now
 HLE_FUNC("forge_input_isConnected", f_in_connected) { RET(in_connected); }
 // (bool free): a plugin's own window takes the mouse pointer (true) or gives it back: not captured for the camera
 // meanwhile, its clicks the window's (host_input.c)
+// forge_input_getMouseMove(float *dx, float *dy): how far the mouse moved since the last frame (window pixels, y down),
+// captured or not; 0 while Forge's menu is open. (The port's own call, as upstream's.)
+HLE_FUNC("forge_input_getMouseMove", f_in_mouse_move) {
+    float dx = 0, dy = 0;
+    void host_input_mouse_move(float *dx, float *dy);
+    if (!overlay_menu_open()) host_input_mouse_move(&dx, &dy);
+    if (ARG(0)) STF(ARG(0), dx);
+    if (ARG(1)) STF(ARG(1), dy);
+}
 HLE_FUNC("forge_input_setMouseFree", f_in_mouse_free) { host_input_mouse_free(ARG(0) & 1); }
 HLE_FUNC("forge_input_getTouch", f_in_touch) {  // (float *x, float *y): the first finger, in screen pixels (1280x720)
     if (!touch_down) { RET(0); return; }
