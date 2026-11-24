@@ -1811,6 +1811,9 @@ static const struct { uint32_t gu, word; } GU2XX_WORD[] = {
     // lr} here): its first word as GU has it, for IAI SLASH HELM BREAKER's check of the code it cleans up after
     // (the only one of its 19 word checks MHXX words differently).
     {0xbc8414, 0xe92d4df0},
+    // GU 0x66f8e8 (MHXX 0x665b2c) is a bl, so its offset differs: GU's word, for GU CraftWheel's check of the craft
+    // functions (the only one of its 9 MHXX words differently)
+    {0x66f8e8, 0xebfb7d6a},
 };
 // Data (globals, vtables, constants, the GOT) of GU in MHXX: {GU first, GU last, MHXX first} of runs of addresses
 // that moved by the same distance, sorted. From what the matched code refers to at the same place in both games
