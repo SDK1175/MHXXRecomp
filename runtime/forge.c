@@ -1397,6 +1397,23 @@ static void find_text(void) {
         }
     }
     LOG("[findtext] %d place(s)%s\n", hits, hits ? "" : " (again in 10 s)");
+    if (state == 0) {  // (once: where the game keeps "weapon07MsgData" (a resource's path), and the words around it)
+        int shown = 0;
+        for (uint64_t page = 0x1000; page < 0x100000000ull && shown < 8; page += 0x10000) {
+            if (!kernel_mapped(page, 0x10000)) continue;
+            const uint8_t *b = (const uint8_t *)G2H((uint32_t)page);
+            for (uint32_t i = 0; i + 16 <= 0x10000 && shown < 8; i++) {
+                if (b[i] != 'w' || memcmp(b + i, "weapon07MsgData", 15)) continue;
+                uint32_t at = (uint32_t)page + i, from = (at & ~3u) - 0x40;
+                if (!kernel_mapped(from, 0x100)) continue;
+                char line[800];
+                int k = 0;
+                for (uint32_t q = from; q < from + 0x100; q += 4) k += snprintf(line + k, sizeof line - k, "%08x ", LD32(q));
+                LOG("[findtext] \"%s\" at %08x; words from %08x: %s\n", (const char *)b + i, at, from, line);
+                shown++, i += 15;
+            }
+        }
+    }
     if (state == 0) {  // (once: the file the game reads for the long swords' names, and its 7th string)
         const char *hp = romfs_host_path("nativeNX/table/weapon07MsgData_jpn.gmd");
         FILE *f = hp ? fopen(hp, "rb") : NULL;
