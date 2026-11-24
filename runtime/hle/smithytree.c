@@ -68,8 +68,8 @@ static bool load(int t) {
     return ty->base && ty->level && ty->create && ty->process;
 }
 
-// The game's message resource "table\weaponNNMsgData_jpn": an rGUIMessage, its path at +8, its strings' count at +0x94
-// and their pointers at +0xa0. Looked for in the heap (a second or so: once a type).
+// The game's message resource "table\\weaponNNMsgData_jpn": an rGUIMessage, its path at +8, its strings' count at
+// +0x84, their bytes at +0x8c, their pointers at +0x90 and the text at +0x94. Looked for in the heap (once a type).
 static uint32_t find_names(int t) {
     char want[40];
     snprintf(want, sizeof want, "table\\weapon%02dMsgData_jpn", t);
