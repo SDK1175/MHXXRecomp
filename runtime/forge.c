@@ -1115,6 +1115,10 @@ HLE_FUNC("mhxx_resource_find", f_resource_find) {
 // at once - a B that leaves the screen is the game's Back too). The plugin still reads it all (forge_input_*); the game
 // sees nothing pressed meanwhile, and if the capture just runs out, a button held then only once let go.
 HLE_FUNC("mhxx_input_capture", f_input_capture) { input_capture(ARG(0)); }
+// mhxx_input_press(uint32_t buttons, uint32_t ms): while a plugin's screen has the controller, the game sees these
+// buttons (NpadButton bits: A 1, B 2, ... Up 1 << 13) held for ms, then let go: one press of the game's own, made by the
+// screen (its Yes doing the game's A in the game's confirmation, the game's own crafting)
+HLE_FUNC("mhxx_input_press", f_input_press) { input_press(ARG(0), ARG(1)); }
 HLE_FUNC("forge_input_getStickL", f_in_stick_l) { stick(c, 0); }
 HLE_FUNC("forge_input_getStickR", f_in_stick_r) { stick(c, 2); }
 HLE_FUNC("forge_input_isKeyDown", f_key_down) { RET(key(keys_now, ARG(0))); }

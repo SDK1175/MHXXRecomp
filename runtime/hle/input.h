@@ -18,3 +18,4 @@ uint32_t input_rumble(void);  // low << 16 | high
 // A plugin's own screen takes the controller from the game for ms more (0: gives it back now): mhxx_input_capture.
 void input_capture(uint32_t ms);
 bool input_captured(void);
+void input_press(uint64_t bits, uint32_t ms);  // (mhxx_input_press: while captured, the game sees these held for ms)

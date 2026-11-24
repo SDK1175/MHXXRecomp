@@ -33,6 +33,10 @@ void input_capture(uint32_t ms) {
     if (!ms) swallow = 0;  // (given back on purpose: the button that did it is the game's too - B the game's Back)
 }
 bool input_captured(void) { return capture_until_ns && plat_now_ns() < capture_until_ns; }
+// While it has the controller, the plugin's screen can press the game's buttons itself (mhxx_input_press): held for
+// ms, then let go - the game sees one press (the screen's Yes doing the game's own A in its confirmation)
+static volatile uint64_t press_bits, press_until_ns;
+void input_press(uint64_t bits, uint32_t ms) { press_bits = bits, press_until_ns = plat_now_ns() + (uint64_t)ms * 1000000ull; }
 
 void input_get(uint64_t *buttons, int32_t sticks[4]) {
     *buttons = g_buttons;
@@ -73,7 +77,10 @@ static void fill_state(Cpu *c) {
     int32_t st[4];
     uint64_t b = input_npad_state(st);
     int32_t lx = st[0], ly = st[1], rx = st[2], ry = st[3];
-    if (input_captured()) swallow = b, b = 0, lx = ly = rx = ry = 0;  // (a plugin's screen has it)
+    if (input_captured()) {  // (a plugin's screen has it: the game sees only what the screen presses)
+        swallow = b, lx = ly = rx = ry = 0;
+        b = plat_now_ns() < press_until_ns ? press_bits : 0;
+    }
     else swallow &= b, b &= ~swallow;
     memcpy(s + 8, &b, 8);
     memcpy(s + 16, &lx, 4);
