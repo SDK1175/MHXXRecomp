@@ -1,5 +1,6 @@
 // The smithy's weapon trees (work in progress): the game's own tables, read where the game reads them, and the names
-// the game shows. Step 1: the tables and the names, checked by a dump to the log (MHXX_SMITHY_DUMP=<weapon type 0-14>).
+// the game shows; a panel over the smithy (runtime/smithytree_ui.cpp) while a weapon list is open. MHXX_SMITHY_DUMP=
+// <weapon type 0-14>: a type's whole tree in the log.
 //
 // The tables (nativeNX/table, loose files of the game; a mod's copy if one replaces them):
 //   weaponNNBaseData.wNNd   8 bytes of header (version, count), then 33 bytes a weapon: +0 its number (u32)
@@ -20,6 +21,7 @@
 #include "platform.h"
 #include "romfs.h"
 #include "rt.h"
+#include "smithytree.h"
 
 #define TYPES 15
 #define GMD_VTABLE 0x17b6b74u  // rGUIMessage's (main+): the resources the names are looked for in
@@ -175,4 +177,85 @@ void smithytree_frame(void) {
     if (!(g_type[t].names = find_names(t))) return;
     dump(t);
     t = -1;
+}
+
+// ------------------------------------------------------------------ the smithy screen
+// Its object's update, every frame the smithy is open (GU 0x6f1ae8, found by MHGU Utility's smithy preview): +4 / +5
+// the screen (7 / 25: the upgrade list), +0x5c the category (a weapon type + 7), +0x1f71 the cursor, +0x1f78 the
+// rows, from +0x28d4 0x30 bytes a row: +0 flags (0x210: hidden), +2 the weapon, +9 its level - 1.
+#define FN_SMITHY_UPDATE 0x6e67d8u
+
+static struct {
+    uint64_t at;  // when last seen (ns); 0 never
+    uint32_t obj;
+    uint8_t screen, sub, cursor;
+    uint16_t category, rows, weapon, level;
+} g_seen;
+
+static void smithy_update(Cpu *c) {
+    uint32_t fn = MAIN_BASE + FN_SMITHY_UPDATE, obj = c->r[0];
+    fnhook_call_original(c, fn);
+    if (obj < 0x08000000 || (obj & 3) || !kernel_mapped(obj, 0x2a00)) return;
+    uint8_t screen = LD8(obj + 4), sub = LD8(obj + 5), cursor = LD8(obj + 0x1f71);
+    uint16_t category = LD16(obj + 0x5c), rows = LD16(obj + 0x1f78), weapon = 0, level = 0;
+    if (cursor < rows && rows <= 64) {
+        uint32_t row = obj + 0x28d4 + cursor * 0x30u;
+        if (!(LD16(row) & 0x210)) weapon = LD16(row + 2), level = (uint16_t)(LD8(row + 9) + 1);
+    }
+    if (screen != g_seen.screen || sub != g_seen.sub || category != g_seen.category || weapon != g_seen.weapon ||
+        level != g_seen.level)
+        LOG("[smithytree] smithy: screen %u/%u, category %u, row %u of %u: weapon %u Lv%u\n", screen, sub, category,
+            cursor, rows, weapon, level);
+    g_seen.at = plat_now_ns(), g_seen.obj = obj, g_seen.screen = screen, g_seen.sub = sub, g_seen.cursor = cursor;
+    g_seen.category = category, g_seen.rows = rows, g_seen.weapon = weapon, g_seen.level = level;
+}
+
+void smithytree_init(void) {
+    fnhook_set(MAIN_BASE + FN_SMITHY_UPDATE, hle_register("smithytree:update", smithy_update));
+}
+
+// What the panel shows: the weapon under the smithy's cursor, its levels by name, where it is made from, what is made
+// from it. False: no weapon list open (the smithy not seen in the last 0.2 s), or its data not there.
+bool smithytree_view(SmithyView *v) {
+    memset(v, 0, sizeof *v);
+    if (!g_seen.at || plat_now_ns() - g_seen.at > 200000000ull) return false;
+    int cat = g_seen.category;
+    if (cat < 7 || cat - 7 >= TYPES || cat - 7 == 5 || !g_seen.weapon) return false;
+    int t = cat - 7;
+    Type *ty = &g_type[t];
+    if (!load(t)) return false;
+    if (!ty->names) {
+        static uint64_t tried[TYPES];
+        uint64_t now = plat_now_ns();
+        if (now - tried[t] < 2000000000ull) return false;  // (a heap search: not every frame)
+        tried[t] = now;
+        if (!(ty->names = find_names(t))) return false;
+    }
+    uint32_t w = g_seen.weapon;
+    v->type = t, v->weapon = w, v->level = g_seen.level, v->screen = g_seen.screen, v->sub = g_seen.sub;
+    for (uint32_t i = 0; i < ty->nlevel; i++) {  // (its levels, a tier for each of its names)
+        const uint8_t *e = ty->level + 8 + 15 * i;
+        if (e[4] != w || e[14] > 2) continue;
+        SmithyTier *tr = &v->tier[e[14]];
+        if (!tr->top || e[5] < tr->low) tr->low = e[5];
+        if (e[5] > tr->top) tr->top = e[5], tr->attack = (int)rd16(e + 8);
+        if (e[14] + 1 > v->ntiers) v->ntiers = e[14] + 1;
+    }
+    for (int k = 0; k < v->ntiers; k++) snprintf(v->tier[k].name, sizeof v->tier[k].name, "%s", name_of(t, w, k));
+    for (uint32_t i = 0; i < ty->ncreate; i++) {  // (made from; made from it)
+        const uint8_t *e = ty->create + 8 + 38 * i;
+        uint32_t made = rd16(e + 2), from = rd16(e + 4);
+        if (made == w && from && from != w && !v->parent) {
+            v->parent = from;
+            snprintf(v->parent_name, sizeof v->parent_name, "%s", name_of(t, from, 0));
+        }
+        if (from == w && made != w && v->nchildren < SMITHY_CHILDREN) {
+            SmithyChild *ch = &v->child[v->nchildren++];
+            int maxlv, attack;
+            level_range(t, made, &maxlv, &attack);
+            ch->weapon = made, ch->top = maxlv, ch->attack = attack;
+            snprintf(ch->name, sizeof ch->name, "%s", name_of(t, made, 0));
+        }
+    }
+    return true;
 }

@@ -82,6 +82,7 @@ static void boot(const char *root) {
     villagehub_init();  // (Village quests at the Hub / Pub counter: runtime/hle/villagehub.c)
     title_exit_init();  // (B on the title's Main Menu asks to quit: runtime/hle/title_exit.c)
     questskip_init();  // (R3 after a quest's clear returns at once: runtime/hle/questskip.c)
+    smithytree_init();  // (the weapon tree over the smithy: runtime/hle/smithytree.c)
     urgentcredit_init();  // (Urgent quests count for all who clear them: runtime/hle/urgentcredit.c)
     mashrate_init();  // (mashing out of a stun at high frame rates: runtime/hle/mashrate.c)
     fastload_init();  // (the waits between areas, alone: runtime/hle/fastload.c)
