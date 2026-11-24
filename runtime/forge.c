@@ -1085,6 +1085,31 @@ uint32_t hangulfont_encode(const char *in, char *out, uint32_t size);  // (nvn/v
 HLE_FUNC("mhxx_hangul_encode", f_hangul_encode) {
     RET(ARG(0) && ARG(1) && ARG(2) ? hangulfont_encode(gstr(ARG(0)), (char *)G2H(ARG(1)), ARG(2)) : 0);
 }
+// mhxx_hangul_decode(const char *text, char *out, uint32_t size): the other way - the game's text with the Korean
+// patch's codes turned back into Hangul (UTF-8), for a plugin drawing the game's own Korean text with its own font
+// (ImGui); the bytes written (NUL after them), 0: no Korean patch font, or no room.
+uint32_t hangulfont_decode(const char *in, char *out, uint32_t size);  // (nvn/vulkan/hangulfont.c)
+HLE_FUNC("mhxx_hangul_decode", f_hangul_decode) {
+    RET(ARG(0) && ARG(1) && ARG(2) ? hangulfont_decode(gstr(ARG(0)), (char *)G2H(ARG(1)), ARG(2)) : 0);
+}
+// mhxx_resource_find(const char *path): a resource the game has loaded, by its path as the game names it
+// ("table\\weapon07MsgData_jpn"): the object (its path at +8, a vtable in the game's code at +0), 0: not loaded. A
+// search of the heap at the host's speed (a plugin's own would take minutes): look once and keep the address.
+HLE_FUNC("mhxx_resource_find", f_resource_find) {
+    const char *want = ARG(0) ? gstr(ARG(0)) : "";
+    size_t n = strlen(want);
+    uint32_t found = 0;
+    for (uint64_t page = 0x08000000; n && n < 64 && page < 0xa8000000ull && !found; page += 0x10000) {
+        if (!kernel_mapped(page, 0x10000)) continue;
+        for (uint32_t a = (uint32_t)page; a + 0x48 <= page + 0x10000; a += 4) {
+            uint32_t vt = LD32(a);
+            if (vt - MAIN_BASE >= 0x2400000u || memcmp(G2H(a + 8), want, n + 1)) continue;
+            found = a;
+            break;
+        }
+    }
+    RET(found);
+}
 HLE_FUNC("forge_input_getStickL", f_in_stick_l) { stick(c, 0); }
 HLE_FUNC("forge_input_getStickR", f_in_stick_r) { stick(c, 2); }
 HLE_FUNC("forge_input_isKeyDown", f_key_down) { RET(key(keys_now, ARG(0))); }
@@ -1443,7 +1468,6 @@ static void frame_update(Cpu *c) {
     }
     static int padtrace = -1;  // (debug) MHXX_PAD_TRACE=1: the game's pad words (as plugins read them) when they change
     find_text();
-    { void smithytree_frame(void); smithytree_frame(); }
     if (padtrace < 0) padtrace = getenv("MHXX_PAD_TRACE") != NULL;
     if (padtrace) {
         static uint32_t last_held, last_slot;

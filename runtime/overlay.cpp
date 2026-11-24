@@ -32,8 +32,6 @@ static void ImGui_ImplVulkan_UpdateTexture(ImTextureData *) {}
 #include "forge.h"
 #include "menu_confirm.h"
 #include "overlay.h"
-#include "hle/smithytree.h"
-extern "C" void smithytree_draw(const SmithyView *v, float scale);
 #include "hle/chat.h"
 #include "settings_panel.h"
 #include "settings_locale.h"
@@ -754,9 +752,7 @@ void overlay_frame(void *cpu) {
     char update_version[64];
     float update_age = 0;
     bool update = update_notice(now, update_version, sizeof update_version, &update_age);
-    SmithyView smithy_view;
-    bool smithy = smithytree_view(&smithy_view);  // (the weapon tree over the smithy: runtime/hle/smithytree.c)
-    if (!open && !free_render && !notice && !chat && !fps && !voice && !update && !smithy) {  // (nothing to draw)
+    if (!open && !free_render && !notice && !chat && !fps && !voice && !update) {  // (nothing to draw)
         std::lock_guard<std::mutex> l(g_snap_lock);
         if (g_snap.Valid) snap_clear();
         apply_input(io);  // (keep the queue short)
@@ -824,7 +820,6 @@ void overlay_frame(void *cpu) {
     if (fps) draw_fps(now);
     if (voice) draw_voice(scale);
     if (update) draw_update(update_age, update_version, scale);
-    if (smithy) smithytree_draw(&smithy_view, scale);
     ImGui::Render();
 
     ImDrawData *dd = ImGui::GetDrawData();

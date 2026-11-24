@@ -349,8 +349,8 @@ static uint32_t encode(const char *in, char *out, uint32_t size, bool typed) {
     return n;
 }
 
-// The patch's codes back to Hangul (UTF-8), for the game's own Korean text drawn by the port (hle/smithytree.c: the
-// weapon names): a code of the patch's syllables becomes its syllable, the rest stays. 0: no room, or not the patch.
+// The patch's codes back to Hangul (UTF-8), for the game's own Korean text a plugin draws with its own font (forge.c
+// mhxx_hangul_decode): a code of the patch's syllables becomes its syllable, the rest stays. 0: no room, or not the patch.
 uint32_t hangulfont_decode(const char *in, char *out, uint32_t size) {
     if (!in || !out || !size || !enc_ready()) return 0;
     static struct { uint32_t code; uint16_t syl; } *rev;
