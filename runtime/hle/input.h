@@ -15,3 +15,6 @@ extern volatile uint64_t g_a_pressed_ns;  // when A was last pressed (plat_now_n
 // 0..65535 each, for the window loop to send to the controller (runtime/host_input.c).
 void input_set_rumble(uint16_t low, uint16_t high);
 uint32_t input_rumble(void);  // low << 16 | high
+// A plugin's own screen takes the controller from the game for ms more (0: gives it back now): mhxx_input_capture.
+void input_capture(uint32_t ms);
+bool input_captured(void);

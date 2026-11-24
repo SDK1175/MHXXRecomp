@@ -23,6 +23,14 @@ void input_set(uint64_t buttons, int32_t lx, int32_t ly, int32_t rx, int32_t ry)
     g_sticks[0] = lx, g_sticks[1] = ly, g_sticks[2] = rx, g_sticks[3] = ry;
 }
 
+// A plugin's own screen takes the controller (mhxx_input_capture): until then the game sees it untouched; afterwards,
+// a button still held from the screen stays hidden from the game until it is let go (B that closed the screen is not
+// also the game's B).
+static volatile uint64_t capture_until_ns;
+static uint64_t swallow;
+void input_capture(uint32_t ms) { capture_until_ns = ms ? plat_now_ns() + (uint64_t)ms * 1000000ull : 0; }
+bool input_captured(void) { return capture_until_ns && plat_now_ns() < capture_until_ns; }
+
 void input_get(uint64_t *buttons, int32_t sticks[4]) {
     *buttons = g_buttons;
     for (int i = 0; i < 4; i++) sticks[i] = g_sticks[i];
@@ -62,6 +70,8 @@ static void fill_state(Cpu *c) {
     int32_t st[4];
     uint64_t b = input_npad_state(st);
     int32_t lx = st[0], ly = st[1], rx = st[2], ry = st[3];
+    if (input_captured()) swallow = b, b = 0, lx = ly = rx = ry = 0;  // (a plugin's screen has it)
+    else swallow &= b, b &= ~swallow;
     memcpy(s + 8, &b, 8);
     memcpy(s + 16, &lx, 4);
     memcpy(s + 20, &ly, 4);

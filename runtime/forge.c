@@ -1110,6 +1110,10 @@ HLE_FUNC("mhxx_resource_find", f_resource_find) {
     }
     RET(found);
 }
+// mhxx_input_capture(uint32_t ms): a plugin's own screen takes the controller from the game for that long (call it
+// every frame the screen is up, with a little to spare, e.g. 150; 0: give it back now). The plugin still reads it all
+// (forge_input_*); the game sees nothing pressed, and a button held when it gets it back only once let go.
+HLE_FUNC("mhxx_input_capture", f_input_capture) { input_capture(ARG(0)); }
 HLE_FUNC("forge_input_getStickL", f_in_stick_l) { stick(c, 0); }
 HLE_FUNC("forge_input_getStickR", f_in_stick_r) { stick(c, 2); }
 HLE_FUNC("forge_input_isKeyDown", f_key_down) { RET(key(keys_now, ARG(0))); }
