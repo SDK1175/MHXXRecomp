@@ -674,6 +674,17 @@ bool gumods_build(const char *mod_romfs, const char *game_romfs, const char *(*c
         LOG("[gumods] %s: its GU files were put into XX's on an earlier start (%s)\n", mod_romfs, out);
         goto free_list;
     }
+    bool any = false;  // (only GU archives and loose textures are ever put in: a mod with neither - a .gui, a .gmd - needs
+                       // no list of XX's archives, a minute's read of 12000 on a first start)
+    for (int i = 0; i < fl.n && !any; i++) {
+        size_t rl = strlen(fl.rel[i]);
+        any = rl > 4 && (!strcmp(fl.rel[i] + rl - 4, ".arc") || !strcmp(fl.rel[i] + rl - 4, ".tex"));
+    }
+    if (!any) {
+        LOG("[gumods] %s: %d GU file(s), none a texture or an archive (a GU menu or text could break XX's): left out\n",
+            mod_romfs, fl.n);
+        goto free_list;
+    }
     if (!g_xloaded) x_load(game_romfs);
     char donetmp[MAX_PATH_LEN];
     snprintf(donetmp, sizeof donetmp, "%s.tmp", done);
