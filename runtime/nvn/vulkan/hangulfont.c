@@ -349,6 +349,52 @@ static uint32_t encode(const char *in, char *out, uint32_t size, bool typed) {
     return n;
 }
 
+// The patch's codes back to Hangul (UTF-8), for the game's own Korean text drawn by the port (hle/smithytree.c: the
+// weapon names): a code of the patch's syllables becomes its syllable, the rest stays. 0: no room, or not the patch.
+uint32_t hangulfont_decode(const char *in, char *out, uint32_t size) {
+    if (!in || !out || !size || !enc_ready()) return 0;
+    static struct { uint32_t code; uint16_t syl; } *rev;
+    static int nrev;
+    if (!rev) {  // (sorted by code, once)
+        void *r = malloc(sizeof *rev * SYLLABLES);
+        if (!r) return 0;
+        rev = r;
+        for (int i = 0; i < SYLLABLES; i++) rev[i].code = enc_codes[i], rev[i].syl = ksx1001_hangul[i];
+        for (int i = 1; i < SYLLABLES; i++)  // (insertion sort: 2350 once)
+            for (int k = i; k > 0 && rev[k - 1].code > rev[k].code; k--) {
+                uint32_t c = rev[k].code; uint16_t y = rev[k].syl;
+                rev[k] = rev[k - 1], rev[k - 1].code = c, rev[k - 1].syl = y;
+            }
+        nrev = SYLLABLES;
+    }
+    uint32_t n = 0;
+    for (const unsigned char *p = (const unsigned char *)in; *p;) {
+        uint32_t c = *p, len = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : (c >> 3) == 30 ? 4 : 1;
+        const unsigned char *start = p;
+        for (uint32_t k = 1; k < len; k++)
+            if ((p[k] & 0xc0) != 0x80) len = 1;
+        if (len == 3) c = (c & 0x0f) << 12 | (p[1] & 0x3f) << 6 | (p[2] & 0x3f);
+        p += len;
+        int lo = 0, hi = nrev - 1, at = -1;
+        while (len == 3 && lo <= hi) {
+            int mid = (lo + hi) / 2;
+            if (rev[mid].code == c) { at = mid; break; }
+            if (rev[mid].code < c) lo = mid + 1;
+            else hi = mid - 1;
+        }
+        char b[4];
+        uint32_t k = len;
+        if (at >= 0) {
+            uint32_t h = rev[at].syl;
+            b[0] = (char)(0xe0 | h >> 12), b[1] = (char)(0x80 | ((h >> 6) & 0x3f)), b[2] = (char)(0x80 | (h & 0x3f)), k = 3;
+        } else memcpy(b, start, len);
+        if (n + k + 1 > size) return 0;
+        memcpy(out + n, b, k), n += k;
+    }
+    out[n] = 0;
+    return n;
+}
+
 // Hangul for plugins (forge.c mhxx_hangul_encode): 0 when a syllable has no glyph or the patch isn't there.
 uint32_t hangulfont_encode(const char *in, char *out, uint32_t size) { return encode(in, out, size, false); }
 

@@ -1443,6 +1443,7 @@ static void frame_update(Cpu *c) {
     }
     static int padtrace = -1;  // (debug) MHXX_PAD_TRACE=1: the game's pad words (as plugins read them) when they change
     find_text();
+    { void smithytree_frame(void); smithytree_frame(); }
     if (padtrace < 0) padtrace = getenv("MHXX_PAD_TRACE") != NULL;
     if (padtrace) {
         static uint32_t last_held, last_slot;
