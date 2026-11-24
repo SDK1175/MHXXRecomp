@@ -35,6 +35,7 @@
 #include "interp.h"
 #include "mods.h"
 #include "overlay.h"
+#include "platform.h"
 
 #define FORGE_MAJOR 1
 #define FORGE_MINOR 5
@@ -1354,6 +1355,39 @@ static void iai_trace(Cpu *c) {
         }
 }
 
+// (debug) MHXX_FIND_TEXT="<Korean text>": where in the game's memory that text is (in the Korean patch's codes), and the
+// message file (GMD) holding it - every 10 s until found, then once more a minute later
+static void find_text(void) {
+    static const char *want;
+    static int state = -1;
+    static double next;
+    if (state < 0) want = getenv("MHXX_FIND_TEXT"), state = want && *want ? 0 : 2;
+    if (state == 2) return;
+    double now = plat_now_ns() / 1e9;
+    if (now < next) return;
+    next = now + (state ? 60 : 10);
+    uint32_t hangulfont_encode(const char *in, char *out, uint32_t size);
+    char enc[256];
+    uint32_t n = hangulfont_encode(want, enc, sizeof enc);
+    if (!n) { LOG("[findtext] can't put \"%s\" in the patch's codes\n", want); state = 2; return; }
+    int hits = 0;
+    for (uint64_t page = 0x1000; page < 0x100000000ull && hits < 12; page += 0x10000) {
+        if (!kernel_mapped(page, 0x10000)) continue;
+        const uint8_t *b = (const uint8_t *)G2H((uint32_t)page);
+        uint32_t span = 0x10000 + (kernel_mapped(page + 0x10000, 0x1000) ? n : 0);
+        for (uint32_t i = 0; i + n <= span && hits < 12; i++) {
+            if (b[i] != (uint8_t)enc[0] || memcmp(b + i, enc, n)) continue;
+            uint32_t at = (uint32_t)page + i, gmd = 0;
+            for (uint32_t back = at & ~3u; back + 0x100000 > at && back >= 0x1000 && kernel_mapped(back, 4); back -= 4)
+                if (!memcmp(G2H(back), "GMD", 4)) { gmd = back; break; }
+            LOG("[findtext] \"%s\" at %08x; GMD %s (%08x)\n", want, at, gmd ? (const char *)G2H(gmd + 0x28) : "none within 1 MB", gmd);
+            hits++, i += n;
+        }
+    }
+    LOG("[findtext] %d place(s)%s\n", hits, hits ? "" : " (again in 10 s)");
+    if (hits) state = state ? 2 : 1;
+}
+
 static void frame_update(Cpu *c) {
     uint32_t self = c->r[0];
     fnhook_call_original(c, text_addr(OFF_UPDATE));
@@ -1368,6 +1402,7 @@ static void frame_update(Cpu *c) {
         if (plugins[i].gu) gucompat_imports_sync(plugins[i].name);  // (a plugin that takes the controller reads later)
     }
     static int padtrace = -1;  // (debug) MHXX_PAD_TRACE=1: the game's pad words (as plugins read them) when they change
+    find_text();
     if (padtrace < 0) padtrace = getenv("MHXX_PAD_TRACE") != NULL;
     if (padtrace) {
         static uint32_t last_held, last_slot;
