@@ -1095,6 +1095,27 @@ HLE_FUNC("mhxx_hangul_decode", f_hangul_decode) {
 // mhxx_resource_find(const char *path): a resource the game has loaded, by its path as the game names it
 // ("table\\weapon07MsgData_jpn"): the object (its path at +8, a vtable in the game's code at +0), 0: not loaded. A
 // search of the heap at the host's speed (a plugin's own would take minutes): look once and keep the address.
+// mhxx_game_texture(const char *arc, const char *name, uint32_t *size): a texture from the game's files (arc a RomFS
+// path, "nativeNX/arc/resident.arc"; name its member, "GUI\\99_texture\\HD_cmn_icon_GSM_NOMIP") made an ImGui texture
+// (runtime/gametex.c): a handle (0: none), its width | height << 16 in *size. Call it from forge_onImGuiFreeRender.
+// mhxx_game_texture_id(int handle): its ImTextureID (r0:r1) for ImDrawList_AddImage's ImTextureRef._TexID (_TexData
+// 0), 0 until ImGui has uploaded it (the next frame).
+int gametex_load(const char *arc, const char *name, uint32_t *w, uint32_t *h);
+uint64_t gametex_id(int handle);
+HLE_FUNC("mhxx_game_texture", f_game_texture) {
+    char arc[160], name[160];
+    snprintf(arc, sizeof arc, "%s", ARG(0) ? gstr(ARG(0)) : "");
+    snprintf(name, sizeof name, "%s", ARG(1) ? gstr(ARG(1)) : "");
+    uint32_t w = 0, h = 0;
+    int hd = gametex_load(arc, name, &w, &h);
+    if (ARG(2)) ST32(ARG(2), w | h << 16);
+    RET((uint32_t)hd);
+}
+HLE_FUNC("mhxx_game_texture_id", f_game_texture_id) {
+    uint64_t id = gametex_id((int)ARG(0));
+    c->r[0] = (uint32_t)id, c->r[1] = (uint32_t)(id >> 32);
+}
+
 HLE_FUNC("mhxx_resource_find", f_resource_find) {
     const char *want = ARG(0) ? gstr(ARG(0)) : "";
     size_t n = strlen(want);

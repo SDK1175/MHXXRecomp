@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "imgui.h"
+#include "imgui_internal.h"  // (RegisterUserTexture: the game's pictures for plugins)
 #ifndef MHGU_NULL_BACKEND
 #include "backends/imgui_impl_vulkan.h"
 #else  // (no renderer: no overlay)
@@ -892,4 +893,22 @@ void overlay_draw(VkCommandBuffer cb, const OverlayTarget *t) {
     std::lock_guard<std::mutex> l(g_snap_lock);
     if (g_snap.Valid && g_snap.CmdListsCount) ImGui_ImplVulkan_RenderDrawData(&g_snap, cb);
 #endif
+}
+
+// ------------------------------------------------------------------ the game's pictures for plugins (runtime/gametex.c)
+// An RGBA picture as an ImGui user texture: ImGui uploads it with its next frame (the loop above, dd->Textures), and a
+// plugin draws it by its ID (ImDrawList_AddImage with _TexID) once it has one.
+extern "C" void *overlay_user_texture(const uint8_t *rgba, int w, int h) {
+    if (!ImGui::GetCurrentContext() || w <= 0 || h <= 0) return nullptr;
+    ImTextureData *t = IM_NEW(ImTextureData)();
+    t->Create(ImTextureFormat_RGBA32, w, h);
+    memcpy(t->GetPixels(), rgba, (size_t)w * h * 4);
+    t->UsedRect = {0, 0, (unsigned short)w, (unsigned short)h};
+    t->UpdateRect = t->UsedRect;
+    ImGui::RegisterUserTexture(t);
+    return t;
+}
+extern "C" uint64_t overlay_user_texture_id(void *tex) {
+    ImTextureData *t = (ImTextureData *)tex;
+    return t && t->Status == ImTextureStatus_OK ? (uint64_t)t->TexID : 0;
 }
