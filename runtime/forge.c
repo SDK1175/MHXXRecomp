@@ -1116,21 +1116,23 @@ HLE_FUNC("mhxx_game_texture_id", f_game_texture_id) {
     c->r[0] = (uint32_t)id, c->r[1] = (uint32_t)(id >> 32);
 }
 
-HLE_FUNC("mhxx_resource_find", f_resource_find) {
-    const char *want = ARG(0) ? gstr(ARG(0)) : "";
+static uint32_t resource_find(const char *want, uint32_t after) {
     size_t n = strlen(want);
-    uint32_t found = 0;
-    for (uint64_t page = 0x08000000; n && n < 64 && page < 0xa8000000ull && !found; page += 0x10000) {
+    uint64_t from = after ? ((uint64_t)after + 4) : 0x08000000;
+    for (uint64_t page = from & ~0xffffull; n && n < 64 && page < 0xa8000000ull; page += 0x10000) {
         if (!kernel_mapped(page, 0x10000)) continue;
-        for (uint32_t a = (uint32_t)page; a + 0x48 <= page + 0x10000; a += 4) {
+        for (uint32_t a = (uint32_t)(page > from ? page : from); a + 0x48 <= page + 0x10000; a += 4) {
             uint32_t vt = LD32(a);
             if (vt - MAIN_BASE >= 0x2400000u || memcmp(G2H(a + 8), want, n + 1)) continue;
-            found = a;
-            break;
+            return a;
         }
     }
-    RET(found);
+    return 0;
 }
+HLE_FUNC("mhxx_resource_find", f_resource_find) { RET(resource_find(ARG(0) ? gstr(ARG(0)) : "", 0)); }
+// mhxx_resource_find_after(const char *path, uint32_t after): the next object past `after` with that path (more than
+// one can have it: an empty one, then the one loaded)
+HLE_FUNC("mhxx_resource_find_after", f_resource_find_after) { RET(resource_find(ARG(0) ? gstr(ARG(0)) : "", ARG(1))); }
 // mhxx_input_capture(uint32_t ms): a plugin's own screen takes the controller from the game for that long (call it
 // every frame the screen is up, with a little to spare, e.g. 150; 0: give it back now, the buttons held then the game's
 // at once - a B that leaves the screen is the game's Back too). The plugin still reads it all (forge_input_*); the game
