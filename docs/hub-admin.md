@@ -190,12 +190,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   autonumber
-  actor R as 신고자 (디시·깃허브)
+  actor R as 신고자 (깃허브 신고 양식·디시)
   actor A as 운영자
   participant UI as 관리 화면
   participant Hub as 허브 서버
 
-  R->>A: "○○가 치트 씀" (닉네임, 대략의 시각)
+  R->>A: "○○가 치트 씀" (헌터 이름, 대략의 시각)
   A->>UI: 지금 방에서 찾기 / 최근 3일 입장 기록에서 찾기
   UI->>Hub: GET /api/joins?q=○○
   Hub-->>UI: 시각·IP·방
