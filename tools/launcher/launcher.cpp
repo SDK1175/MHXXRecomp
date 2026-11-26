@@ -62,8 +62,8 @@ int ui_take_picked_folder(char *out, size_t size) {
     SDL_SetAtomicInt(&picked_ready, 0);
     return 4;
 }
-int ldn_hub_status(const char *, const char *, int *, int *) { return 0; }
-void ldn_hub_check(const char *, const char *) {}
+int ldn_hub_status(const char *, const char *, bool, int *, int *) { return 0; }
+void ldn_hub_check(const char *, const char *, bool) {}
 int cheats_count(void) { return 0; }
 // (voice chat: the game's - the launcher shows no voice rows)
 void voice_test(bool) {}
@@ -605,6 +605,54 @@ static void release_notes(const std::string &md, float s) {
             ImGui::TextWrapped("%s", md_inline(t).c_str());
         }
     }
+}
+// The hub server's consent ([Multiplayer] HubConsent, net/ldn.c): asked once, before the first start with it unset and
+// the hub server on. 0 still on it, 1 agreed, 2 not (the Network page changes it later).
+static bool hub_consent_due() {
+    if (g_config.hub_consent || launcher_ini_get("HubConsentAsked") == "1") return false;
+    const char *v = g_config.ldn_server;
+    return !((v[0] | 0x20) == 'o' && (v[1] | 0x20) == 'f' && (v[2] | 0x20) == 'f' && !v[3]);
+}
+static int consent_screen(int w, int h, float s) {
+    float pad = 18 * s, dw = std::min(760 * s, (float)w - pad * 2);
+    ImGui::SetNextWindowPos(ImVec2(w * .5f, h * .5f), ImGuiCond_Always, ImVec2(.5f, .5f));
+    ImGui::SetNextWindowSize(ImVec2(dw, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(30 * s, 24 * s));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(.03f, .07f, .17f, .96f));
+    ImGui::Begin("##consent", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize);
+    ImDrawList *d = ImGui::GetWindowDrawList();
+    float cw = ImGui::GetContentRegionAvail().x, bh = ImGui::GetFrameHeight() * 1.6f;
+    ImGui::SetWindowFontScale(1.3f);
+    ImGui::TextColored(GOLD_TEXT, "%s", tr("Hub server consent"));
+    ImGui::SetWindowFontScale(1.0f);
+    divider(d, cw, s);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cw);
+    ImGui::TextWrapped("%s", tr("The hub server lets you play over the internet without port forwarding. To act on reports of cheating or trolling, it keeps this while you use it:"));
+    ImGui::Dummy(ImVec2(0, 4 * s));
+    const char *items[] = {
+        "Your hunter name, and a port ID: a random code this port made (not linked to you or your PC)",
+        "Which room you were in, and when: kept 3 days, then deleted (longer only if you are banned)",
+        "Your IP address is never stored or shown: only a code that tells whether two connections came from the same address",
+        "Only the server's admin sees it, never other players",
+    };
+    for (const char *t : items) ImGui::TextWrapped("•  %s", tr(t));
+    ImGui::Dummy(ImVec2(0, 4 * s));
+    ImGui::TextColored(DIM_TEXT, "%s", tr("Without it the hub server is never contacted: LAN and Search hosts still work. You can change this in Settings > Network."));
+    ImGui::PopTextWrapPos();
+    ImGui::Dummy(ImVec2(0, 10 * s));
+    float b1 = (cw - 12 * s) * .5f;
+    int result = 0;
+    if (hunter_button("consent.yes", tr("Agree"), ImVec2(b1, bh), true, true, s)) result = 1;
+    ImGui::SameLine(0, 12 * s);
+    if (hunter_button("consent.no", tr("Don't use the hub server"), ImVec2(b1, bh), false, true, s)) result = 2;
+    ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
+    gold_frame(ImGui::GetForegroundDrawList(), wp, ImVec2(wp.x + ws.x, wp.y + ws.y), s);
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+    return result;
 }
 // The update screen: 0 still on it, 1 closed (No / Close)
 // Yes to an update: the save backed up first (Tools: AutoBackup), then the update
@@ -1558,6 +1606,29 @@ int main(int argc, char **argv) {
                 if (SDL_Surface *sf = SDL_RenderReadPixels(rd, nullptr)) SDL_SavePNG(sf, shot), SDL_DestroySurface(sf);
                 quit = true;
             }
+            SDL_RenderPresent(rd);
+            continue;
+        }
+        if (!ask_shortcut && !in_setup && !in_tex && !in_tools && !shot && hub_consent_due()) {
+            if (!art.background)
+                ImGui::GetBackgroundDrawList()->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)w, (float)h), NAVY_TOP,
+                                                                         NAVY_TOP, NAVY_BOTTOM, NAVY_BOTTOM);
+            if (int c = consent_screen(w, h, scale)) {
+                if (c == 1) {
+                    Config nc = g_config;
+                    nc.hub_consent = 1;
+                    char err[256];
+                    if (config_save(&nc, err, sizeof err)) g_config.hub_consent = 1;
+                    else SDL_Log("hub server consent: %s", err);
+                }
+                launcher_ini_set("HubConsentAsked", "1");
+            }
+            ImGui::Render();
+            SDL_SetRenderScale(rd, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
+            SDL_SetRenderDrawColor(rd, 4, 10, 28, 255);
+            SDL_RenderClear(rd);
+            draw_background(rd, art, w, h);
+            ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), rd);
             SDL_RenderPresent(rd);
             continue;
         }

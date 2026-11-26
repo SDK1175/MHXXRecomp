@@ -1,5 +1,6 @@
 // The admin view (docs/hub-admin.md): an HTTP page and API on a loopback address only, opened through an SSH tunnel by
-// the admin apps. It shows the hubs, who is in them and from which address; players never see any of it.
+// the admin apps. It shows the hubs and who is in them (hunter name, port id, a hash of the address - never the
+// address itself); players never see any of it.
 //
 // Locks: the tunnel (SSH keys) and a token, made on the first start in the state directory (admin.token, 0600). The
 // apps read it over SSH and open /?token=..., which sets a cookie; the API also takes "Authorization: Bearer ...".
@@ -55,6 +56,7 @@ func NewAdmin(s *Server, dir, version string) (*Admin, error) {
 	a := &Admin{s: s, st: openStore(dir), token: tok, started: time.Now(), version: version}
 	s.mu.Lock()
 	s.banned = a.st.banned
+	s.netOf = a.st.netOf
 	s.onRecord = a.st.record
 	s.mu.Unlock()
 	go a.st.janitor()
@@ -229,7 +231,8 @@ type AdminRoom struct {
 type AdminMember struct {
 	Node   int        `json:"node"` // -1: joining (no node yet)
 	Name   string     `json:"name"`
-	IP     string     `json:"ip,omitempty"`
+	ID     string     `json:"id,omitempty"`  // port id
+	Net    string     `json:"net,omitempty"` // the address, hashed
 	Joined *time.Time `json:"joined,omitempty"`
 	Link   string     `json:"link"` // host, udp, tcp (through this server), lan (not through it), joining
 	Pair   string     `json:"pair,omitempty"`
@@ -261,7 +264,7 @@ func (a *Admin) Snapshot() AdminState {
 		r := AdminRoom{ID: fmt.Sprintf("%016x", h.id), Opened: h.created, Keyed: h.room != [16]byte{}, Proto: int(h.proto),
 			Nodes: int(h.info[niNodeCount]), Max: int(h.info[niNodeMax]), Members: []AdminMember{}}
 		opened := h.created
-		r.Members = append(r.Members, AdminMember{Node: 0, Name: nodeName(h.info[:], 0), IP: h.ip, Joined: &opened, Link: "host"})
+		r.Members = append(r.Members, AdminMember{Node: 0, Name: nodeName(h.info[:], 0), ID: h.pid, Net: h.net, Joined: &opened, Link: "host"})
 		ps := byHub[h]
 		for i := 1; i < r.Max && i < maxNodes; i++ {
 			if !h.linked[i] {
@@ -270,7 +273,7 @@ func (a *Admin) Snapshot() AdminState {
 			m := AdminMember{Node: i, Name: nodeName(h.info[:], i), Link: "lan"}
 			for _, p := range ps {
 				if p.node == i {
-					m.IP, m.Pair, m.Link = p.ip, fmt.Sprintf("%08x", p.id), p.link()
+					m.ID, m.Net, m.Pair, m.Link = p.pid, p.net, fmt.Sprintf("%08x", p.id), p.link()
 					j := p.joined
 					m.Joined = &j
 				}
@@ -280,7 +283,7 @@ func (a *Admin) Snapshot() AdminState {
 		for _, p := range ps {
 			if p.node < 0 {
 				j := p.joined
-				r.Members = append(r.Members, AdminMember{Node: -1, IP: p.ip, Joined: &j, Link: "joining",
+				r.Members = append(r.Members, AdminMember{Node: -1, ID: p.pid, Net: p.net, Joined: &j, Link: "joining",
 					Pair: fmt.Sprintf("%08x", p.id)})
 			}
 		}
@@ -303,7 +306,8 @@ func (p *pair) link() string {
 // ---- actions
 
 type actionReq struct {
-	IP     string `json:"ip"`
+	ID     string `json:"id"`  // port id
+	Net    string `json:"net"` // hashed address (a ban: refuse it too; kick: close its connections too)
 	Pair   string `json:"pair"`
 	Room   string `json:"room"`
 	Name   string `json:"name"`
@@ -371,7 +375,37 @@ func device(r *http.Request) string {
 	return d
 }
 
-func validIP(ip string) bool { return net.ParseIP(ip) != nil }
+// validID: a port id ("ABCD-EFGH", portID) or a hashed address (12 hex digits, netOf), as the page sends them.
+func validID(id string) bool {
+	if len(id) != 9 || id[4] != '-' {
+		return false
+	}
+	for i, c := range id {
+		if i != 4 && !(c >= 'A' && c <= 'Z' || c >= '2' && c <= '7') {
+			return false
+		}
+	}
+	return true
+}
+
+func validNet(nh string) bool {
+	if len(nh) != 12 {
+		return false
+	}
+	for _, c := range nh {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func target(id, nh string) string {
+	if id != "" {
+		return id
+	}
+	return "net:" + nh
+}
 
 func (a *Admin) kick(r *http.Request, q actionReq) actionResp {
 	if q.Pair != "" {
@@ -379,14 +413,14 @@ func (a *Admin) kick(r *http.Request, q actionReq) actionResp {
 		if _, err := fmt.Sscanf(q.Pair, "%08x", &id); err != nil || !a.s.KickPair(id) {
 			return actionResp{Message: "그 연결은 이미 끝났습니다"}
 		}
-		a.st.act(Action{At: time.Now(), Kind: "kick", Target: q.IP, Name: q.Name, Reason: q.Reason, Device: device(r)})
+		a.st.act(Action{At: time.Now(), Kind: "kick", Target: target(q.ID, q.Net), Name: q.Name, Reason: q.Reason, Device: device(r)})
 		return actionResp{OK: true, Closed: 1}
 	}
-	if !validIP(q.IP) {
-		return actionResp{Message: "IP가 없습니다"}
+	if !validID(q.ID) {
+		return actionResp{Message: "포트 ID가 없습니다"}
 	}
-	n := a.s.KickIP(q.IP)
-	a.st.act(Action{At: time.Now(), Kind: "kick", Target: q.IP, Name: q.Name, Reason: q.Reason, Device: device(r)})
+	n := a.s.Kick(q.ID, "")
+	a.st.act(Action{At: time.Now(), Kind: "kick", Target: q.ID, Name: q.Name, Reason: q.Reason, Device: device(r)})
 	return actionResp{OK: true, Closed: n}
 }
 
@@ -399,18 +433,19 @@ func (a *Admin) closeRoom(r *http.Request, q actionReq) actionResp {
 	return actionResp{OK: true}
 }
 
+// ban: a port id, and (net given) the hashed address it came from too - a new port id from there is refused as well.
 func (a *Admin) ban(r *http.Request, q actionReq) actionResp {
-	if !validIP(q.IP) {
-		return actionResp{Message: "IP가 없는 사람(LAN·직접)은 밴할 수 없습니다"}
+	if q.ID != "" && !validID(q.ID) || q.Net != "" && !validNet(q.Net) || q.ID == "" && q.Net == "" {
+		return actionResp{Message: "포트 ID가 없는 사람(LAN·직접)은 밴할 수 없습니다"}
 	}
-	b := Ban{IP: q.IP, Name: q.Name, Reason: q.Reason, At: time.Now()}
+	b := Ban{ID: q.ID, Net: q.Net, Name: q.Name, Reason: q.Reason, At: time.Now()}
 	if q.Days > 0 {
 		u := b.At.Add(time.Duration(q.Days) * 24 * time.Hour)
 		b.Until = &u
 	}
 	a.st.ban(b)
-	n := a.s.KickIP(q.IP)
-	a.st.act(Action{At: b.At, Kind: "ban", Target: q.IP, Name: q.Name,
+	n := a.s.Kick(q.ID, q.Net)
+	a.st.act(Action{At: b.At, Kind: "ban", Target: target(q.ID, q.Net), Name: q.Name,
 		Reason: strings.TrimSpace(fmt.Sprintf("%s (%s)", q.Reason, banSpan(q.Days))), Device: device(r)})
 	a.s.changes.notify()
 	return actionResp{OK: true, Closed: n}
@@ -424,10 +459,10 @@ func banSpan(days int) string {
 }
 
 func (a *Admin) unban(r *http.Request, q actionReq) actionResp {
-	if !a.st.unban(q.IP) {
+	if !a.st.unban(q.ID, q.Net) {
 		return actionResp{Message: "밴 목록에 없습니다"}
 	}
-	a.st.act(Action{At: time.Now(), Kind: "unban", Target: q.IP, Name: q.Name, Reason: q.Reason, Device: device(r)})
+	a.st.act(Action{At: time.Now(), Kind: "unban", Target: target(q.ID, q.Net), Name: q.Name, Reason: q.Reason, Device: device(r)})
 	a.s.changes.notify()
 	return actionResp{OK: true}
 }

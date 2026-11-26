@@ -77,6 +77,7 @@
     .nickname = "",                                                                                 \
     .ldn_server = "",                                                                               \
     .ldn_key = "",                                                                                  \
+    .hub_consent = 0,                                                                               \
     .sync_small_monsters = 1,                                                                       \
     .share_urgent = 1,                                                                              \
     /* [Monster HP, Village Quests] */                                                              \
@@ -396,6 +397,13 @@ static const char DEFAULT_INI[] =
     "; On Android, empty means public among Android players only: to play with friends on PC, all enter the same key.\n"
     "; Default:\n"
     "Key =\n"
+    "\n"
+    "; You agree to what the hub server keeps: while you use it, its admin sees your hunter name and a port ID (a\n"
+    "; random code this port made, in hub_id next to this file), and keeps them for 3 days with the room and time,\n"
+    "; to act on reports (kick, ban). Your IP address is never stored or shown, only a code that tells whether two\n"
+    "; connections came from the same address. Off: the hub server is never contacted (LAN and Join still work).\n"
+    "; Default: Off (the launcher asks)\n"
+    "HubConsent = Off\n"
     "\n"
     "; Sync small monsters between players in multiplayer. Everyone in the hunt should use the same setting.\n"
     "; Default: On\n"
@@ -723,6 +731,7 @@ const ConfigSetting g_settings[] = {
     {"Multiplayer", "Nickname", SET_TEXT, F(nickname), sizeof g_config.nickname, 0, 0, NULL, NULL, false, ERR_NET},
     {"Multiplayer", "Server", SET_TEXT, F(ldn_server), sizeof g_config.ldn_server, 0, 0, NULL, NULL, false, ERR_SERVER},
     {"Multiplayer", "Key", SET_TEXT, F(ldn_key), sizeof g_config.ldn_key, 0, 0, NULL, NULL, false, ERR_SERVER},
+    ON_OFF("Multiplayer", "HubConsent", hub_consent, false),
     ON_OFF("Multiplayer", "SyncSmallMonsters", sync_small_monsters, false),
     ON_OFF("Multiplayer", "ShareUrgentCredit", share_urgent, false),
     {"Monster HP", "1Player|1Players", SET_FACTOR, F(hp.scale[0]), 0, HP_SCALE_MIN, HP_SCALE_MAX, NULL, NULL, false, ERR_HP},

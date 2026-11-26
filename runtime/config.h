@@ -110,6 +110,8 @@ typedef struct {
     int voice_volume;         // [Voice] VoiceVolume: the other players' voices, 0..100 % (config_voice_gain)
     int combo_window;         // [Controls] ComboInputWindow: COMBO_*, how long a press waits for a second button
     char ldn_server[256];     // [Multiplayer] Server: hub server for internet hubs (host[:port]); "" the default, "Off" none
+    int hub_consent;          // [Multiplayer] HubConsent: the player agreed to what the hub server keeps (net/ldn.c: none
+                              // of its requests is sent without it; the launcher asks once, the Network page can change it)
     char ldn_key[64];         // [Multiplayer] Key: matchmaking key, hubs seen only by players with the same; "" public
     char chat_key[32];        // [Controls] ChatKey: the key that opens a line of chat (runtime/hle/chat.c), by SDL's
                               // name for it ("/", "Y"...); "" none
@@ -237,6 +239,7 @@ int config_live_bonus_content(void);    // [Bonus Content] BonusContent: each ti
 int config_live_discord(void);         // [Discord] RichPresence
 int config_live_discord_hunter(void);  // [Discord] ShowHunter
 int config_live_share_urgent(void);    // [Multiplayer] ShareUrgentCredit
+int config_live_hub_consent(void);     // [Multiplayer] HubConsent (net/ldn.c)
 int config_live_title_back_exit(void); // [Application] TitleBackExit
 int config_live_quest_skip(void);      // [Application] QuestClearSkip
 int config_live_quest_skip_online(void); // [Application] QuestClearSkipOnline

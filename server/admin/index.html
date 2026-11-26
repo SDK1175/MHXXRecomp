@@ -145,6 +145,7 @@ h3 { font-size: 14px; color: var(--muted); margin: 22px 0 10px; font-weight: 700
 .dialog h4 { margin: 0 0 6px; font-size: 17px; }
 .dialog p { margin: 0 0 14px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .dialog label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 6px; }
+.dialog label.chk { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
 .dialog textarea { width: 100%; min-height: 70px; resize: vertical; }
 .seg { display: flex; gap: 6px; }
 .seg button { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); font-weight: 700; font-size: 13px; }
@@ -212,7 +213,7 @@ h3 { font-size: 14px; color: var(--muted); margin: 22px 0 10px; font-weight: 700
   </section>
   <section class="view" id="v-bans"><div class="rows" id="bans"></div></section>
   <section class="view" id="v-log">
-    <div class="toolbar"><input id="q" type="search" placeholder="닉네임이나 IP로 찾기 (최근 3일)" autocomplete="off"></div>
+    <div class="toolbar"><input id="q" type="search" placeholder="헌터 이름이나 포트 ID로 찾기 (최근 3일)" autocomplete="off"></div>
     <div class="rows" id="joins"></div>
     <h3>관리 조치 기록</h3>
     <div class="rows" id="actions"></div>
@@ -310,7 +311,7 @@ function renderDetail(full) {
   if (!r) {
     if (selected && prev) toast("보던 방이 닫혔습니다");
     selected = null; d.classList.remove("open");
-    d.innerHTML = '<div class="empty" style="border:0">방을 고르면 들어와 있는 사람과 접속 주소가 보입니다.</div>';
+    d.innerHTML = '<div class="empty" style="border:0">방을 고르면 들어와 있는 사람과 포트 ID가 보입니다.</div>';
     return;
   }
   if (full || !d.querySelector(".members")) {
@@ -318,7 +319,7 @@ function renderDetail(full) {
       <h2><span id="dName"></span><span class="badge" id="dBadge"></span></h2>
       <div class="sub" id="dSub"></div><div class="members" id="members"></div>
       <div class="toolbar" style="margin-top:14px"><button class="btn danger" id="closeRoom">방 닫기</button>
-      <span class="hint" style="margin:0">IP를 누르면 복사됩니다. LAN·직접으로 들어온 사람은 이 서버를 거치지 않아 막을 수 없습니다.</span></div>`;
+      <span class="hint" style="margin:0">포트 ID를 누르면 복사됩니다. IP 주소는 저장하지도 보여 주지도 않습니다. LAN·직접으로 들어온 사람은 이 서버를 거치지 않아 막을 수 없습니다.</span></div>`;
     $("#back").onclick = closeDetail;
     $("#closeRoom").onclick = () => {
       const room = state.rooms.find((x) => x.id === selected); if (!room) return;
@@ -334,17 +335,17 @@ function renderDetail(full) {
 function makeMember(m) { const el = document.createElement("div"); el.className = "member"; fillMember(el, m); return el; }
 function fillMember(el, m) {
   const name = m.link === "joining" ? "(입장 중)" : m.name || "(이름 없음)";
-  const ip = m.ip ? `<button class="ip mono" title="복사">${esc(m.ip)}</button>` : `<span>주소 없음 (이 서버를 거치지 않음)</span>`;
+  const ip = m.id ? `<button class="ip mono" title="포트 ID 복사">${esc(m.id)}</button>` : `<span>포트 ID 없음 (이 서버를 거치지 않음)</span>`;
   const when = m.joined ? `<span>${clock(m.joined)} 입장 · ${ago(m.joined)} 전</span>` : "";
   el.innerHTML = `<div class="avatar">${esc((name.trim()[0] || "?").toUpperCase())}</div>
     <div class="who"><b>${esc(name)}</b><span><span class="badge b-${m.link}">${linkLabel[m.link] || esc(m.link)}</span>${ip}${when}</span></div>
     <div class="actions"><button class="btn" data-a="kick">${m.link === "host" ? "방 닫기" : "강퇴"}</button><button class="btn danger" data-a="ban">밴</button></div>`;
-  const noIP = !m.ip;
+  const noIP = !m.id;
   for (const b of el.querySelectorAll(".actions .btn")) { b.disabled = noIP; if (noIP) b.title = "이 서버를 거치지 않아 막을 수 없습니다"; }
   el.querySelector('[data-a="kick"]').onclick = () => kickMember(m);
-  el.querySelector('[data-a="ban"]').onclick = () => banBox(m.ip, name);
+  el.querySelector('[data-a="ban"]').onclick = () => banBox(m.id, m.net, name);
   const ipb = el.querySelector(".ip");
-  if (ipb) ipb.onclick = () => { navigator.clipboard?.writeText(m.ip).then(() => toast("IP 복사: " + m.ip), () => {}); };
+  if (ipb) ipb.onclick = () => { navigator.clipboard?.writeText(m.id).then(() => toast("포트 ID 복사: " + m.id), () => {}); };
 }
 
 // ---- actions
@@ -378,13 +379,14 @@ function confirmBox(title, text, okLabel, ok) {
 function kickMember(m) {
   const room = state.rooms.find((x) => x.id === selected);
   if (m.link === "host") { $("#closeRoom")?.click(); return; }
-  confirmBox(`${m.name || "이 사람"}을(를) 강퇴할까요?`, `${m.ip}의 이 방 연결을 끊습니다. 밴이 아니라서 다시 들어올 수 있습니다.`, "강퇴",
-    () => act("/api/kick", { pair: m.pair, ip: m.ip, name: m.name, room: room?.id }, "강퇴했습니다"));
+  confirmBox(`${m.name || "이 사람"}을(를) 강퇴할까요?`, `${m.id}의 이 방 연결을 끊습니다. 밴이 아니라서 다시 들어올 수 있습니다.`, "강퇴",
+    () => act("/api/kick", { pair: m.pair, id: m.id, name: m.name, room: room?.id }, "강퇴했습니다"));
 }
-function banBox(ip, name) {
+function banBox(id, net, name) {
   let days = 1;
-  dialog(`<h4>밴</h4><p><b>${esc(name || "(이름 없음)")}</b> · <span class="mono">${esc(ip)}</span><br>이 IP의 연결을 모두 끊고, 기간 동안 방 목록·방 만들기·입장을 모두 막습니다.
-      같은 공유기나 모바일 데이터를 쓰는 다른 사람도 같이 막힐 수 있습니다.</p>
+  dialog(`<h4>밴</h4><p><b>${esc(name || "(이름 없음)")}</b> · <span class="mono">${esc(id)}</span><br>이 포트 ID의 연결을 모두 끊고, 기간 동안 방 목록·방 만들기·입장을 모두 막습니다.</p>
+    ${net ? `<label class="chk"><input type="checkbox" data-net checked> 같은 인터넷 주소도 막기 (포트 ID를 새로 만들어 돌아오는 것까지 막음)</label>
+      <p class="hint" style="margin:4px 0 0">주소 자체는 저장하지 않고, 같은 주소인지만 알아봅니다. 같은 공유기나 모바일 데이터를 쓰는 다른 사람도 같이 막힐 수 있습니다.</p>` : ""}
     <label>기간</label><div class="seg"><button data-d="1" class="on">1일</button><button data-d="7">7일</button><button data-d="0">영구</button></div>
     <label>사유 (기록에 남음)</label><textarea maxlength="200" placeholder="예: 치트 사용 신고 (디시 ○월 ○일)"></textarea>
     <div class="foot"><button class="btn" data-x>취소</button><button class="btn solid-danger" data-ok>밴</button></div>`,
@@ -393,14 +395,16 @@ function banBox(ip, name) {
       sc.querySelector("[data-x]").onclick = close;
       sc.querySelector("textarea").focus();
       sc.querySelector("[data-ok]").onclick = () => {
-        const reason = sc.querySelector("textarea").value.trim(); close();
-        act("/api/ban", { ip, name, reason, days }, `밴했습니다 (${days ? days + "일" : "영구"})`);
+        const reason = sc.querySelector("textarea").value.trim();
+        const withNet = net && sc.querySelector("[data-net]")?.checked; close();
+        act("/api/ban", { id: id || "", net: withNet ? net : "", name, reason, days }, `밴했습니다 (${days ? days + "일" : "영구"})`);
       };
     });
 }
+const banLabel = (b) => b.id ? b.id + (b.net ? " + 주소" : "") : "주소 " + (b.net || "").slice(0, 6);
 function unbanBox(b) {
-  confirmBox(`${b.ip} 밴을 풀까요?`, `${b.name || "(이름 없음)"} · ${b.reason || "사유 없음"}`, "해제",
-    () => act("/api/unban", { ip: b.ip, name: b.name }, "밴을 풀었습니다"));
+  confirmBox(`${banLabel(b)} 밴을 풀까요?`, `${b.name || "(이름 없음)"} · ${b.reason || "사유 없음"}`, "해제",
+    () => act("/api/unban", { id: b.id || "", net: b.id ? "" : b.net, name: b.name }, "밴을 풀었습니다"));
 }
 
 function left(until) {
@@ -415,10 +419,10 @@ function renderBans() {
   const empty = box.querySelector(".empty");
   if (!state.bans.length) { if (!empty) box.insertAdjacentHTML("afterbegin", '<div class="empty">밴한 사람이 없습니다.</div>'); }
   else if (empty) empty.remove();
-  sync(box, state.bans, (b) => b.ip + b.at, (b) => { const el = document.createElement("div"); el.className = "rowc"; fillBan(el, b); return el; }, fillBan);
+  sync(box, state.bans, (b) => (b.id || b.net) + b.at, (b) => { const el = document.createElement("div"); el.className = "rowc"; fillBan(el, b); return el; }, fillBan);
 }
 function fillBan(el, b) {
-  el.innerHTML = `<div><b>${esc(b.name || "(이름 없음)")}</b> <span class="mono">${esc(b.ip)}</span>
+  el.innerHTML = `<div><b>${esc(b.name || "(이름 없음)")}</b> <span class="mono">${esc(banLabel(b))}</span>
       <div class="m"><span class="badge b-key">${left(b.until)}</span><span>${when(b.at)} 밴</span><span>${esc(b.reason || "사유 없음")}</span></div></div>
     <button class="btn">해제</button>`;
   el.querySelector("button").onclick = () => unbanBox(b);
@@ -429,14 +433,14 @@ let logTimer = null;
 async function loadLog() {
   try {
     const [joins, acts] = await Promise.all([api("/api/joins?q=" + encodeURIComponent($("#q").value)), api("/api/actions")]);
-    const banned = new Set((state?.bans || []).map((b) => b.ip));
+    const banned = new Set((state?.bans || []).map((b) => b.id).filter(Boolean));
     $("#joins").innerHTML = joins.length ? joins.map((j, i) => `<div class="rowc"><div><b>${esc(j.name || "(이름 없음)")}</b>
         <span class="badge ${j.role === "host" ? "b-host" : "b-tcp"}">${j.role === "host" ? "방장" : "참가"}</span>
-        <div class="m"><span>${when(j.at)}</span><button class="ip mono" data-i="${i}">${esc(j.ip)}</button><span>${j.role === "host" ? "방을 열었음" : esc(j.host) + "의 방"}</span></div></div>
-        <button class="btn danger" data-b="${i}" ${banned.has(j.ip) ? "disabled" : ""}>${banned.has(j.ip) ? "밴됨" : "밴"}</button></div>`).join("")
+        <div class="m"><span>${when(j.at)}</span><button class="ip mono" data-i="${i}">${esc(j.id || "(포트 ID 없음)")}</button><span>${j.role === "host" ? "방을 열었음" : esc(j.host) + "의 방"}</span></div></div>
+        <button class="btn danger" data-b="${i}" ${banned.has(j.id) || !j.id && !j.net ? "disabled" : ""}>${banned.has(j.id) ? "밴됨" : "밴"}</button></div>`).join("")
       : '<div class="empty">최근 3일 동안 기록이 없습니다.</div>';
-    for (const b of $("#joins").querySelectorAll("[data-b]")) b.onclick = () => { const j = joins[+b.dataset.b]; banBox(j.ip, j.name); };
-    for (const b of $("#joins").querySelectorAll("[data-i]")) b.onclick = () => { const j = joins[+b.dataset.i]; navigator.clipboard?.writeText(j.ip).then(() => toast("IP 복사: " + j.ip), () => {}); };
+    for (const b of $("#joins").querySelectorAll("[data-b]")) b.onclick = () => { const j = joins[+b.dataset.b]; banBox(j.id, j.net, j.name); };
+    for (const b of $("#joins").querySelectorAll("[data-i]")) b.onclick = () => { const j = joins[+b.dataset.i]; if (j.id) navigator.clipboard?.writeText(j.id).then(() => toast("포트 ID 복사: " + j.id), () => {}); };
     const kind = { kick: "강퇴", close: "방 닫기", ban: "밴", unban: "밴 해제" };
     const dev = { phone: "폰", pc: "PC", web: "브라우저" };
     $("#actions").innerHTML = acts.length ? acts.map((a) => `<div class="rowc"><div><b>${kind[a.kind] || esc(a.kind)}</b> ${esc(a.name || "")}

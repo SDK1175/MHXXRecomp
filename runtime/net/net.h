@@ -46,9 +46,9 @@ void ldn_send_aux(const void *data, uint32_t len);  // the port's own message to
 // The hub server (internet hubs) for the settings menu: its last known state for these settings (ini Server, Key),
 // from a search, a hosted hub or a check; ms: the answer's round trip, hubs: listed for the key (-1: not known).
 enum { HUB_UNKNOWN, HUB_CHECKING, HUB_OFF, HUB_ONLINE, HUB_NOT_FOUND, HUB_UNREACHABLE, HUB_LOST, HUB_NO_ANSWER,
-       HUB_BUSY, HUB_VERSION, HUB_REFUSED };
-int ldn_hub_status(const char *server, const char *key, int *ms, int *hubs);  // HUB_*
-void ldn_hub_check(const char *server, const char *key);  // asks the server for its hubs, in a thread
+       HUB_BUSY, HUB_VERSION, HUB_REFUSED, HUB_NO_CONSENT };
+int ldn_hub_status(const char *server, const char *key, bool consent, int *ms, int *hubs);  // HUB_* (not agreed: HUB_NO_CONSENT)
+void ldn_hub_check(const char *server, const char *key, bool consent);  // asks the server for its hubs, in a thread (not agreed: nothing)
 
 // vsock.c
 void vsock_deliver(const VPacket *p, const void *data, uint32_t len);  // from the network to the local sockets

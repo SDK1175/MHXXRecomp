@@ -2,11 +2,14 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -42,13 +45,14 @@ func TestAdminView(t *testing.T) {
 	hs := httptest.NewServer(a.Handler())
 	defer hs.Close()
 
-	// a hub with its host only
+	// a hub with its host only (shown by port id and a hash of the address: never the address)
+	me := portID(headerAs(2, 0, 1)[24:40])
 	hc := dial(t, s)
 	send(t, hc, tHost, header(2, 0), namedInfo("방장"))
 	idn := u64le(expect(t, hc, tHosted))
 	id := hexid(idn)
 	r := room(t, a.Snapshot(), id)
-	if r.Keyed || r.Nodes != 1 || len(r.Members) != 1 || r.Members[0].Name != "방장" || r.Members[0].IP != "127.0.0.1" ||
+	if r.Keyed || r.Nodes != 1 || len(r.Members) != 1 || r.Members[0].Name != "방장" || r.Members[0].ID != me || !validNet(r.Members[0].Net) ||
 		r.Members[0].Link != "host" {
 		t.Fatalf("host only: %+v", r)
 	}
@@ -63,14 +67,14 @@ func TestAdminView(t *testing.T) {
 	psec := expect(t, pc, tSpliced)
 	time.Sleep(50 * time.Millisecond)
 	r = room(t, a.Snapshot(), id)
-	if len(r.Members) != 2 || r.Members[1].Link != "joining" || r.Members[1].IP != "127.0.0.1" {
+	if len(r.Members) != 2 || r.Members[1].Link != "joining" || r.Members[1].ID != me {
 		t.Fatalf("joining: %+v", r.Members)
 	}
 	send(t, hc, tUpdate, namedInfo("방장", "손님"))
 	time.Sleep(50 * time.Millisecond)
 	r = room(t, a.Snapshot(), id)
 	if r.Nodes != 2 || len(r.Members) != 2 || r.Members[1].Name != "손님" || r.Members[1].Link != "tcp" ||
-		r.Members[1].IP != "127.0.0.1" || r.Members[1].Joined == nil {
+		r.Members[1].ID != me || r.Members[1].Net != r.Members[0].Net || r.Members[1].Joined == nil {
 		t.Fatalf("joined: %+v", r.Members)
 	}
 
@@ -90,7 +94,7 @@ func TestAdminView(t *testing.T) {
 	// a player who came over the LAN: a node with no address
 	send(t, hc, tUpdate, namedInfo("방장", "손님", "옆자리"))
 	time.Sleep(50 * time.Millisecond)
-	if m := room(t, a.Snapshot(), id).Members[2]; m.Name != "옆자리" || m.Link != "lan" || m.IP != "" {
+	if m := room(t, a.Snapshot(), id).Members[2]; m.Name != "옆자리" || m.Link != "lan" || m.ID != "" || m.Net != "" {
 		t.Fatalf("lan: %+v", m)
 	}
 
@@ -187,7 +191,6 @@ func fmtHex(v uint64) string {
 	return string(b)
 }
 
-
 func post(t *testing.T, a *Admin, url, path string, body string) actionResp {
 	t.Helper()
 	req, _ := http.NewRequest("POST", url+path, strings.NewReader(body))
@@ -217,7 +220,7 @@ func TestAdminActions(t *testing.T) {
 	send(t, hc, tHost, header(2, 0), namedInfo("방장"))
 	idn := u64le(expect(t, hc, tHosted))
 	pc := dial(t, s)
-	send(t, pc, tJoin, header(2, 0), u64(idn))
+	send(t, pc, tJoin, headerAs(2, 0, 2), u64(idn))
 	ticket := expect(t, hc, tIncoming)
 	ac := dial(t, s)
 	send(t, ac, tAttach, header(2, 0), ticket)
@@ -226,8 +229,12 @@ func TestAdminActions(t *testing.T) {
 	send(t, hc, tUpdate, namedInfo("방장", "치터"))
 	time.Sleep(50 * time.Millisecond)
 
-	// the records: the host and the player, by name
-	if j := a.st.findJoins("치터", 10); len(j) != 1 || j[0].Role != "player" || j[0].Host != "방장" || j[0].IP != "127.0.0.1" {
+	// the records: the host and the player, by name; by port id too
+	cheater := portID(headerAs(2, 0, 2)[24:40])
+	if j := a.st.findJoins(strings.ToLower(cheater), 10); len(j) != 1 || j[0].Name != "치터" {
+		t.Fatalf("records by id %+v", j)
+	}
+	if j := a.st.findJoins("치터", 10); len(j) != 1 || j[0].Role != "player" || j[0].Host != "방장" || j[0].ID != cheater || !validNet(j[0].Net) || j[0].IP != "" {
 		t.Fatalf("records %+v", j)
 	}
 	if j := a.st.findJoins("", 10); len(j) != 2 {
@@ -257,33 +264,54 @@ func TestAdminActions(t *testing.T) {
 		t.Fatal("the room is still there")
 	}
 
-	// ban for a day: kept on disk, new connections are closed at once
-	if r := post(t, a, hs.URL, "/api/ban", `{"ip":"127.0.0.1","name":"치터","reason":"치트","days":1}`); !r.OK {
+	// ban the port id for a day (not its address): kept on disk, its requests are refused, another port id from the
+	// same address still gets in
+	if r := post(t, a, hs.URL, "/api/ban", `{"id":"`+cheater+`","name":"치터","reason":"치트","days":1}`); !r.OK {
 		t.Fatalf("ban %+v", r)
 	}
-	if b := a.st.banList(); len(b) != 1 || b[0].Until == nil || b[0].Reason != "치트" {
+	if b := a.st.banList(); len(b) != 1 || b[0].Until == nil || b[0].Reason != "치트" || b[0].ID != cheater {
 		t.Fatalf("bans %+v", b)
 	}
 	c := dial(t, s)
-	send(t, c, tList, header(2, 0))
-	c.SetReadDeadline(time.Now().Add(2 * time.Second))
-	if _, err := c.Read(make([]byte, 1)); err == nil {
-		t.Fatal("a banned address got an answer")
+	send(t, c, tList, headerAs(2, 0, 2))
+	if e := expect(t, c, tError); binary.LittleEndian.Uint32(e) != errBanned {
+		t.Fatal("a banned port id got an answer")
 	}
+	c = dial(t, s)
+	send(t, c, tList, header(2, 0))
+	expect(t, c, tHubs)
 	a2, _ := NewAdmin(NewServer(DefaultConfig()), dir, "test")
-	if !a2.st.banned("127.0.0.1") {
+	if !a2.st.banned("", cheater) {
 		t.Fatal("the ban was not kept")
 	}
 	// an expired ban lets it in again
 	past := time.Now().Add(-time.Minute)
-	a2.st.ban(Ban{IP: "10.0.0.1", At: past, Until: &past})
-	if a2.st.banned("10.0.0.1") {
+	a2.st.ban(Ban{ID: "ZZZZ-ZZZZ", At: past, Until: &past})
+	if a2.st.banned("", "ZZZZ-ZZZZ") {
 		t.Fatal("an expired ban still holds")
 	}
 
-	// unban, and the actions are recorded
-	if r := post(t, a, hs.URL, "/api/unban", `{"ip":"127.0.0.1"}`); !r.OK {
+	// unban
+	if r := post(t, a, hs.URL, "/api/unban", `{"id":"`+cheater+`"}`); !r.OK {
 		t.Fatalf("unban %+v", r)
+	}
+	c = dial(t, s)
+	send(t, c, tList, headerAs(2, 0, 2))
+	expect(t, c, tHubs)
+
+	// a ban of the address too: a new port id from it is refused at once
+	nh := a.st.netOf("127.0.0.1")
+	if r := post(t, a, hs.URL, "/api/ban", `{"id":"`+cheater+`","net":"`+nh+`","name":"치터","days":1}`); !r.OK {
+		t.Fatalf("ban with the address %+v", r)
+	}
+	c = dial(t, s)
+	send(t, c, tList, headerAs(2, 0, 9))
+	c.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, err := c.Read(make([]byte, 1)); err == nil {
+		t.Fatal("a banned address got an answer")
+	}
+	if r := post(t, a, hs.URL, "/api/unban", `{"id":"`+cheater+`"}`); !r.OK {
+		t.Fatalf("unban 2 %+v", r)
 	}
 	c = dial(t, s)
 	send(t, c, tList, header(2, 0))
@@ -293,17 +321,45 @@ func TestAdminActions(t *testing.T) {
 	for _, x := range acts {
 		kinds = append(kinds, x.Kind)
 	}
-	if strings.Join(kinds, ",") != "unban,ban,close,kick" {
+	if strings.Join(kinds, ",") != "unban,ban,unban,ban,close,kick" {
 		t.Fatalf("actions %v", kinds)
 	}
 
 	// a POST from another page is refused
-	req, _ := http.NewRequest("POST", hs.URL+"/api/unban", strings.NewReader(`{"ip":"127.0.0.1"}`))
+	req, _ := http.NewRequest("POST", hs.URL+"/api/unban", strings.NewReader(`{"id":"AAAA-AAAA"}`))
 	req.Header.Set("Authorization", "Bearer "+a.token)
 	req.Header.Set("Origin", "http://evil.example")
 	resp, _ := http.DefaultClient.Do(req)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("cross-origin POST: %d", resp.StatusCode)
+	}
+}
+
+// Files from before (bans, records and actions with IP addresses) are rewritten with the addresses' hashes, and a ban
+// of an address still holds.
+func TestStoreForgetsAddresses(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	day := joinFile(dir, now)
+	os.WriteFile(filepath.Join(dir, "bans.json"), []byte(`[{"ip":"10.1.2.3","name":"옛날","at":"`+now.Format(time.RFC3339)+`"}]`), 0600)
+	os.WriteFile(day, []byte(`{"at":"`+now.Format(time.RFC3339)+`","name":"손님","ip":"10.1.2.3","room":"r","host":"h","role":"player"}`+"\n"), 0600)
+	os.WriteFile(filepath.Join(dir, "actions.log"), []byte(`{"at":"`+now.Format(time.RFC3339)+`","kind":"ban","target":"10.1.2.3"}`+"\n"), 0600)
+	st := openStore(dir)
+	for _, f := range []string{"bans.json", filepath.Base(day), "actions.log"} {
+		b, _ := os.ReadFile(filepath.Join(dir, f))
+		if strings.Contains(string(b), "10.1.2.3") {
+			t.Fatalf("%s still has the address: %s", f, b)
+		}
+	}
+	nh := st.netOf("10.1.2.3")
+	if !st.banned(nh, "") || st.banned(st.netOf("10.1.2.4"), "") {
+		t.Fatal("the old ban by address")
+	}
+	if j := st.findJoins("손님", 10); len(j) != 1 || j[0].Net != nh || j[0].IP != "" {
+		t.Fatalf("old record %+v", j)
+	}
+	if st2 := openStore(dir); st2.netOf("10.1.2.3") != nh {
+		t.Fatal("the key was not kept")
 	}
 }

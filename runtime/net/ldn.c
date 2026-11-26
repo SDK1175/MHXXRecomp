@@ -181,10 +181,11 @@ typedef struct { char magic[4]; uint32_t token; uint8_t kind, pad[3]; } UHdr;
 #define UDP_SILENCE_NS 15000000000ull
 
 // The hub server (server/server.go has the protocol): control frames like the link's; requests start with a header
-// "MHGS", u16 LOBBY_PROTO, u16 PROTO_VERSION, room[16] (the matchmaking key's hash).
-#define LOBBY_PROTO 1
+// "MHGS", u16 LOBBY_PROTO, u16 PROTO_VERSION, room[16] (the matchmaking key's hash), port id[16] (since 2: port_id).
+// Nothing is sent to it before the player agreed ([Multiplayer] HubConsent: lobby_server).
+#define LOBBY_PROTO 2
 #define LOBBY_PORT 39510
-#define LOBBY_HEADER 24
+#define LOBBY_HEADER 40
 enum { S_LIST = 1, S_HOST, S_ATTACH, S_JOIN, S_UPDATE, S_PING, S_HUBS = 16, S_HOSTED, S_INCOMING, S_SPLICED, S_ERROR };
 enum { SE_NOT_FOUND = 1, SE_NO_ANSWER, SE_BUSY, SE_VERSION };
 #define LOBBY_PING_NS 15000000000ull
@@ -794,10 +795,62 @@ static bool lobby_server_of(const char *s, char *out) {
     snprintf(out, LOBBY_NAME, "%s", s);
     return *out;
 }
+static void consent_notice(void);
 static bool lobby_server(char *out) {
     char s[LOBBY_NAME];
     config_live_ldn(s, sizeof s, NULL, 0);
-    return lobby_server_of(s, out);
+    if (!lobby_server_of(s, out)) return false;
+    if (!config_live_hub_consent()) {  // (not agreed: the server is never contacted)
+        consent_notice();
+        *out = 0;
+        return false;
+    }
+    return true;
+}
+
+// The port id: 16 random bytes made the first time the hub server is used (after the player agreed), kept in hub_id
+// next to the settings file. The server shows and bans it as a short code (server.go portID); it stands for this
+// copy of the port, not for the player's address. Deleting the file makes a new one.
+static void port_id(uint8_t out[16]) {
+    static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
+    static uint8_t id[16];
+    static bool have;
+    pthread_mutex_lock(&mu);
+    if (!have) {
+        char path[1100];
+        config_path(path, sizeof path);
+        char *slash = strrchr(path, '/'), *back = strrchr(path, '\\');
+        if (back > slash) slash = back;
+        if (slash) snprintf(slash + 1, sizeof path - (size_t)(slash + 1 - path), "hub_id");
+        else snprintf(path, sizeof path, "hub_id");
+        FILE *f = fopen(path, "rb");
+        char hex[33] = {0};
+        if (f) {
+            if (fread(hex, 1, 32, f) != 32) hex[0] = 0;
+            fclose(f);
+        }
+        have = true;
+        for (int i = 0; i < 16 && have; i++) {
+            unsigned v;
+            if (sscanf(hex + 2 * i, "%2x", &v) != 1) have = false;
+            else id[i] = (uint8_t)v;
+        }
+        bool zero = true;
+        for (int i = 0; i < 16; i++) zero &= !id[i];
+        if (!have || zero) {
+            do rand_bytes(id, sizeof id);
+            while (!id[0] && !id[1]);
+            if ((f = fopen(path, "wb"))) {
+                for (int i = 0; i < 16; i++) fprintf(f, "%02x", id[i]);
+                fputc('\n', f);
+                fclose(f);
+            } else
+                LOG("[ldn] can't write %s: a new port id each start\n", path);
+            have = true;
+        }
+    }
+    memcpy(out, id, 16);
+    pthread_mutex_unlock(&mu);
 }
 
 // A request's header. The room is a hash of the matchmaking key (key NULL: ini Key; spaces around it ignored): hubs
@@ -812,6 +865,7 @@ static bool lobby_header(uint8_t *h, const char *key) {
     wr16(h + 4, LOBBY_PROTO);
     wr16(h + 6, PROTO_VERSION);
     memset(h + 8, 0, 16);
+    port_id(h + 24);
     const char *k = key;
     while (*k == ' ') k++;
     size_t n = strlen(k);
@@ -864,6 +918,15 @@ static void version_notice(bool host, const char *theirs, bool refused) {
              v, g_port_version);
     overlay_notice(line, settings_text(lang, refused ? UI_TEXT("Players of different versions can't play together: update to the same version in the launcher.")
                                                      : UI_TEXT("A development build: played together anyway.")));
+}
+// The hub server is on but the player has not agreed to it: once a run, when a hub would be listed or searched for
+static void consent_notice(void) {
+    static volatile int shown;
+    if (shown) return;
+    shown = 1;
+    int lang = config_language();
+    overlay_notice(settings_text(lang, UI_TEXT("The hub server is not used: you have not agreed to it")),
+                   settings_text(lang, UI_TEXT("Only hubs on your local network are shown. To play over the internet, turn on Hub server consent in F1 > Network.")));
 }
 enum { NOTE_HOST, NOTE_SEARCH, NOTE_JOIN };
 static pthread_mutex_t hub_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -1099,12 +1162,16 @@ static void *hub_check_thread(void *arg) {
     return NULL;
 }
 
-void ldn_hub_check(const char *server, const char *key) {
+void ldn_hub_check(const char *server, const char *key, bool consent) {
     HubCheck *c = calloc(1, sizeof *c);
     pthread_t th;
     if (!c) return;
     hnet_init();
     bool on = lobby_server_of(server, c->server);
+    if (on && !consent) {  // (not agreed: not even asked)
+        free(c);
+        return;
+    }
     snprintf(c->key, sizeof c->key, "%s", key);
     pthread_mutex_lock(&hub_mu);
     c->check = ++hub_now.check;
@@ -1122,9 +1189,10 @@ void ldn_hub_check(const char *server, const char *key) {
     free(c);
 }
 
-int ldn_hub_status(const char *server, const char *key, int *ms, int *hubs) {
+int ldn_hub_status(const char *server, const char *key, bool consent, int *ms, int *hubs) {
     char name[LOBBY_NAME];
     if (!lobby_server_of(server, name)) return HUB_OFF;
+    if (!consent) return HUB_NO_CONSENT;
     pthread_mutex_lock(&hub_mu);
     // (the server's state holds whatever the key; the hub count only for the key it was for)
     int state = strcmp(hub_now.server, name) ? HUB_UNKNOWN : hub_now.state;

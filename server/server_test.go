@@ -34,13 +34,19 @@ func dial(t *testing.T, s *Server) *net.TCPConn {
 	return c
 }
 
-func header(proto uint16, room byte) []byte {
+func header(proto uint16, room byte) []byte { return headerAs(proto, room, 1) }
+
+// headerAs: a request header with the port id of player `who` (16 bytes of it)
+func headerAs(proto uint16, room, who byte) []byte {
 	h := make([]byte, headerSize)
 	copy(h, "MHGS")
 	binary.LittleEndian.PutUint16(h[4:], serverProto)
 	binary.LittleEndian.PutUint16(h[6:], proto)
 	for i := 8; i < 24; i++ {
 		h[i] = room
+	}
+	for i := 24; i < 40; i++ {
+		h[i] = who
 	}
 	return h
 }
@@ -276,4 +282,24 @@ func TestHubLimitPerIP(t *testing.T) {
 	c := dial(t, s)
 	send(t, c, tHost, header(2, 0), testInfo(1))
 	expect(t, c, tError)
+}
+
+// A port of server protocol 1 (0.10.15 or before: no port id, no consent asked) is told to update; one without a port
+// id is refused.
+func TestOldPortRefused(t *testing.T) {
+	s := start(t, nil)
+	c := dial(t, s)
+	old := make([]byte, 24)
+	copy(old, "MHGS")
+	binary.LittleEndian.PutUint16(old[4:], 1)
+	binary.LittleEndian.PutUint16(old[6:], 2)
+	send(t, c, tList, old)
+	if e := expect(t, c, tError); binary.LittleEndian.Uint32(e) != errVersion {
+		t.Fatalf("protocol 1: error %d", binary.LittleEndian.Uint32(e))
+	}
+	c = dial(t, s)
+	send(t, c, tList, headerAs(2, 0, 0))
+	if e := expect(t, c, tError); binary.LittleEndian.Uint32(e) != errBadReq {
+		t.Fatalf("no port id: error %d", binary.LittleEndian.Uint32(e))
+	}
 }

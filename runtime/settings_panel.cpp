@@ -344,6 +344,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(bonus_content);
     SAME(village_in_hub);
     SAME(share_urgent);
+    SAME(hub_consent);
     SAME(title_back_exit);
     SAME(quest_skip);
     SAME(quest_skip_online);
@@ -727,7 +728,7 @@ void text(std::vector<Row> &rows, const char *id, const char *name, char *field,
 void hub_check(std::vector<Row> &rows) {
     int ms = -1, hubs = -1;
     std::string state;
-    switch (ldn_hub_status(s.draft.ldn_server, s.draft.ldn_key, &ms, &hubs)) {
+    switch (ldn_hub_status(s.draft.ldn_server, s.draft.ldn_key, s.draft.hub_consent, &ms, &hubs)) {
     case HUB_CHECKING: state = tr("Checking..."); break;
     case HUB_OFF: state = tr("Off"); break;
     case HUB_ONLINE:
@@ -740,6 +741,7 @@ void hub_check(std::vector<Row> &rows) {
     case HUB_BUSY: state = tr("Busy"); break;
     case HUB_VERSION: state = tr("Other version"); break;
     case HUB_REFUSED: state = tr("Refused"); break;
+    case HUB_NO_CONSENT: state = tr("Not agreed"); break;
     default: state = tr("Not checked"); break;
     }
     Row r;
@@ -747,7 +749,7 @@ void hub_check(std::vector<Row> &rows) {
     r.title = tr("Check hub server");
     r.help = tr("Asks the hub server above whether it answers, with the matchmaking key above: how long it takes, and how many hubs it lists.");
     r.value = state;
-    r.activate = []() { ldn_hub_check(s.draft.ldn_server, s.draft.ldn_key); };
+    r.activate = []() { ldn_hub_check(s.draft.ldn_server, s.draft.ldn_key, s.draft.hub_consent); };
     rows.push_back(std::move(r));
 }
 // The keybinds' rows (config.h BIND_*): what each is called
@@ -977,6 +979,7 @@ void reset_section() {
         c.sync_small_monsters = f.sync_small_monsters;
         c.village_in_hub = f.village_in_hub;
         c.share_urgent = f.share_urgent;
+        c.hub_consent = f.hub_consent;
         c.hp = f.hp;
         quest_keys();
         break;
@@ -1454,6 +1457,8 @@ std::vector<Row> main_rows() {
     case 3:
         number(r, "port", "Host port (TCP / UDP)", &c.ldn_port, (int)lo("Port"), (int)hi("Port"), 1, ini("Port"));
         text(r, "hosts", "Search hosts", c.ldn_join, sizeof c.ldn_join, *c.ldn_join ? c.ldn_join : tr("LAN"), ini("Join"));
+        add_bool(r, "consent", "Hub server consent", &c.hub_consent, ini("HubConsent"));
+        r.back().help = tr("Agree to what the hub server keeps, to play over the internet. While you use it, its admin sees your hunter name and a port ID (a random code this port made), and keeps them for 3 days with the room and time, to act on reports (kick, ban). Your IP address is never stored or shown. Off: the hub server is never contacted; LAN and Search hosts still work.");
         text(r, "server", "Hub server", c.ldn_server, sizeof c.ldn_server,
              !*c.ldn_server ? std::string(tr("Default")) + (*LDN_DEFAULT_SERVER ? " (" LDN_DEFAULT_SERVER ")" : "")
                             : c.ldn_server,

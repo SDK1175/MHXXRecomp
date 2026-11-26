@@ -11,7 +11,12 @@
 // Control frames: u32 size (of what follows), u8 type, payload; little endian. The first frame of a connection is a
 // request, whose payload starts with a header: "MHGS", u16 server protocol, u16 link protocol (the port's
 // PROTO_VERSION: only hubs of the same one are listed or joined), room[16] (the first 16 bytes of SHA-256 of the
-// matchmaking key, all zero without a key).
+// matchmaking key, all zero without a key), port id[16] (since server protocol 2: random bytes the port made when
+// its player agreed to the hub server's use of their data - the port asks first and never connects without it).
+//
+// What is kept of a player (docs/hub-admin.md, "개인정보"): their port id, as a short code (portID), and a keyed hash
+// of their IP address (netOf, the admin's secret key: the address itself is never written or shown, only whether two
+// connections came from the same one). Addresses are in memory only while connected (limits, kicking).
 //
 // Everything a client sends is untrusted: sizes are capped, NetworkInfo is checked before it is listed, requests are
 // rate limited per IP address, connections and hubs per IP address are limited, and the relay only ever forwards
@@ -22,6 +27,8 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base32"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -35,8 +42,8 @@ import (
 )
 
 const (
-	serverProto = 1
-	headerSize  = 24
+	serverProto = 2 // 2: the port id (consent); a port of protocol 1 (0.10.15 or before) is told errVersion: update
+	headerSize  = 40
 	netInfoSize = 0x480
 	maxFrame    = 4096
 
@@ -60,6 +67,7 @@ const (
 	errBusy     = 3 // a limit was reached
 	errVersion  = 4 // server protocol mismatch
 	errBadReq   = 5
+	errBanned   = 6 // (the port shows it as a refusal)
 
 	udpMagic  = "MHGR"
 	udpHeader = 16 // magic, u32 pair, u64 secret
@@ -107,7 +115,9 @@ type hub struct {
 	proto   uint16
 	info    [netInfoSize]byte // guarded by Server.mu
 	created time.Time
-	ip      string
+	ip      string      // (memory only: the per-address hub limit)
+	pid     string      // the host's port id (portID)
+	net     string      // the host's address, hashed (netOf)
 	out     chan []byte // frames to the host
 	done    chan struct{}
 	joins   int // pending and spliced players (guarded by Server.mu)
@@ -130,7 +140,8 @@ type pair struct {
 	// for the admin view (guarded by Server.mu): the hub, the player's address, when, and which node of the hub's
 	// NetworkInfo the player became (-1: not yet / unknown)
 	hub    *hub
-	ip     string
+	pid    string // the player's port id
+	net    string // the player's address, hashed
 	joined time.Time
 	node   int
 	conns  [2]*net.TCPConn // host side, player side (closing either ends the link)
@@ -154,17 +165,32 @@ type Server struct {
 	udp     *net.UDPConn
 	changes changes // hubs, players or links changed (the admin view's live updates)
 
-	// the admin view: every open connection and its address (guarded by mu), and hooks it sets before Serve
-	live     map[*net.TCPConn]string
-	banned   func(ip string) bool // (the hooks are set and read with mu held) // a new connection from this address is closed at once
-	onRecord func(JoinRecord)     // a host opened a hub, or a player became a node (called with mu held: don't block)
+	// the admin view: every open connection (guarded by mu), and hooks it sets before Serve (set and read with mu held)
+	live     map[*net.TCPConn]*liveConn
+	netOf    func(ip string) string     // an address's keyed hash (nil: no admin view, "")
+	banned   func(net, pid string) bool // a connection from this address or port id is closed at once
+	onRecord func(JoinRecord)           // a host opened a hub, or a player became a node (called with mu held: don't block)
+}
+
+type liveConn struct {
+	ip, net, pid string // (pid "" until the request is read)
+}
+
+// portID: the code a port's id is shown and banned by ("ABCD-EFGH": 40 bits of its SHA-256; the id itself is kept
+// nowhere).
+func portID(id []byte) string {
+	sum := sha256.Sum256(id)
+	c := base32.StdEncoding.EncodeToString(sum[:5])
+	return c[:4] + "-" + c[4:8]
 }
 
 // JoinRecord: who came in, for the admin view's records (kept 3 days, docs/hub-admin.md).
 type JoinRecord struct {
 	At   time.Time `json:"at"`
 	Name string    `json:"name"`
-	IP   string    `json:"ip"`
+	ID   string    `json:"id"`           // port id
+	Net  string    `json:"net"`          // the address, hashed
+	IP   string    `json:"ip,omitempty"` // (only in records from before: openStore hashes it)
 	Room string    `json:"room"`
 	Host string    `json:"host"` // the room's host's name
 	Role string    `json:"role"` // host, player
@@ -172,7 +198,7 @@ type JoinRecord struct {
 
 func NewServer(cfg Config) *Server {
 	return &Server{cfg: cfg, hubs: map[uint64]*hub{}, pending: map[uint64]*pending{}, pairs: map[uint32]*pair{},
-		ips: map[string]*ipState{}, live: map[*net.TCPConn]string{}}
+		ips: map[string]*ipState{}, live: map[*net.TCPConn]*liveConn{}}
 }
 
 func (s *Server) vlog(format string, args ...any) {
@@ -332,9 +358,13 @@ func (s *Server) allowRequest(ip string) bool {
 func (s *Server) handle(c *net.TCPConn) {
 	ip := c.RemoteAddr().(*net.TCPAddr).IP.String()
 	s.mu.Lock()
-	banned := s.banned
+	banned, netOf := s.banned, s.netOf
 	s.mu.Unlock()
-	if banned != nil && banned(ip) {
+	nh := ""
+	if netOf != nil {
+		nh = netOf(ip)
+	}
+	if banned != nil && banned(nh, "") {
 		c.Close()
 		return
 	}
@@ -344,8 +374,9 @@ func (s *Server) handle(c *net.TCPConn) {
 	}
 	defer s.release(ip)
 	defer c.Close()
+	lc := &liveConn{ip: ip, net: nh}
 	s.mu.Lock()
-	s.live[c] = ip
+	s.live[c] = lc
 	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
@@ -357,13 +388,29 @@ func (s *Server) handle(c *net.TCPConn) {
 	c.SetKeepAlivePeriod(30 * time.Second)
 	c.SetReadDeadline(time.Now().Add(s.cfg.HandshakeTime))
 	t, p, err := readFrame(c, maxFrame)
-	if err != nil || len(p) < headerSize || !bytes.Equal(p[:4], []byte("MHGS")) {
+	if err != nil || len(p) < 8 || !bytes.Equal(p[:4], []byte("MHGS")) {
 		return
 	}
 	if binary.LittleEndian.Uint16(p[4:]) != serverProto {
 		sendError(c, errVersion)
 		return
 	}
+	if len(p) < headerSize {
+		sendError(c, errBadReq)
+		return
+	}
+	if bytes.Equal(p[24:40], make([]byte, 16)) { // (no consent: a port never sends this)
+		sendError(c, errBadReq)
+		return
+	}
+	pid := portID(p[24:40])
+	if banned != nil && banned("", pid) {
+		sendError(c, errBanned)
+		return
+	}
+	s.mu.Lock()
+	lc.pid = pid
+	s.mu.Unlock()
 	proto := binary.LittleEndian.Uint16(p[6:])
 	var room [16]byte
 	copy(room[:], p[8:24])
@@ -380,7 +427,7 @@ func (s *Server) handle(c *net.TCPConn) {
 			sendError(c, errBadReq)
 			return
 		}
-		s.host(c, ip, proto, room, body)
+		s.host(c, ip, lc, proto, room, body)
 	case tAttach:
 		if len(body) != 8 {
 			return
@@ -394,7 +441,7 @@ func (s *Server) handle(c *net.TCPConn) {
 			sendError(c, errBusy)
 			return
 		}
-		s.join(c, proto, room, binary.LittleEndian.Uint64(body))
+		s.join(c, lc, proto, room, binary.LittleEndian.Uint64(body))
 	}
 }
 
@@ -440,8 +487,8 @@ func (s *Server) list(c *net.TCPConn, proto uint16, room [16]byte) {
 	writeFrame(c, frame(tHubs, out))
 }
 
-func (s *Server) host(c *net.TCPConn, ip string, proto uint16, room [16]byte, info []byte) {
-	h := &hub{room: room, proto: proto, created: time.Now(), ip: ip, out: make(chan []byte, 16),
+func (s *Server) host(c *net.TCPConn, ip string, lc *liveConn, proto uint16, room [16]byte, info []byte) {
+	h := &hub{room: room, proto: proto, created: time.Now(), ip: ip, pid: lc.pid, net: lc.net, out: make(chan []byte, 16),
 		done: make(chan struct{})}
 	copy(h.info[:], info)
 	s.mu.Lock()
@@ -459,7 +506,7 @@ func (s *Server) host(c *net.TCPConn, ip string, proto uint16, room [16]byte, in
 	st.hubs++
 	s.linkNodes(h)
 	if s.onRecord != nil {
-		s.onRecord(JoinRecord{At: h.created, Name: nodeName(h.info[:], 0), IP: ip, Room: fmt.Sprintf("%016x", h.id),
+		s.onRecord(JoinRecord{At: h.created, Name: nodeName(h.info[:], 0), ID: h.pid, Net: h.net, Room: fmt.Sprintf("%016x", h.id),
 			Host: nodeName(h.info[:], 0), Role: "host"})
 	}
 	s.mu.Unlock()
@@ -521,7 +568,7 @@ func (s *Server) host(c *net.TCPConn, ip string, proto uint16, room [16]byte, in
 	}
 }
 
-func (s *Server) join(c *net.TCPConn, proto uint16, room [16]byte, id uint64) {
+func (s *Server) join(c *net.TCPConn, lc *liveConn, proto uint16, room [16]byte, id uint64) {
 	s.mu.Lock()
 	h := s.hubs[id]
 	if h == nil || h.room != room || h.proto != proto {
@@ -575,7 +622,7 @@ func (s *Server) join(c *net.TCPConn, proto uint16, room [16]byte, id uint64) {
 		hc = <-pj.host
 	}
 	p := &pair{secret: [2]uint64{rand64(), rand64()}, lim: newBucket(s.cfg.Bandwidth, s.cfg.Bandwidth), hub: h,
-		ip: c.RemoteAddr().(*net.TCPAddr).IP.String(), joined: time.Now(), node: -1, conns: [2]*net.TCPConn{hc, c}}
+		pid: lc.pid, net: lc.net, joined: time.Now(), node: -1, conns: [2]*net.TCPConn{hc, c}}
 	s.mu.Lock()
 	for p.id == 0 || s.pairs[p.id] != nil {
 		p.id = uint32(rand64())
@@ -721,7 +768,7 @@ func (s *Server) linkNodes(h *hub) {
 		if best != nil {
 			best.node = i
 			if s.onRecord != nil {
-				s.onRecord(JoinRecord{At: best.joined, Name: nodeName(h.info[:], i), IP: best.ip,
+				s.onRecord(JoinRecord{At: best.joined, Name: nodeName(h.info[:], i), ID: best.pid, Net: best.net,
 					Room: fmt.Sprintf("%016x", h.id), Host: nodeName(h.info[:], 0), Role: "player"})
 			}
 		}
@@ -755,12 +802,13 @@ func (c *changes) notify() {
 
 // ---- the admin view's actions (they close connections; the games see them drop)
 
-// KickIP closes every connection from this address; it can come back unless banned.
-func (s *Server) KickIP(ip string) int {
+// Kick closes every connection of this port id (or, net set, also from this hashed address); it can come back
+// unless banned.
+func (s *Server) Kick(pid, nh string) int {
 	s.mu.Lock()
 	var cs []*net.TCPConn
-	for c, a := range s.live {
-		if a == ip {
+	for c, l := range s.live {
+		if pid != "" && l.pid == pid || nh != "" && l.net == nh {
 			cs = append(cs, c)
 		}
 	}

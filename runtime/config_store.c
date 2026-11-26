@@ -53,6 +53,7 @@ static SDL_AtomicInt live_binds[BINDS][BIND_KEYS];
 static SDL_AtomicInt live_ldn_port;
 static SDL_AtomicInt live_sync_zako;
 static SDL_AtomicInt live_share_urgent;
+static SDL_AtomicInt live_hub_consent;
 static SDL_AtomicInt live_title_back_exit;
 static SDL_AtomicInt live_quest_skip;
 static SDL_AtomicInt live_quest_skip_online;
@@ -104,6 +105,7 @@ static void publish_live(const Config *c, bool all) {
     if (all || c->discord != saved.discord) SDL_SetAtomicInt(&live_discord, c->discord);
     if (all || c->discord_hunter != saved.discord_hunter) SDL_SetAtomicInt(&live_discord_hunter, c->discord_hunter);
     if (all || c->share_urgent != saved.share_urgent) SDL_SetAtomicInt(&live_share_urgent, c->share_urgent);
+    if (all || c->hub_consent != saved.hub_consent) SDL_SetAtomicInt(&live_hub_consent, c->hub_consent);
     if (all || c->title_back_exit != saved.title_back_exit) SDL_SetAtomicInt(&live_title_back_exit, c->title_back_exit);
     if (all || c->quest_skip != saved.quest_skip) SDL_SetAtomicInt(&live_quest_skip, c->quest_skip);
     if (all || c->quest_skip_online != saved.quest_skip_online) SDL_SetAtomicInt(&live_quest_skip_online, c->quest_skip_online);
@@ -201,6 +203,7 @@ float config_live_hp_village(void) {
 int config_live_discord(void) { return SDL_GetAtomicInt(&live_discord); }
 int config_live_discord_hunter(void) { return SDL_GetAtomicInt(&live_discord_hunter); }
 int config_live_share_urgent(void) { return SDL_GetAtomicInt(&live_share_urgent); }
+int config_live_hub_consent(void) { return SDL_GetAtomicInt(&live_hub_consent); }
 int config_live_title_back_exit(void) { return SDL_GetAtomicInt(&live_title_back_exit); }
 int config_live_quest_skip(void) { return SDL_GetAtomicInt(&live_quest_skip); }
 int config_live_quest_skip_online(void) { return SDL_GetAtomicInt(&live_quest_skip_online); }
