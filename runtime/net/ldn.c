@@ -37,6 +37,8 @@
 #include "../settings_locale.h"
 #include "net.h"
 #include "../voice.h"
+#include "../cpu.h"
+#include "../game/addr.h"
 
 #ifdef _WIN32
 typedef SOCKET hsock;
@@ -400,6 +402,31 @@ static bool udp_send(hsock s, const struct sockaddr_in *to, const Link *l, uint8
     int k = to ? sendto(s, (const char *)buf, (int)n, 0, (const struct sockaddr *)to, sizeof *to)
                : send(s, (const char *)buf, (int)n, 0);
     return k == (int)n;
+}
+
+// The name this game's node carries: the hunter's own name (from the game's player data, as presence.c and voice.c read
+// it), in UTF-8 with the Korean patch's codes turned back into Hangul - the hub server's admin screen and its join
+// records name the hunter as the others see them in the game, not the [Multiplayer] Nickname (most leave it "Hunter").
+// No hunter yet (no save loaded): the name the game gave (the nickname). Cut on a whole character, NUL-padded to 0x20.
+uint32_t hangulfont_decode(const char *in, char *out, uint32_t size);  // (nvn/vulkan/hangulfont.c)
+static const uint8_t *node_name(const uint8_t *game_name, uint8_t out[0x20]) {
+    uint32_t gc = LD32(A_G_GAMECONTROL), sp = LD32(A_G_SPLAYER);
+    bool ok_gc = gc >= 0x08000000u && gc < 0xF0000000u && !(gc & 3), ok_sp = sp >= 0x08000000u && sp < 0xF0000000u && !(sp & 3);
+    uint32_t slot = ok_gc ? LD32(gc + 0x30) : 9;
+    uint32_t pl = ok_sp && slot < 4 ? LD32(sp + 0x1c + 4 * slot) : 0;
+    uint32_t pd = pl >= 0x08000000u && pl < 0xF0000000u && !(pl & 3) ? LD32(pl + 0x13c4) : 0;
+    if (!(pd >= 0x08000000u && pd < 0xF0000000u && !(pd & 3))) return game_name;
+    char raw[33], dec[100];
+    memcpy(raw, G2H(pd + 0x514), 32), raw[32] = 0;
+    if (!raw[0]) return game_name;
+    const char *nm = hangulfont_decode(raw, dec, sizeof dec) ? dec : raw;
+    size_t n = strlen(nm);
+    if (n > 0x1f) {  // (back to the start of a character)
+        n = 0x1f;
+        while (n && ((uint8_t)nm[n] & 0xC0) == 0x80) n--;
+    }
+    memset(out, 0, 0x20), memcpy(out, nm, n);
+    return out;
 }
 
 static Hello make_hello(bool scan_only, const uint8_t *user_name) {
@@ -1524,7 +1551,8 @@ static uint32_t create_network(const uint8_t *cfg, const uint8_t *sec, const uin
     memcpy(nd + NODE_MAC, L.mac, 6);
     nd[NODE_ID] = 0;
     nd[NODE_CONNECTED] = 1;
-    memcpy(nd + NODE_NAME, user, 0x20);
+    uint8_t own[0x20];
+    memcpy(nd + NODE_NAME, node_name(user, own), 0x20);
     wr16(nd + NODE_LCV, L.lcv);
     wr16(L.info + NI_ADV_SIZE, (uint16_t)L.adv_size);
     memcpy(L.info + NI_ADV, L.adv, L.adv_size);
@@ -1680,7 +1708,8 @@ static uint32_t connect_network(const uint8_t *info, const uint8_t *user, uint16
         return R_CONNECT_TIMEOUT;
     }
     L.lcv = lcv;
-    Hello h = make_hello(false, user);
+    uint8_t own[0x20];
+    Hello h = make_hello(false, node_name(user, own));
     static uint8_t buf[MAX_FRAME];
     uint8_t type;
     int n;
