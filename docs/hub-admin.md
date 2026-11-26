@@ -190,7 +190,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   autonumber
-  actor R as 신고자 (깃허브 신고 양식·디시)
+  actor R as 신고자 (구글 신고 폼·디시)
   actor A as 운영자
   participant UI as 관리 화면
   participant Hub as 허브 서버
